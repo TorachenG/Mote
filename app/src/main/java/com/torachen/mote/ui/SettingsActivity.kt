@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.captionBar
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -73,7 +75,6 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 
 // ★★★ MIUIX 图标 ★★★
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Album
 import top.yukonga.miuix.kmp.icon.extended.All
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Background
@@ -85,7 +86,10 @@ import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.Months
 import top.yukonga.miuix.kmp.icon.extended.Photos
 import top.yukonga.miuix.kmp.icon.extended.Search
-import top.yukonga.miuix.kmp.icon.extended.Update
+
+// ★★★ MIUIX 工具（overscroll 回弹） ★★★
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 // ============================================================
 // 数据模型
@@ -115,11 +119,9 @@ private val DEFAULT_ICON_INNER_SIZE = 23.dp
 private val SMALL_ICON_INNER_SIZE = 20.5.dp
 private val MEDIUM_ICON_INNER_SIZE = 21.75.dp
 
-// ★ 档位 A：效果优先，MIUIX 官方默认参数
 private const val TOP_BAR_BLUR_RADIUS = 25f
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 
-// 首帧测量前的兜底 topBar 高度（不含 statusBars）
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
 
 // ============================================================
@@ -167,7 +169,7 @@ private val settingsSections = listOf(
         items = listOf(
             SettingsItem("图标", MiuixIcons.Photos, "settings_icon", iconBgColor = Color(0xFF2AD200)),
             SettingsItem("颜色", MiuixIcons.Background, "settings_color", iconBgColor = Color(0xFFFF7439)),
-            SettingsItem("布局", MiuixIcons.All, "settings_layout"),
+            SettingsItem("界面", MiuixIcons.All, "settings_layout"),
         )
     ),
     SettingsSection(
@@ -194,6 +196,7 @@ private val settingsSections = listOf(
 fun SettingsMainPage(
     onBack: () -> Unit,
     onItemClick: (String) -> Unit,
+    isTransitioning: Boolean = false,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner(parent = null)
     val scrollBehavior = MiuixScrollBehavior()
@@ -227,7 +230,6 @@ fun SettingsMainPage(
                 .fillMaxSize()
                 .background(surfaceColor)
         ) {
-            // ========== 内容层 ==========
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -242,11 +244,11 @@ fun SettingsMainPage(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(
-                        top = contentTopPadding,
-                        bottom = 12.dp,
-                    ),
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .scrollEndHaptic()
+                        .overScrollVertical(),
+                    contentPadding = PaddingValues(top = contentTopPadding),
+                    overscrollEffect = null,
                 ) {
                     item(key = "searchbar") {
                         SearchBar(
@@ -318,19 +320,26 @@ fun SettingsMainPage(
                                         }
                                     }
                                 }
+
+                                // ★ 底部导航栏占位
+                                Spacer(
+                                    Modifier.height(
+                                        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                                WindowInsets.captionBar.asPaddingValues().calculateBottomPadding()
+                                    )
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // ========== 顶栏层（兄弟节点）==========
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
                     .then(
-                        if (blurSupported && backdrop != null) {
+                        if (!isTransitioning && blurSupported && backdrop != null) {
                             Modifier.textureBlur(
                                 backdrop = backdrop,
                                 shape = RectangleShape,
@@ -379,16 +388,13 @@ fun SettingsMainPage(
 
 // ============================================================
 // 设置子页面（通用兜底）
-//
-// ★ 现在只用于尚未实现的其它设置项（例如 settings_icon、
-//   settings_background …）。settings_home 与 settings_search
-//   已由 MainActivity.AppRoot 单独路由到对应实现。
 // ============================================================
 
 @Composable
 fun SettingsSubPage(
     title: String,
     onBack: () -> Unit,
+    isTransitioning: Boolean = false,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner(parent = null)
     val scrollBehavior = MiuixScrollBehavior()
@@ -419,7 +425,6 @@ fun SettingsSubPage(
                 .fillMaxSize()
                 .background(surfaceColor)
         ) {
-            // ========== 内容层 ==========
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -434,38 +439,50 @@ fun SettingsSubPage(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .scrollEndHaptic()
+                        .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding),
+                    overscrollEffect = null,
                 ) {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Text(title, color = MiuixTheme.colorScheme.onSurface)
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "该页面正在开发中",
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(title, color = MiuixTheme.colorScheme.onSurface)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "该页面正在开发中",
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
                             }
+
+                            // ★ 底部导航栏占位
+                            Spacer(
+                                Modifier.height(
+                                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+                                            WindowInsets.captionBar.asPaddingValues().calculateBottomPadding()
+                                )
+                            )
                         }
                     }
                 }
             }
 
-            // ========== 顶栏层（兄弟节点）==========
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
                     .then(
-                        if (blurSupported && backdrop != null) {
+                        if (!isTransitioning && blurSupported && backdrop != null) {
                             Modifier.textureBlur(
                                 backdrop = backdrop,
                                 shape = RectangleShape,
