@@ -1,0 +1,11 @@
+<resources>
+
+    <!-- 深色模式：用 Material（深色） -->
+    <style name="Theme.Mote" parent="android:Theme.Material.NoActionBar" />
+
+    <style name="Theme.Mote.Player" parent="Theme.Mote">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
+</resources>

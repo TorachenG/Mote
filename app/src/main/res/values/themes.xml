@@ -1,5 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- 浅色模式：用 Material.Light -->
     <style name="Theme.Mote" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Mote.Player" parent="Theme.Mote">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
 </resources>

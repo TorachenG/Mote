@@ -13,3 +13,8 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# IDE »º´æ
+.kotlin/
+.idea/
+*.log
