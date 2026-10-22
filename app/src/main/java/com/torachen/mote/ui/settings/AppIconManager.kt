@@ -27,9 +27,9 @@ internal data class AppIconOption(
 internal val APP_ICON_OPTIONS: List<AppIconOption> = listOf(
     AppIconOption("default", "默认", R.mipmap.ic_logo, ".IconDefault", "默认"),
     AppIconOption("sparkle", "星芒", R.mipmap.ic_logo_sparkle, ".IconSparkle", "默认"),
-    AppIconOption("tri_blue", "蓝色", R.mipmap.ic_logo_tri_blue, ".IconNetwork", "三角"),
-    AppIconOption("tri_green", "绿色", R.mipmap.ic_logo_tri_green, ".IconWave", "三角"),
-    AppIconOption("tri_island", "岛屿", R.mipmap.ic_logo_tri_island, ".IconOrbit", "三角"),
+    AppIconOption("tri_blue", "蓝色", R.mipmap.ic_logo_triangle_blue, ".IconNetwork", "三角"),
+    AppIconOption("tri_green", "绿色", R.mipmap.ic_logo_triangle_green, ".IconWave", "三角"),
+    AppIconOption("tri_island", "岛屿", R.mipmap.ic_logo_triangle_island, ".IconOrbit", "三角"),
 )
 
 internal object AppIconManager {

@@ -193,8 +193,8 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_logo_tri_blue"
-            android:roundIcon="@mipmap/ic_logo_tri_blue"
+            android:icon="@mipmap/ic_logo_triangle_blue"
+            android:roundIcon="@mipmap/ic_logo_triangle_blue"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -207,8 +207,8 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_logo_tri_green"
-            android:roundIcon="@mipmap/ic_logo_tri_green"
+            android:icon="@mipmap/ic_logo_triangle_green"
+            android:roundIcon="@mipmap/ic_logo_triangle_green"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -221,8 +221,8 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_logo_tri_island"
-            android:roundIcon="@mipmap/ic_logo_tri_island"
+            android:icon="@mipmap/ic_logo_triangle_island"
+            android:roundIcon="@mipmap/ic_logo_triangle_island"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
