@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mote 浏览器 · 官方下载</title>
+<meta name="description" content="Mote —— 轻快、纯净的 Android 浏览器。支持扫码、翻译、文档扫描与用户脚本，开源免费。">
+<meta name="theme-color" content="#0b0d13">
+<link rel="icon" href="assets/icon.png">
+<style>
+  :root{
+    --bg:#0b0d13;
+    --surface:rgba(255,255,255,.045);
+    --stroke:rgba(255,255,255,.09);
+    --text:#eef0f6;
+    --muted:#9aa1b2;
+    --brand:#5b7cff;
+    --brand2:#a855f7;
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .glow{
+    position:fixed;inset:-20% -10% auto -10%;height:70vh;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(45% 55% at 22% 18%, rgba(91,124,255,.28), transparent 70%),
+      radial-gradient(42% 50% at 78% 8%, rgba(168,85,247,.22), transparent 70%);
+    filter:blur(20px);
+  }
+  .wrap{position:relative;z-index:1;max-width:1040px;margin:0 auto;padding:0 22px}
+
+  header{display:flex;align-items:center;gap:12px;padding:26px 0}
+  header img{width:34px;height:34px;border-radius:9px;border:1px solid var(--stroke)}
+  header .name{font-weight:650;letter-spacing:.2px}
+  header .spacer{flex:1}
+  header a{color:var(--muted);text-decoration:none;font-size:14px;padding:6px 10px;border-radius:10px;transition:.2s}
+  header a:hover{color:var(--text);background:var(--surface)}
+
+  .hero{text-align:center;padding:34px 0 10px}
+  .hero .icon{
+    width:104px;height:104px;border-radius:26px;border:1px solid var(--stroke);
+    box-shadow:0 24px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04) inset;
+    background:#fff;
+  }
+  h1{font-size:clamp(30px,5vw,44px);line-height:1.2;margin:22px 0 10px;letter-spacing:-.5px}
+  h1 .grad{
+    background:linear-gradient(100deg,#8ea6ff,#c084fc 60%,#f0abfc);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .tag{color:var(--muted);margin:0 auto;max-width:640px;font-size:16.5px}
+  .meta{
+    display:inline-flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center;
+    margin:20px 0 6px;color:var(--muted);font-size:13.5px;
+  }
+  .chip{
+    border:1px solid var(--stroke);background:var(--surface);
+    padding:5px 11px;border-radius:999px;
+  }
+  .actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:26px 0 10px}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;justify-content:center;
+    padding:14px 26px;border-radius:14px;font-weight:600;font-size:15.5px;
+    text-decoration:none;border:1px solid transparent;transition:transform .16s, box-shadow .2s, background .2s;
+  }
+  .btn:active{transform:translateY(1px)}
+  .primary{
+    color:#0a0c12;
+    background:linear-gradient(100deg,#9db2ff,#c4a0ff);
+    box-shadow:0 12px 30px rgba(120,110,255,.35);
+  }
+  .primary:hover{box-shadow:0 16px 40px rgba(120,110,255,.5)}
+  .ghost{color:var(--text);background:var(--surface);border-color:var(--stroke)}
+  .ghost:hover{background:rgba(255,255,255,.08)}
+  .hint{color:#767e90;font-size:13px;margin-top:14px}
+
+  section{padding:54px 0}
+  .sec-title{font-size:14px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
+  .card{
+    background:var(--surface);border:1px solid var(--stroke);border-radius:var(--radius);
+    padding:20px 20px 18px;transition:.2s;
+  }
+  .card:hover{border-color:rgba(255,255,255,.18);transform:translateY(-2px)}
+  .card .ico{width:26px;height:26px;display:block;color:#a9bbff}
+  .card .ico svg{width:26px;height:26px}
+  .card h3{margin:10px 0 6px;font-size:16.5px;font-weight:640}
+  .card p{margin:0;color:var(--muted);font-size:14.2px;line-height:1.62}
+
+  .shots{display:flex;gap:22px;justify-content:center;flex-wrap:wrap}
+  .phone{
+    width:min(260px,78vw);border-radius:26px;overflow:hidden;
+    border:1px solid var(--stroke);background:#12141c;
+    box-shadow:0 30px 70px rgba(0,0,0,.55);
+  }
+  .phone img{display:block;width:100%;height:auto}
+  .phone figcaption{text-align:center;color:var(--muted);font-size:13px;padding:10px 0 12px}
+  figure{margin:0}
+
+  .install ol{margin:0;padding-left:20px;color:var(--muted)}
+  .install li{margin:8px 0}
+  .install a{color:#a9bbff}
+
+  footer{
+    border-top:1px solid var(--stroke);margin-top:20px;padding:28px 0 44px;
+    display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;
+    color:var(--muted);font-size:13.5px;
+  }
+  footer .links{display:flex;flex-wrap:wrap;gap:16px}
+  footer a{color:var(--muted);text-decoration:none}
+  footer a:hover{color:var(--text)}
+  @media (max-width:520px){ .hero{padding-top:14px} section{padding:38px 0} }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<div class="wrap">
+  <header>
+    <img src="assets/icon.png" alt="Mote">
+    <span class="name">Mote</span>
+    <span class="spacer"></span>
+    <a href="https://github.com/TorachenG/Mote" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/TorachenG/Mote/releases" target="_blank" rel="noopener">更新日志</a>
+  </header>
+
+  <section class="hero">
+    <img class="icon" src="assets/icon.png" alt="Mote 图标">
+    <h1>Mote <span class="grad">浏览器</span></h1>
+    <p class="tag">轻快、纯净的 Android 浏览器。扫码、翻译、文档扫描、用户脚本一应俱全，开源免费。</p>
+
+    <div class="meta">
+      <span class="chip">版本 <b id="version">0.3.0</b></span>
+      <span class="chip">Android 7.0+</span>
+      <span class="chip" id="size-chip">APK</span>
+    </div>
+
+    <div class="actions">
+      <a class="btn primary" id="download" href="https://github.com/TorachenG/Mote/releases/latest">下载最新版</a>
+      <a class="btn ghost" href="https://github.com/TorachenG/Mote" target="_blank" rel="noopener">GitHub 源码</a>
+      <a class="btn ghost" href="https://gitee.com/TorachenG/Mote" target="_blank" rel="noopener">Gitee 镜像</a>
+    </div>
+    <p class="hint" id="hint">如果按钮没反应，请直接打开 Releases 页面手动下载 APK。</p>
+  </section>
+
+  <section>
+    <p class="sec-title">主要功能</p>
+    <div class="grid">
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></div>
+        <h3>冷启动更快</h3>
+        <p>Baseline Profile + 启动链路优化，首屏更早出现在你眼前。</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></div>
+        <h3>扫码 / 翻译 / 文档扫描</h3>
+        <p>二维码与条码识别、整页翻译、文档增强与黑白滤镜，还能一键提取文字。</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m9 8-4 4 4 4M15 8l4 4-4 4"/></svg></div>
+        <h3>用户脚本</h3>
+        <p>对标 VIA 的脚本管理：多个脚本、独立开关、在线下载与导入、@match 匹配注入。</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5.5c0 4.6-3.2 7.6-7 9.5-3.8-1.9-7-4.9-7-9.5V6l7-3Z"/><path d="m9.2 12.2 2 2 3.6-3.8"/></svg></div>
+        <h3>拦截追踪</h3>
+        <p>内置追踪器拦截与自定义白名单，页面更干净、加载更省流量。</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.2A8.6 8.6 0 1 1 9.8 3.5a7 7 0 0 0 10.7 10.7Z"/></svg></div>
+        <h3>阅读更舒适</h3>
+        <p>夜间模式、无图模式、文字缩放与强制缩放，按站点独立记忆。</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h10M18 8h2M4 16h4M12 16h8"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></svg></div>
+        <h3>高度可定制</h3>
+        <p>主页横幅、自定义背景与图片横幅、应用图标、主题色与 Material / MIUIX 双风格。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="sec-title">界面预览</p>
+    <div class="shots">
+      <figure class="phone">
+        <img src="assets/shot-scripts.png" alt="用户脚本管理界面" loading="lazy">
+        <figcaption>用户脚本</figcaption>
+      </figure>
+      <figure class="phone">
+        <img src="assets/shot-icons.png" alt="应用图标选择界面" loading="lazy">
+        <figcaption>应用图标</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="install">
+    <p class="sec-title">安装说明</p>
+    <ol>
+      <li>点击上方「下载最新版」，下载 <code>.apk</code> 文件。</li>
+      <li>首次安装时，系统会提示「禁止安装未知来源应用」，按提示允许当前浏览器或文件管理器安装即可。</li>
+      <li>Mote 完全离线可用，不需要注册账号；隐私政策见页面底部。</li>
+    </ol>
+  </section>
+
+  <footer>
+    <div>© 2026 TorachenG · Mote</div>
+    <div class="links">
+      <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/privacy-policy.md" target="_blank" rel="noopener">隐私政策</a>
+      <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/user-agreement.md" target="_blank" rel="noopener">用户协议</a>
+      <a href="https://github.com/TorachenG/Mote/tree/main/app/src/main/assets/licenses" target="_blank" rel="noopener">开源许可</a>
+      <a href="https://github.com/TorachenG/Mote/issues" target="_blank" rel="noopener">反馈问题</a>
+    </div>
+  </footer>
+</div>
+
+<script>
+(async function () {
+  const btn = document.getElementById('download');
+  const versionEl = document.getElementById('version');
+  const sizeChip = document.getElementById('size-chip');
+  const hint = document.getElementById('hint');
+  const api = 'https://api.github.com/repos/TorachenG/Mote/releases/latest';
+
+  try {
+    const res = await fetch(api, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) throw new Error('no release');
+    const data = await res.json();
+    const assets = data.assets || [];
+    const apk = assets.find(a => /\.apk$/i.test(a.name));
+    const tag = (data.tag_name || '').replace(/^v/i, '');
+
+    if (tag) versionEl.textContent = tag;
+
+    if (apk) {
+      const mb = (apk.size / 1048576).toFixed(1);
+      btn.href = apk.browser_download_url;
+      btn.textContent = `下载 APK（${mb} MB）`;
+      sizeChip.textContent = `${mb} MB`;
+      hint.textContent = `最新版本 v${tag}，直接下载安装即可。`;
+    } else if (data.html_url) {
+      btn.href = data.html_url;
+      btn.textContent = `前往 v${tag} 发布页下载`;
+      hint.textContent = '该版本请到发布页选择 APK 下载。';
+    }
+  } catch (e) {
+    btn.href = 'https://github.com/TorachenG/Mote/releases';
+    btn.textContent = '前往 Releases 下载';
+    hint.textContent = '暂时无法获取最新版本信息，请到 Releases 页面手动下载。';
+  }
+})();
+</script>
+</body>
+</html>

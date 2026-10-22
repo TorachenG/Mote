@@ -4,6 +4,12 @@ Mote 是一款完全使用 Jetpack Compose 编写的 Android 浏览器，UI 严�
 
 >项目当前在功能开发阶段，不代表最终品质
 
+### 下载
+
+- 官方网站：<https://toracheng.github.io/Mote/>
+- 最新版本 APK：<https://github.com/TorachenG/Mote/releases/latest>
+- 源码镜像：<https://gitee.com/TorachenG/Mote>
+
 ### 项目结构
 
 每个设置子页面共享同一套骨架：`Box` + `layerBackdrop` + `LazyColumn` + 顶部模糊栏，保证视觉一致性。
