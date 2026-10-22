@@ -486,13 +486,7 @@ private fun SettingsWebMiuix(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(
-                            if (listState.canScrollForward || listState.canScrollBackward) {
-                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding),

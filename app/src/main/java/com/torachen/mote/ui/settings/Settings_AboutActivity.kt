@@ -753,13 +753,7 @@ private fun SettingsAboutMiuix(
                         state = lazyListState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .then(
-                                if (lazyListState.canScrollForward || lazyListState.canScrollBackward) {
-                                    Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                                } else {
-                                    Modifier
-                                }
-                            )
+                            .nestedScroll(scrollBehavior.nestedScrollConnection)
                             .scrollEndHaptic()
                             .overScrollVertical(),
                         contentPadding = PaddingValues(top = contentTopPadding),

@@ -1124,6 +1124,8 @@ private fun SettingsLayoutMiuix(
                     )
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
+                    Spacer(Modifier.height(contentTopPadding))
+
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
@@ -1135,16 +1137,9 @@ private fun SettingsLayoutMiuix(
                                     state = listState0,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .then(
-                                            if (listState0.canScrollForward || listState0.canScrollBackward) {
-                                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
+                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
-                                    contentPadding = PaddingValues(top = contentTopPadding),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "general_content") {
@@ -1340,16 +1335,9 @@ private fun SettingsLayoutMiuix(
                                     state = listState1,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .then(
-                                            if (listState1.canScrollForward || listState1.canScrollBackward) {
-                                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
+                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
-                                    contentPadding = PaddingValues(top = contentTopPadding),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "newtab_content") {
@@ -2342,7 +2330,7 @@ internal fun BrowserHomePreview() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 24.dp),
+            .padding(top = 20.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -2498,7 +2486,7 @@ internal fun ThemePreview() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 24.dp),
+            .padding(top = 20.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -2679,7 +2667,7 @@ private fun ThemePreviewMaterial() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 24.dp),
+            .padding(top = 20.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -2833,7 +2821,7 @@ private fun BrowserHomePreviewMaterial() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 24.dp),
+            .padding(top = 20.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(

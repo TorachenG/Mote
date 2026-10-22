@@ -340,13 +340,7 @@ private fun SettingsWebSecurityMiuix(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(
-                            if (listState.canScrollForward || listState.canScrollBackward) {
-                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding),
@@ -917,13 +911,7 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(
-                            if (listState.canScrollForward || listState.canScrollBackward) {
-                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(
