@@ -18,3 +18,7 @@ local.properties
 .kotlin/
 .idea/
 *.log
+
+# 构建产物
+/baselineprofile/build
+/app/src/release/generated

@@ -13,6 +13,7 @@ import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -97,6 +98,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -120,6 +122,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -188,8 +191,10 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurBlendMode
 import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.highlight.Highlight
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -413,7 +418,7 @@ class NativePlayerActivity : ComponentActivity() {
     private fun initializePlayerAndUi() {
         setContent {
             val tc = remember { ThemeController(colorSchemeMode = ColorSchemeMode.Dark) }
-            val navOwner = rememberNavigationEventDispatcherOwner(parent = null)
+            val navOwner = rememberNavigationEventDispatcherOwner()
             MiuixTheme(controller = tc) {
                 CompositionLocalProvider(
                     LocalNavigationEventDispatcherOwner provides navOwner
@@ -588,6 +593,67 @@ class NativePlayerActivity : ComponentActivity() {
 // ============================================================
 // 工具
 // ============================================================
+
+@Composable
+private fun buildPlayerMaterialModifier(
+    materialStyle: Int,
+    blurSupported: Boolean,
+    backdrop: LayerBackdrop?,
+    shape: Shape,
+    advancedBlurRadius: Float = CONTROL_BLUR_RADIUS,
+): Modifier {
+    val isBlurActive = blurSupported && backdrop != null && materialStyle != 0
+
+    return if (isBlurActive && backdrop != null) {
+        if (materialStyle == 2) {
+            // 轻透磨砂：与新标签页深色模式参数一致
+            val highlight = Highlight.GlassStrokeSmallDark
+            val baseSurface = Color(0xFF121212)
+            val blendColor = lerp(baseSurface, Color.Black, 0.5f).copy(alpha = 0.5f)
+
+            val blurColors = BlurDefaults.blurColors(
+                blendColors = listOf(
+                    BlendColorEntry(
+                        color = blendColor,
+                        mode = BlurBlendMode.SrcOver,
+                    ),
+                ),
+                contrast = 1.25f,
+                saturation = 1.25f,
+            )
+            Modifier
+                .graphicsLayer {
+                    shadowElevation = 24.dp.toPx()
+                    ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                    spotShadowColor = Color.Transparent
+                }
+                .textureBlur(
+                    backdrop = backdrop,
+                    shape = shape,
+                    blurRadius = 25f,
+                    noiseCoefficient = BlurDefaults.NoiseCoefficient,
+                    colors = blurColors,
+                    highlight = highlight,
+                )
+        } else {
+            // 高级材质：保持原有半透明黑
+            Modifier.textureBlur(
+                backdrop = backdrop,
+                shape = shape,
+                blurRadius = advancedBlurRadius,
+                noiseCoefficient = BlurDefaults.NoiseCoefficient,
+                colors = BlurDefaults.blurColors(
+                    blendColors = listOf(
+                        BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
+                    ),
+                ),
+            )
+        }
+    } else {
+        // 普通材质 或 不支持模糊
+        Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA), shape)
+    }
+}
 
 private fun fmtTime(ms: Long): String {
     if (ms <= 0) return "00:00"
@@ -1035,6 +1101,18 @@ private fun NativePlayerScreen(
     val scope = rememberCoroutineScope()
     val configuration = LocalConfiguration.current
     val prefs = remember { ctx.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    var playerMaterialStyle by remember {
+        mutableIntStateOf(prefs.getInt("ui_material_style", 2))
+    }
+    DisposableEffect(Unit) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "ui_material_style") {
+                playerMaterialStyle = prefs.getInt(key, 2)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     val audioManager = remember {
         ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
@@ -1383,6 +1461,8 @@ private fun NativePlayerScreen(
     }
 
     fun startPlaybackService() {
+        val prefs = ctx.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("notification_bar_enabled", true)) return
         try {
             val intent = buildServiceIntent()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1393,14 +1473,10 @@ private fun NativePlayerScreen(
         } catch (_: Exception) {}
     }
 
-    fun stopPlaybackService() {
-        try {
-            ctx.stopService(Intent(ctx, PlaybackService::class.java))
-        } catch (_: Exception) {}
-    }
-
     fun notifyServiceRefresh() {
         if (!backgroundPlayEnabled) return
+        val prefs = ctx.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("notification_bar_enabled", true)) return
         val intent = buildServiceIntent()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1411,6 +1487,12 @@ private fun NativePlayerScreen(
         } catch (_: Exception) {
             try { ctx.startService(intent) } catch (_: Exception) {}
         }
+    }
+
+    fun stopPlaybackService() {
+        try {
+            ctx.stopService(Intent(ctx, PlaybackService::class.java))
+        } catch (_: Exception) {}
     }
 
     fun captureCoverAsync() {
@@ -1544,7 +1626,7 @@ private fun NativePlayerScreen(
     }
 
     LaunchedEffect(controlsVisible, isPlaying, isLocked, isSeeking, isSwipeSeeking, showMoreMenu, showSpeedMenu, isEnded, uiTick) {
-        if (controlsVisible && isPlaying && !isEnded && !isSeeking && !isSwipeSeeking && !showMoreMenu && !showSpeedMenu && !isLongPressSpeed) {
+        if (controlsVisible && isPlaying && !isEnded && !isSeeking && !isSwipeSeeking && !showMoreMenu && !showSpeedMenu && !isLongPressSpeed && !isLocked) {
             delay(3000); controlsVisible = false
         }
     }
@@ -1733,7 +1815,7 @@ private fun NativePlayerScreen(
 
     val topUiVisible = controlsVisible && !isLocked
     val bottomUiVisible = controlsVisible && !isLocked
-    val rightUiVisible = controlsVisible
+    val rightUiVisible = controlsVisible || isLocked
 
     val topUiProgress by animateFloatAsState(
         targetValue = if (topUiVisible) 1f else 0f,
@@ -2125,18 +2207,13 @@ private fun NativePlayerScreen(
                         .padding(top = 34.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .then(
-                            if (blurSupported && backdrop != null) {
-                                Modifier.textureBlur(
-                                    backdrop = backdrop, shape = RoundedCornerShape(20.dp),
-                                    blurRadius = CONTROL_BLUR_RADIUS,
-                                    noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                    colors = BlurDefaults.blurColors(
-                                        blendColors = listOf(
-                                            BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                        ),
-                                    ),
-                                )
-                            } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                            buildPlayerMaterialModifier(
+                                materialStyle = playerMaterialStyle,
+                                blurSupported = blurSupported,
+                                backdrop = backdrop,
+                                shape = RoundedCornerShape(20.dp),
+                                advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                            )
                         )
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
@@ -2191,20 +2268,12 @@ private fun NativePlayerScreen(
                         Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .then(
-                                if (blurSupported && backdrop != null) {
-                                    Modifier.textureBlur(
-                                        backdrop = backdrop, shape = RoundedCornerShape(12.dp),
-                                        blurRadius = CONTROL_BLUR_RADIUS,
-                                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                        colors = BlurDefaults.blurColors(
-                                            blendColors = listOf(
-                                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                            ),
-                                        ),
-                                    )
-                                } else Modifier.background(
-                                    color = Color.Black.copy(alpha = UI_SCRIM_ALPHA),
+                                buildPlayerMaterialModifier(
+                                    materialStyle = playerMaterialStyle,
+                                    blurSupported = blurSupported,
+                                    backdrop = backdrop,
                                     shape = RoundedCornerShape(12.dp),
+                                    advancedBlurRadius = CONTROL_BLUR_RADIUS,
                                 )
                             )
                             .padding(horizontal = 20.dp, vertical = 12.dp),
@@ -2289,18 +2358,13 @@ private fun NativePlayerScreen(
                         Box(
                             Modifier.size(CONTROL_BUTTON_SIZE).clip(CircleShape)
                                 .then(
-                                    if (blurSupported && backdrop != null) {
-                                        Modifier.textureBlur(
-                                            backdrop = backdrop, shape = CircleShape,
-                                            blurRadius = CONTROL_BLUR_RADIUS,
-                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                            colors = BlurDefaults.blurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                                ),
-                                            ),
-                                        )
-                                    } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                    buildPlayerMaterialModifier(
+                                        materialStyle = playerMaterialStyle,
+                                        blurSupported = blurSupported,
+                                        backdrop = backdrop,
+                                        shape = CircleShape,
+                                        advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                    )
                                 )
                                 .clickable { onBack() },
                             contentAlignment = Alignment.Center,
@@ -2315,18 +2379,13 @@ private fun NativePlayerScreen(
                         Box(
                             Modifier.size(CONTROL_BUTTON_SIZE).clip(CircleShape)
                                 .then(
-                                    if (blurSupported && backdrop != null) {
-                                        Modifier.textureBlur(
-                                            backdrop = backdrop, shape = CircleShape,
-                                            blurRadius = CONTROL_BLUR_RADIUS,
-                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                            colors = BlurDefaults.blurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                                ),
-                                            ),
-                                        )
-                                    } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                    buildPlayerMaterialModifier(
+                                        materialStyle = playerMaterialStyle,
+                                        blurSupported = blurSupported,
+                                        backdrop = backdrop,
+                                        shape = CircleShape,
+                                        advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                    )
                                 )
                                 .clickable { enterPipMode(); bump() },
                             contentAlignment = Alignment.Center,
@@ -2343,18 +2402,13 @@ private fun NativePlayerScreen(
                         Box(
                             Modifier.size(CONTROL_BUTTON_SIZE).clip(CircleShape)
                                 .then(
-                                    if (blurSupported && backdrop != null) {
-                                        Modifier.textureBlur(
-                                            backdrop = backdrop, shape = CircleShape,
-                                            blurRadius = CONTROL_BLUR_RADIUS,
-                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                            colors = BlurDefaults.blurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                                ),
-                                            ),
-                                        )
-                                    } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                    buildPlayerMaterialModifier(
+                                        materialStyle = playerMaterialStyle,
+                                        blurSupported = blurSupported,
+                                        backdrop = backdrop,
+                                        shape = CircleShape,
+                                        advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                    )
                                 )
                                 .clickable {
                                     val opening = !showMoreMenu
@@ -2400,18 +2454,13 @@ private fun NativePlayerScreen(
                         Box(
                             Modifier.size(CONTROL_BUTTON_SIZE).clip(CircleShape)
                                 .then(
-                                    if (blurSupported && backdrop != null) {
-                                        Modifier.textureBlur(
-                                            backdrop = backdrop, shape = CircleShape,
-                                            blurRadius = CONTROL_BLUR_RADIUS,
-                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                            colors = BlurDefaults.blurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                                ),
-                                            ),
-                                        )
-                                    } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                    buildPlayerMaterialModifier(
+                                        materialStyle = playerMaterialStyle,
+                                        blurSupported = blurSupported,
+                                        backdrop = backdrop,
+                                        shape = CircleShape,
+                                        advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                    )
                                 )
                                 .clickable(enabled = !isCapturing) { doCapture(); bump() },
                             contentAlignment = Alignment.Center,
@@ -2455,18 +2504,13 @@ private fun NativePlayerScreen(
                         Box(
                             Modifier.size(CONTROL_BUTTON_SIZE).clip(CircleShape)
                                 .then(
-                                    if (blurSupported && backdrop != null) {
-                                        Modifier.textureBlur(
-                                            backdrop = backdrop, shape = CircleShape,
-                                            blurRadius = CONTROL_BLUR_RADIUS,
-                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                            colors = BlurDefaults.blurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                                ),
-                                            ),
-                                        )
-                                    } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                    buildPlayerMaterialModifier(
+                                        materialStyle = playerMaterialStyle,
+                                        blurSupported = blurSupported,
+                                        backdrop = backdrop,
+                                        shape = CircleShape,
+                                        advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                    )
                                 )
                                 .clickable {
                                     isLocked = !isLocked
@@ -2583,18 +2627,13 @@ private fun NativePlayerScreen(
                     Box(
                         Modifier.size(CONTROL_BUTTON_SIZE).clip(CircleShape)
                             .then(
-                                if (blurSupported && backdrop != null) {
-                                    Modifier.textureBlur(
-                                        backdrop = backdrop, shape = CircleShape,
-                                        blurRadius = CONTROL_BLUR_RADIUS,
-                                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                        colors = BlurDefaults.blurColors(
-                                            blendColors = listOf(
-                                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                            ),
-                                        ),
-                                    )
-                                } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                buildPlayerMaterialModifier(
+                                    materialStyle = playerMaterialStyle,
+                                    blurSupported = blurSupported,
+                                    backdrop = backdrop,
+                                    shape = CircleShape,
+                                    advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                )
                             )
                             .clickable(enabled = bottomUiVisible) {
                                 when {
@@ -2629,21 +2668,12 @@ private fun NativePlayerScreen(
                                 .height(CONTROL_BUTTON_SIZE)
                                 .clip(RoundedCornerShape(CONTROL_BUTTON_SIZE / 2))
                                 .then(
-                                    if (blurSupported && backdrop != null) {
-                                        Modifier.textureBlur(
-                                            backdrop = backdrop,
-                                            shape = RoundedCornerShape(CONTROL_BUTTON_SIZE / 2),
-                                            blurRadius = CONTROL_BLUR_RADIUS,
-                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                            colors = BlurDefaults.blurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                                ),
-                                            ),
-                                        )
-                                    } else Modifier.background(
-                                        color = Color.Black.copy(alpha = UI_SCRIM_ALPHA),
+                                    buildPlayerMaterialModifier(
+                                        materialStyle = playerMaterialStyle,
+                                        blurSupported = blurSupported,
+                                        backdrop = backdrop,
                                         shape = RoundedCornerShape(CONTROL_BUTTON_SIZE / 2),
+                                        advancedBlurRadius = CONTROL_BLUR_RADIUS,
                                     )
                                 )
                                 .clickable(enabled = bottomUiVisible) { showEpisodeSheet = true }
@@ -2664,21 +2694,12 @@ private fun NativePlayerScreen(
                         Modifier.height(CONTROL_BUTTON_SIZE)
                             .clip(RoundedCornerShape(CONTROL_BUTTON_SIZE / 2))
                             .then(
-                                if (blurSupported && backdrop != null) {
-                                    Modifier.textureBlur(
-                                        backdrop = backdrop,
-                                        shape = RoundedCornerShape(CONTROL_BUTTON_SIZE / 2),
-                                        blurRadius = CONTROL_BLUR_RADIUS,
-                                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                        colors = BlurDefaults.blurColors(
-                                            blendColors = listOf(
-                                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                            ),
-                                        ),
-                                    )
-                                } else Modifier.background(
-                                    color = Color.Black.copy(alpha = UI_SCRIM_ALPHA),
+                                buildPlayerMaterialModifier(
+                                    materialStyle = playerMaterialStyle,
+                                    blurSupported = blurSupported,
+                                    backdrop = backdrop,
                                     shape = RoundedCornerShape(CONTROL_BUTTON_SIZE / 2),
+                                    advancedBlurRadius = CONTROL_BLUR_RADIUS,
                                 )
                             )
                             .clickable(enabled = bottomUiVisible) {
@@ -2700,19 +2721,13 @@ private fun NativePlayerScreen(
                         Modifier.size(CONTROL_BUTTON_SIZE)
                             .clip(CircleShape)
                             .then(
-                                if (blurSupported && backdrop != null) {
-                                    Modifier.textureBlur(
-                                        backdrop = backdrop,
-                                        shape = CircleShape,
-                                        blurRadius = CONTROL_BLUR_RADIUS,
-                                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                        colors = BlurDefaults.blurColors(
-                                            blendColors = listOf(
-                                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                            ),
-                                        ),
-                                    )
-                                } else Modifier.background(Color.Black.copy(alpha = UI_SCRIM_ALPHA))
+                                buildPlayerMaterialModifier(
+                                    materialStyle = playerMaterialStyle,
+                                    blurSupported = blurSupported,
+                                    backdrop = backdrop,
+                                    shape = CircleShape,
+                                    advancedBlurRadius = CONTROL_BLUR_RADIUS,
+                                )
                             )
                             .clickable(enabled = bottomUiVisible) {
                                 userManuallyRotatedState.value = true
@@ -2859,21 +2874,12 @@ private fun NativePlayerScreen(
                         Modifier.width(360.dp)
                             .clip(RoundedCornerShape(DOWNLOAD_DIALOG_CORNER))
                             .then(
-                                if (blurSupported && backdrop != null) {
-                                    Modifier.textureBlur(
-                                        backdrop = backdrop,
-                                        shape = RoundedCornerShape(DOWNLOAD_DIALOG_CORNER),
-                                        blurRadius = PANEL_BLUR_RADIUS,
-                                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                        colors = BlurDefaults.blurColors(
-                                            blendColors = listOf(
-                                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                                            ),
-                                        ),
-                                    )
-                                } else Modifier.background(
-                                    color = Color.Black.copy(alpha = UI_SCRIM_ALPHA),
+                                buildPlayerMaterialModifier(
+                                    materialStyle = playerMaterialStyle,
+                                    blurSupported = blurSupported,
+                                    backdrop = backdrop,
                                     shape = RoundedCornerShape(DOWNLOAD_DIALOG_CORNER),
+                                    advancedBlurRadius = PANEL_BLUR_RADIUS,
                                 )
                             )
                             .clickable(interactionSource = null, indication = null) { }
@@ -2918,6 +2924,7 @@ private fun NativePlayerScreen(
                 BrightnessOverlay(
                     brightness = brightnessOverlayValue,
                     backdrop = backdrop, blurSupported = blurSupported,
+                    materialStyle = playerMaterialStyle,
                 )
             }
 
@@ -2929,6 +2936,7 @@ private fun NativePlayerScreen(
                 VolumeOverlay(
                     volume = volumeOverlayValue,
                     backdrop = backdrop, blurSupported = blurSupported,
+                    materialStyle = playerMaterialStyle,
                 )
             }
 
@@ -3094,6 +3102,7 @@ private fun MiniProgressBar(
 @Composable
 private fun BrightnessOverlay(
     brightness: Float, backdrop: LayerBackdrop?, blurSupported: Boolean,
+    materialStyle: Int,
 ) {
     val v = brightness.coerceIn(0f, 1f)
     val sunColor = if (v >= 0.99f) Color(0xFFFFB74D) else Color.White
@@ -3102,20 +3111,12 @@ private fun BrightnessOverlay(
         modifier = Modifier
             .clip(RoundedCornerShape(OVERLAY_CORNER))
             .then(
-                if (blurSupported && backdrop != null) {
-                    Modifier.textureBlur(
-                        backdrop = backdrop, shape = RoundedCornerShape(OVERLAY_CORNER),
-                        blurRadius = CONTROL_BLUR_RADIUS,
-                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                        colors = BlurDefaults.blurColors(
-                            blendColors = listOf(
-                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                            ),
-                        ),
-                    )
-                } else Modifier.background(
-                    color = Color.Black.copy(alpha = UI_SCRIM_ALPHA),
+                buildPlayerMaterialModifier(
+                    materialStyle = materialStyle,
+                    blurSupported = blurSupported,
+                    backdrop = backdrop,
                     shape = RoundedCornerShape(OVERLAY_CORNER),
+                    advancedBlurRadius = CONTROL_BLUR_RADIUS,
                 )
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -3164,6 +3165,7 @@ private fun BrightnessOverlay(
 @Composable
 private fun VolumeOverlay(
     volume: Float, backdrop: LayerBackdrop?, blurSupported: Boolean,
+    materialStyle: Int,
 ) {
     val v = volume.coerceIn(0f, 1f)
     val isFull = v >= 0.99f
@@ -3187,20 +3189,12 @@ private fun VolumeOverlay(
         modifier = Modifier
             .clip(RoundedCornerShape(OVERLAY_CORNER))
             .then(
-                if (blurSupported && backdrop != null) {
-                    Modifier.textureBlur(
-                        backdrop = backdrop, shape = RoundedCornerShape(OVERLAY_CORNER),
-                        blurRadius = CONTROL_BLUR_RADIUS,
-                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                        colors = BlurDefaults.blurColors(
-                            blendColors = listOf(
-                                BlendColorEntry(color = Color.Black.copy(alpha = UI_SCRIM_ALPHA)),
-                            ),
-                        ),
-                    )
-                } else Modifier.background(
-                    color = Color.Black.copy(alpha = UI_SCRIM_ALPHA),
+                buildPlayerMaterialModifier(
+                    materialStyle = materialStyle,
+                    blurSupported = blurSupported,
+                    backdrop = backdrop,
                     shape = RoundedCornerShape(OVERLAY_CORNER),
+                    advancedBlurRadius = CONTROL_BLUR_RADIUS,
                 )
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -3370,7 +3364,7 @@ private fun MoreMenu(
 ) {
     val funcs = listOf(
         "复制链接" to MiuixIcons.Copy,
-        "分享视频" to MiuixIcons.Forward,
+        "分享视频" to Icons.Rounded.Share,
         (if (isBookmarked) "取消书签" else "添加书签") to
                 (if (isBookmarked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites),
         "下载视频" to MiuixIcons.Download,

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      注意：这里绝对不能写 android:maxSdkVersion="28"。
+
+      BaselineProfileRule 内部套了 GrantPermissionRule.grant(WRITE_EXTERNAL_STORAGE)，
+      流程是：pm grant -> checkSelfPermission -> 仍为 DENIED 就 fail("Failed to grant permissions")。
+      而 maxSdkVersion=28 会让系统在 Android 13+ 上根本不登记这条权限（dumpsys 的
+      requested permissions 里没有它），pm grant 静默无效，于是 grant 永远失败、
+      两个用例在 0.5 秒内直接报错，profile 一个字节都不会生成。
+    -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+</manifest>

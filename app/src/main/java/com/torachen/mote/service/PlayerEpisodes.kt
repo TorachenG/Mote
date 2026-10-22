@@ -493,8 +493,7 @@ internal fun EpisodeSheet(
             LazyColumn(
                 state = listState,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 480.dp),
+                    .fillMaxWidth(),
             ) {
                 items(
                     count = episodes.size,
