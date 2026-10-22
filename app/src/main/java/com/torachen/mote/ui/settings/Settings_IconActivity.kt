@@ -207,7 +207,7 @@ private fun SettingsIconMiuix(onBack: () -> Unit) {
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = contentTopPadding),
+                    contentPadding = PaddingValues(top = contentTopPadding + 12.dp),
                     overscrollEffect = null,
                 ) {
                     item(key = "content") {

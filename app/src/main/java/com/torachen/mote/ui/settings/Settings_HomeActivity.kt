@@ -414,7 +414,7 @@ private fun SettingsHomeMiuix(
                         .scrollEndHaptic()
                         .overScrollVertical()
                         .imePadding(),
-                    contentPadding = PaddingValues(top = contentTopPadding),
+                    contentPadding = PaddingValues(top = contentTopPadding + 12.dp),
                     overscrollEffect = null,
                 ) {
                     item(key = "content") {
