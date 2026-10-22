@@ -31,3 +31,7 @@ Mote 是一款完全使用 Jetpack Compose 编写的 Android 浏览器，UI 严�
 git clone https://github.com/TorachenG/Mote.git
 cd Mote
 ./gradlew :app:assembleDebug
+
+### 许可
+
+本项目源码以 [Apache License 2.0](LICENSE) 发布；随应用分发的第三方组件（AndroidX、MIT 许可的 MaterialKolor、Google ML Kit 等）遵循各自许可，详见 [NOTICE](NOTICE)。
