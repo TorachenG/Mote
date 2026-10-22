@@ -869,7 +869,7 @@ private fun SettingsMainPageMiuix(
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = contentTopPadding + 12.dp),
+                    contentPadding = PaddingValues(top = contentTopPadding + 4.dp),
                     overscrollEffect = null,
                 ) {
                     item(key = "searchbar") {
@@ -1685,7 +1685,7 @@ fun SettingsSubPage(
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .scrollEndHaptic()
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = contentTopPadding + 12.dp),
+                    contentPadding = PaddingValues(top = contentTopPadding + 4.dp),
                     overscrollEffect = null,
                 ) {
                     item {
