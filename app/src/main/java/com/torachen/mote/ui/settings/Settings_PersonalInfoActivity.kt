@@ -431,7 +431,13 @@ private fun SettingsPersonalInfoMiuix(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .then(
+                            if (listState.canScrollForward || listState.canScrollBackward) {
+                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding),
@@ -801,7 +807,13 @@ private fun PasswordManagerPageMiuix(onBack: () -> Unit) {
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .then(
+                            if (listState.canScrollForward || listState.canScrollBackward) {
+                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(

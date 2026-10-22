@@ -1135,7 +1135,13 @@ private fun SettingsLayoutMiuix(
                                     state = listState0,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                                        .then(
+                                            if (listState0.canScrollForward || listState0.canScrollBackward) {
+                                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
                                     contentPadding = PaddingValues(top = contentTopPadding),
@@ -1334,7 +1340,13 @@ private fun SettingsLayoutMiuix(
                                     state = listState1,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                                        .then(
+                                            if (listState1.canScrollForward || listState1.canScrollBackward) {
+                                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
                                     contentPadding = PaddingValues(top = contentTopPadding),
@@ -2330,7 +2342,7 @@ internal fun BrowserHomePreview() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 24.dp),
+            .padding(top = 8.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -2486,7 +2498,7 @@ internal fun ThemePreview() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 24.dp),
+            .padding(top = 8.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -2667,7 +2679,7 @@ private fun ThemePreviewMaterial() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 24.dp),
+            .padding(top = 8.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -2821,7 +2833,7 @@ private fun BrowserHomePreviewMaterial() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 20.dp, bottom = 24.dp),
+            .padding(top = 8.dp, bottom = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(

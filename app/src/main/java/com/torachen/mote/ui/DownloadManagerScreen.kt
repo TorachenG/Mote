@@ -1059,7 +1059,13 @@ private fun DownloadManagerScreenMiuix(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .then(
+                            if (listState.canScrollForward || listState.canScrollBackward) {
+                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding),
@@ -1481,7 +1487,13 @@ private fun TaskDetailScreenMiuix(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .then(
+                            if (listState.canScrollForward || listState.canScrollBackward) {
+                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding, bottom = 100.dp),
@@ -2981,7 +2993,13 @@ private fun DownloadSettingsMiuix(onBack: () -> Unit) {
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .then(
+                            if (listState.canScrollForward || listState.canScrollBackward) {
+                                Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = contentTopPadding),
