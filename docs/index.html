@@ -120,6 +120,24 @@
     letter-spacing:.5px;
   }
 
+  /* ---------- 入场动画：从下往上平滑归位 + 渐显，按从上到下的顺序依次出现 ---------- */
+  @keyframes rise {
+    from { opacity: 0; transform: translate3d(0, 26px, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  main > * {
+    animation: rise .78s cubic-bezier(.22,1,.36,1) backwards;
+    will-change: transform, opacity;
+  }
+  main > .star { animation-delay: .06s }
+  main > h1    { animation-delay: .15s }
+  main > .meta { animation-delay: .24s }
+  main > .dl   { animation-delay: .33s }
+  main > .tags { animation-delay: .42s }
+
+  @media (prefers-reduced-motion: reduce) {
+    main > * { animation: none }
+  }
   @media (max-width:760px){
     .top{padding:22px 20px;flex-direction:column;gap:14px}
     .brand .name{font-size:34px;letter-spacing:5px;margin-top:5px}
