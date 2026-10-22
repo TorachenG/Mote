@@ -15,7 +15,9 @@ import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +44,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -55,10 +59,14 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode as ComposeBlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
@@ -70,6 +78,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -78,17 +87,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.TextStyle
 import androidx.core.net.toUri
 
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.DropdownEntry
@@ -98,27 +101,35 @@ import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurBlendMode
+import top.yukonga.miuix.kmp.blur.BlurColors
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.preference.WindowSpinnerPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
-
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurBlendMode
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
-
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 import com.torachen.mote.ui.component.miuix.effect.BgEffectBackground
+
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.IconButton as M3IconButton
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.Scaffold as M3Scaffold
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TopAppBar as M3TopAppBar
+import androidx.compose.material3.TopAppBarDefaults as M3TopAppBarDefaults
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -126,7 +137,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import androidx.compose.ui.graphics.BlendMode as ComposeBlendMode
 
 // ============================================================
 // 常量
@@ -134,6 +144,7 @@ import androidx.compose.ui.graphics.BlendMode as ComposeBlendMode
 
 private const val TOP_BAR_BLUR_RADIUS = 25f
 private const val TOP_BAR_BLEND_ALPHA = 0.87f
+
 
 private const val APP_DISPLAY_NAME = "Mote"
 
@@ -144,7 +155,6 @@ private val TOP_BAR_FALLBACK_HEIGHT = 64.dp
 
 private const val CARD_ALPHA = 0.5f
 
-// ★ 星星尺寸
 private val LOGO_SIZE = 100.dp
 
 private val AUTO_CHECK_UPDATE_OPTIONS = listOf("每次启动", "每周启动", "关闭")
@@ -187,12 +197,30 @@ internal object PendingUpdateStore {
 }
 
 // ============================================================
-// ★ 星星 Logo（Canvas 绘制，参考原图的四角星 sparkle）
-//
-//   形状说明：
-//   - 四个尖角分别指向上下左右
-//   - 每条边都是向内凹的 cubic 贝塞尔曲线
-//   - 控制点 (0.5, 0.35) 和 (0.65, 0.5) 让尖角锐利、中间鼓起
+// 页面状态 / 动作
+// ============================================================
+
+@Immutable
+private data class AboutPageState(
+    val appName: String,
+    val versionName: String,
+    val updateStateText: String,
+    val autoCheckUpdateOptions: List<String>,
+    val autoCheckUpdateIndex: Int,
+    val downloadSourceOptions: List<Pair<String, String>>,
+    val downloadSourceIndex: Int,
+)
+
+@Immutable
+private data class AboutPageActions(
+    val onBack: () -> Unit,
+    val onCheckUpdate: () -> Unit,
+    val onAutoCheckUpdateChange: (Int) -> Unit,
+    val onDownloadSourceChange: (Int) -> Unit,
+)
+
+// ============================================================
+// ★ 星星 Logo（Canvas 绘制，四角星 sparkle）
 // ============================================================
 
 @Composable
@@ -202,36 +230,35 @@ private fun MoteStarCanvas(modifier: Modifier = Modifier) {
         val h = size.height
 
         val path = Path().apply {
-            moveTo(w * 0.5f, 0f)                                  // 顶
+            moveTo(w * 0.5f, 0f)
             cubicTo(
-                w * 0.5f, h * 0.30f,                              // ★ 0.40 → 0.30（远离中轴）
-                w * 0.70f, h * 0.5f,                              // ★ 0.60 → 0.70（远离中轴）
+                w * 0.5f, h * 0.30f,
+                w * 0.70f, h * 0.5f,
                 w, h * 0.5f
             )
             cubicTo(
-                w * 0.70f, h * 0.5f,                              // ★ 对称
-                w * 0.5f, h * 0.70f,                              // ★ 对称
+                w * 0.70f, h * 0.5f,
+                w * 0.5f, h * 0.70f,
                 w * 0.5f, h
             )
             cubicTo(
-                w * 0.5f, h * 0.70f,                              // ★ 对称
-                w * 0.30f, h * 0.5f,                              // ★ 对称
+                w * 0.5f, h * 0.70f,
+                w * 0.30f, h * 0.5f,
                 0f, h * 0.5f
             )
             cubicTo(
-                w * 0.30f, h * 0.5f,                              // ★ 对称
-                w * 0.5f, h * 0.30f,                              // ★ 对称
+                w * 0.30f, h * 0.5f,
+                w * 0.5f, h * 0.30f,
                 w * 0.5f, 0f
             )
             close()
         }
 
-        // 左上 → 右下 的线性渐变（粉 → 紫 → 蓝）
         val brush = Brush.linearGradient(
             colors = listOf(
-                Color(0xFFFFB5A7),   // 桃粉
-                Color(0xFFC5A0DD),   // 中间过渡紫
-                Color(0xFF3B72FF),   // 亮蓝
+                Color(0xFFFFB5A7),
+                Color(0xFFC5A0DD),
+                Color(0xFF3B72FF),
             ),
             start = androidx.compose.ui.geometry.Offset(0f, 0f),
             end = androidx.compose.ui.geometry.Offset(w, h),
@@ -242,64 +269,15 @@ private fun MoteStarCanvas(modifier: Modifier = Modifier) {
 }
 
 // ============================================================
-// 关于页
+// 入口
 // ============================================================
 
 @Composable
 fun SettingsAboutPage(
     onBack: () -> Unit,
 ) {
-    val navOwner = rememberNavigationEventDispatcherOwner(parent = null)
-    val scrollBehavior = MiuixScrollBehavior()
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
-
-    val surfaceColor = MiuixTheme.colorScheme.surface
-    val blurSupported = isRuntimeShaderSupported()
-
-    // ★ backdrop #1：BgEffectBackground 内部流光纹理（供星星 / 文字染色）
-    val contentBackdrop = rememberLayerBackdrop()
-
-    // ★ backdrop #2：顶栏模糊专用
-    val barBlurBackdrop = if (blurSupported) {
-        rememberLayerBackdrop {
-            drawRect(surfaceColor)
-            drawContent()
-        }
-    } else null
-
-    val density = LocalDensity.current
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-    var topBarBottomPx by remember { mutableIntStateOf(0) }
-    val measuredTop = with(density) { topBarBottomPx.toDp() }
-    val contentTopPadding = if (topBarBottomPx > 0) measuredTop
-    else statusBarHeight + TOP_BAR_FALLBACK_HEIGHT
-
-    val lazyListState = rememberLazyListState()
-    var logoHeightPx by remember { mutableIntStateOf(0) }
-
-    val scrollProgress by remember {
-        derivedStateOf {
-            if (logoHeightPx <= 0) 0f
-            else {
-                val index = lazyListState.firstVisibleItemIndex
-                val offset = lazyListState.firstVisibleItemScrollOffset
-                if (index > 0) 1f else (offset.toFloat() / logoHeightPx).coerceIn(0f, 1f)
-            }
-        }
-    }
-
-    val blurActive = barBlurBackdrop != null && scrollProgress == 1f
-    val barColor = if (blurActive) {
-        Color.Transparent
-    } else {
-        if (scrollProgress == 1f) surfaceColor else Color.Transparent
-    }
-
-    val effectiveLogoHeight = with(density) {
-        if (logoHeightPx > 0) logoHeightPx.toDp() else LOGO_FALLBACK_HEIGHT
-    }
+    val scope = rememberCoroutineScope()
 
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
@@ -344,43 +322,214 @@ fun SettingsAboutPage(
         }
     }
 
-    val autoCheckUpdateEntries = remember(autoCheckUpdateIndex) {
-        listOf(
-            DropdownEntry(
-                items = AUTO_CHECK_UPDATE_OPTIONS.mapIndexed { index, label ->
-                    DropdownItem(
-                        text = label,
-                        selected = autoCheckUpdateIndex == index,
-                        onClick = {
-                            autoCheckUpdateIndex = index
-                            prefs.edit().putInt(KEY_AUTO_CHECK_UPDATE, index).apply()
-                        },
-                    )
-                },
-            ),
-        )
+    val updateStateText = when (val s = updateState) {
+        UpdateState.Idle -> "检查版本"
+        UpdateState.Checking -> "正在检查中"
+        UpdateState.UpToDate -> "已经是最新版本"
+        is UpdateState.HasUpdate -> "发现新版本"
+        is UpdateState.Failed -> "检查失败"
     }
 
-    val downloadSourceEntries = remember(downloadSourceIndex) {
-        listOf(
-            DropdownEntry(
-                items = DOWNLOAD_SOURCE_OPTIONS.mapIndexed { index, (label, summary) ->
-                    DropdownItem(
-                        text = label,
-                        summary = summary,
-                        selected = downloadSourceIndex == index,
-                        onClick = {
-                            downloadSourceIndex = index
-                            prefs.edit().putInt(KEY_DOWNLOAD_SOURCE, index).apply()
-                            updateState = UpdateState.Idle
-                        },
-                    )
-                },
-            ),
-        )
+    val state = AboutPageState(
+        appName = APP_DISPLAY_NAME,
+        versionName = currentVersionRaw,
+        updateStateText = updateStateText,
+        autoCheckUpdateOptions = AUTO_CHECK_UPDATE_OPTIONS,
+        autoCheckUpdateIndex = autoCheckUpdateIndex,
+        downloadSourceOptions = DOWNLOAD_SOURCE_OPTIONS,
+        downloadSourceIndex = downloadSourceIndex,
+    )
+
+    val actions = AboutPageActions(
+        onBack = onBack,
+        onCheckUpdate = { performCheck() },
+        onAutoCheckUpdateChange = { index ->
+            autoCheckUpdateIndex = index
+            prefs.edit().putInt(KEY_AUTO_CHECK_UPDATE, index).apply()
+        },
+        onDownloadSourceChange = { index ->
+            downloadSourceIndex = index
+            prefs.edit().putInt(KEY_DOWNLOAD_SOURCE, index).apply()
+            updateState = UpdateState.Idle
+        },
+    )
+
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> SettingsAboutMiuix(state, actions)
+        UiMode.Material -> SettingsAboutMaterial(state, actions)
     }
 
-    // ★ 三阶段淡出/缩小进度
+    // ★ UpdateDialog 里的 WindowBottomSheet 需要 LocalNavigationEventDispatcherOwner
+    val dialogNavOwner = rememberNavigationEventDispatcherOwner()
+    val updateInfo = updateState as? UpdateState.HasUpdate
+    CompositionLocalProvider(
+        LocalNavigationEventDispatcherOwner provides dialogNavOwner
+    ) {
+        UpdateDialog(
+            show = showUpdateDialog && updateInfo != null,
+            info = updateInfo,
+            currentVersion = currentVersionRaw,
+            isDownloading = isDownloading,
+            onDismiss = { showUpdateDialog = false },
+            onDownload = {
+                if (updateInfo != null && !isDownloading) {
+                    isDownloading = true
+                    showUpdateDialog = false
+                    startApkDownload(
+                        context = context,
+                        downloadUrl = updateInfo.url,
+                        onComplete = { isDownloading = false },
+                        onFailed = { msg ->
+                            isDownloading = false
+                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        },
+                    )
+                }
+            },
+        )
+    }
+}
+
+// ============================================================
+// MIUIX 版 —— BgEffectBackground 动态流光 + 自绘四角星
+// ============================================================
+
+@Composable
+private fun SettingsAboutMiuix(
+    state: AboutPageState,
+    actions: AboutPageActions,
+) {
+    val navOwner = rememberNavigationEventDispatcherOwner()
+    val scrollBehavior = MiuixScrollBehavior()
+
+    val surfaceColor = MiuixTheme.colorScheme.surface
+    val blurSupported = isRuntimeShaderSupported()
+
+    val contentBackdrop = rememberLayerBackdrop()
+
+    val barBlurBackdrop = if (blurSupported) {
+        rememberLayerBackdrop {
+            drawRect(surfaceColor)
+            drawContent()
+        }
+    } else null
+
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var progressiveTitleBlur by remember {
+        mutableStateOf(prefs.getBoolean(KEY_PROGRESSIVE_TITLE_BLUR, true))
+    }
+    var materialStyle by remember {
+        mutableIntStateOf(prefs.getInt("ui_material_style", 2))
+    }
+    DisposableEffect(Unit) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                KEY_PROGRESSIVE_TITLE_BLUR -> progressiveTitleBlur = prefs.getBoolean(key, true)
+                "ui_material_style" -> materialStyle = prefs.getInt(key, 2)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    var topBarBottomPx by remember { mutableIntStateOf(0) }
+    val measuredTop = with(density) { topBarBottomPx.toDp() }
+    val contentTopPadding = if (topBarBottomPx > 0) measuredTop
+    else statusBarHeight + TOP_BAR_FALLBACK_HEIGHT
+
+    val lazyListState = rememberLazyListState()
+    var logoHeightPx by remember { mutableIntStateOf(0) }
+
+    val scrollProgress by remember {
+        derivedStateOf {
+            if (logoHeightPx <= 0) 0f
+            else {
+                val index = lazyListState.firstVisibleItemIndex
+                val offset = lazyListState.firstVisibleItemScrollOffset
+                if (index > 0) 1f else (offset.toFloat() / logoHeightPx).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    val isAtTop = scrollProgress == 0f
+    val themeIsDark = surfaceColor.luminance() < 0.5f
+    val backCardAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isAtTop || !progressiveTitleBlur) 0f else 1f,
+        animationSpec = androidx.compose.animation.core.tween(400, easing = androidx.compose.animation.core.CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+        label = "settingsBackCardAlpha",
+    )
+    val backCardMaterialModifier = if (progressiveTitleBlur) {
+        buildBackCardMaterialModifier(materialStyle, blurSupported, barBlurBackdrop, themeIsDark)
+    } else {
+        Modifier
+    }
+
+    val blurActive = barBlurBackdrop != null && scrollProgress == 1f
+    val barColor = if (blurActive) {
+        Color.Transparent
+    } else {
+        if (scrollProgress == 1f) surfaceColor else Color.Transparent
+    }
+
+    val effectiveLogoHeight = with(density) {
+        if (logoHeightPx > 0) logoHeightPx.toDp() else LOGO_FALLBACK_HEIGHT
+    }
+
+    val logoBlend = remember(themeIsDark) {
+        if (themeIsDark) {
+            listOf(
+                BlendColorEntry(Color(0xe6a1a1a1), BlurBlendMode.ColorDodge),
+                BlendColorEntry(Color(0x4de6e6e6), BlurBlendMode.LinearLight),
+                BlendColorEntry(Color(0xff1af500), BlurBlendMode.Lab),
+            )
+        } else {
+            listOf(
+                BlendColorEntry(Color(0xcc4a4a4a), BlurBlendMode.ColorBurn),
+                BlendColorEntry(Color(0xff4f4f4f), BlurBlendMode.LinearLight),
+                BlendColorEntry(Color(0xff1af200), BlurBlendMode.Lab),
+            )
+        }
+    }
+
+    var cardInitialY by remember { mutableFloatStateOf(0f) }
+    var cardCurrentY by remember { mutableFloatStateOf(0f) }
+
+    val cardProgress by remember {
+        derivedStateOf {
+            val topBarY = topBarBottomPx.toFloat()
+            if (cardInitialY <= 0f || topBarY <= 0f) 0f
+            else {
+                val range = cardInitialY - topBarY
+                if (range <= 0f) 0f
+                else ((cardInitialY - cardCurrentY) / range).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    val darkT = cardProgress
+    val darkAlphaProgress = darkT * darkT * darkT * darkT
+    val darkCardColor = lerp(
+        Color.White,
+        MiuixTheme.colorScheme.surfaceContainer,
+        darkT,
+    ).copy(alpha = 0.1f + 0.9f * darkAlphaProgress)
+
+    val cardColor = if (surfaceColor.luminance() >= 0.5f) {
+        lerp(
+            MiuixTheme.colorScheme.surfaceContainer.copy(alpha = CARD_ALPHA),
+            MiuixTheme.colorScheme.surfaceContainer,
+            cardProgress,
+        )
+    } else {
+        darkCardColor
+    }
+
     var logoAreaY by remember { mutableFloatStateOf(0f) }
     var iconY by remember { mutableFloatStateOf(0f) }
     var appNameY by remember { mutableFloatStateOf(0f) }
@@ -425,54 +574,44 @@ fun SettingsAboutPage(
         } catch (_: Exception) {}
     }
 
-    // ★ 主题判定 + 星星/文字的流光混合配色
-    val themeIsDark = surfaceColor.luminance() < 0.5f
-    val logoBlend = remember(themeIsDark) {
-        if (themeIsDark) {
-            listOf(
-                BlendColorEntry(Color(0xe6a1a1a1), BlurBlendMode.ColorDodge),
-                BlendColorEntry(Color(0x4de6e6e6), BlurBlendMode.LinearLight),
-                BlendColorEntry(Color(0xff1af500), BlurBlendMode.Lab),
-            )
-        } else {
-            listOf(
-                BlendColorEntry(Color(0xcc4a4a4a), BlurBlendMode.ColorBurn),
-                BlendColorEntry(Color(0xff4f4f4f), BlurBlendMode.LinearLight),
-                BlendColorEntry(Color(0xff1af200), BlurBlendMode.Lab),
-            )
-        }
+    val autoCheckUpdateEntries = remember(
+        state.autoCheckUpdateOptions, state.autoCheckUpdateIndex
+    ) {
+        listOf(
+            DropdownEntry(
+                items = state.autoCheckUpdateOptions.mapIndexed { index, label ->
+                    DropdownItem(
+                        text = label,
+                        selected = state.autoCheckUpdateIndex == index,
+                        onClick = { actions.onAutoCheckUpdateChange(index) },
+                    )
+                },
+            ),
+        )
     }
 
-    // ★ 卡片滚动联动 alpha / color
-    var cardInitialY by remember { mutableFloatStateOf(0f) }
-    var cardCurrentY by remember { mutableFloatStateOf(0f) }
-
-    val cardProgress by remember {
-        derivedStateOf {
-            val topBarY = topBarBottomPx.toFloat()
-            if (cardInitialY <= 0f || topBarY <= 0f) 0f
-            else {
-                val range = cardInitialY - topBarY
-                if (range <= 0f) 0f
-                else ((cardInitialY - cardCurrentY) / range).coerceIn(0f, 1f)
-            }
-        }
+    val downloadSourceEntries = remember(
+        state.downloadSourceOptions, state.downloadSourceIndex
+    ) {
+        listOf(
+            DropdownEntry(
+                items = state.downloadSourceOptions.mapIndexed { index, (label, summary) ->
+                    DropdownItem(
+                        text = label,
+                        summary = summary,
+                        selected = state.downloadSourceIndex == index,
+                        onClick = { actions.onDownloadSourceChange(index) },
+                    )
+                },
+            ),
+        )
     }
-
-    val cardColor = lerp(
-        MiuixTheme.colorScheme.surfaceContainer.copy(alpha = CARD_ALPHA),
-        MiuixTheme.colorScheme.surfaceContainer,
-        cardProgress,
-    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
 
-            // ============================================================
-            // 内容层（注册 barBlurBackdrop）
-            // ============================================================
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -490,20 +629,17 @@ fun SettingsAboutPage(
                     effectBackground = true,
                     alpha = { 1f - scrollProgress },
                 ) {
-                    // ============================================================
-                    // Logo 区
-                    // ============================================================
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = contentTopPadding + LOGO_TOP_OFFSET)
                             .onGloballyPositioned { coords ->
-                                val h = coords.size.height
-                                if (h != logoHeightPx) logoHeightPx = h
+                                if (coords.size.height != logoHeightPx) {
+                                    logoHeightPx = coords.size.height
+                                }
                             },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        // ---------- 星星 Logo（Canvas 绘制 + 动态流光染色） ----------
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -539,7 +675,6 @@ fun SettingsAboutPage(
                             )
                         }
 
-                        // ---------- 应用名（动态流光染色 + 描边加粗） ----------
                         val appNameStrokePx = with(density) { 0.6.dp.toPx() }
 
                         Box(
@@ -571,9 +706,8 @@ fun SettingsAboutPage(
                                 ),
                             contentAlignment = Alignment.Center,
                         ) {
-                            // 底层：描边，把笔画撑粗
                             Text(
-                                text = APP_DISPLAY_NAME,
+                                text = state.appName,
                                 color = MiuixTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 35.sp,
@@ -585,18 +719,16 @@ fun SettingsAboutPage(
                                     ),
                                 ),
                             )
-                            // 上层：正常填充
                             Text(
-                                text = APP_DISPLAY_NAME,
+                                text = state.appName,
                                 color = MiuixTheme.colorScheme.onSurface,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 35.sp,
                             )
                         }
 
-                        // ---------- 版本号 ----------
                         Text(
-                            text = currentVersionRaw,
+                            text = state.versionName,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .graphicsLayer {
@@ -617,9 +749,6 @@ fun SettingsAboutPage(
                         )
                     }
 
-                    // ============================================================
-                    // 滚动内容
-                    // ============================================================
                     LazyColumn(
                         state = lazyListState,
                         modifier = Modifier
@@ -634,9 +763,7 @@ fun SettingsAboutPage(
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(
-                                        LOGO_TOP_OFFSET + effectiveLogoHeight + LOGO_BOTTOM_GAP
-                                    )
+                                    .height(LOGO_TOP_OFFSET + effectiveLogoHeight + LOGO_BOTTOM_GAP)
                                     .onGloballyPositioned { coordinates ->
                                         try {
                                             logoAreaY = coordinates.positionInWindow().y +
@@ -655,9 +782,7 @@ fun SettingsAboutPage(
                                         try {
                                             val y = coords.positionInWindow().y
                                             if (y > 0f) {
-                                                if (cardInitialY == 0f) {
-                                                    cardInitialY = y
-                                                }
+                                                if (cardInitialY == 0f) cardInitialY = y
                                                 cardCurrentY = y
                                             }
                                         } catch (_: Exception) {}
@@ -672,33 +797,48 @@ fun SettingsAboutPage(
                                         contentColor = MiuixTheme.colorScheme.onSurface,
                                     ),
                                 ) {
-                                    ArrowPreference(
+                                    SearchableItem(
                                         title = "检查更新",
-                                        endActions = {
-                                            Text(
-                                                text = when (val s = updateState) {
-                                                    UpdateState.Idle -> "检查版本"
-                                                    UpdateState.Checking -> "正在检查中"
-                                                    UpdateState.UpToDate -> "已经是最新版本"
-                                                    is UpdateState.HasUpdate -> "发现新版本"
-                                                    is UpdateState.Failed -> "检查失败"
-                                                },
-                                                fontSize = MiuixTheme.textStyles.body2.fontSize,
-                                                color = MiuixTheme.colorScheme.onSurfaceVariantActions,
-                                            )
-                                        },
-                                        onClick = { performCheck() },
-                                    )
-                                    WindowDropdownPreference(
+                                        pageRoute = "settings_about",
+                                        pageTitle = "关于",
+                                        itemKey = "settings_about_check_update",
+                                    ) {
+                                        ArrowPreference(
+                                            title = "检查更新",
+                                            endActions = {
+                                                Text(
+                                                    text = state.updateStateText,
+                                                    fontSize = MiuixTheme.textStyles.body2.fontSize,
+                                                    color = MiuixTheme.colorScheme.onSurfaceVariantActions,
+                                                )
+                                            },
+                                            onClick = { actions.onCheckUpdate() },
+                                        )
+                                    }
+                                    SearchableItem(
                                         title = "自动检查更新",
-                                        entries = autoCheckUpdateEntries,
-                                        collapseOnSelection = true,
-                                    )
-                                    WindowSpinnerPreference(
+                                        pageRoute = "settings_about",
+                                        pageTitle = "关于",
+                                        itemKey = "settings_about_auto_check_update",
+                                    ) {
+                                        WindowDropdownPreference(
+                                            title = "自动检查更新",
+                                            entries = autoCheckUpdateEntries,
+                                            collapseOnSelection = true,
+                                        )
+                                    }
+                                    SearchableItem(
                                         title = "更新来源",
-                                        entries = downloadSourceEntries,
-                                        collapseOnSelection = true,
-                                    )
+                                        pageRoute = "settings_about",
+                                        pageTitle = "关于",
+                                        itemKey = "settings_about_download_source",
+                                    ) {
+                                        WindowSpinnerPreference(
+                                            title = "更新来源",
+                                            entries = downloadSourceEntries,
+                                            collapseOnSelection = true,
+                                        )
+                                    }
                                 }
 
                                 Card(
@@ -730,35 +870,60 @@ fun SettingsAboutPage(
                         }
                     }
                 }
+
+                SettingsPageAutoScroll(
+                    lazyListState = lazyListState,
+                    pageRoute = "settings_about",
+                    contentTopPadding = contentTopPadding,
+                )
             }
 
-            // ============================================================
-            // 顶栏层（与内容层平级）
-            // ============================================================
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
                     .then(
                         if (blurActive && barBlurBackdrop != null) {
-                            Modifier.textureBlur(
-                                backdrop = barBlurBackdrop,
-                                shape = RectangleShape,
-                                blurRadius = TOP_BAR_BLUR_RADIUS,
-                                colors = BlurColors(
-                                    blendColors = listOf(
-                                        BlendColorEntry(
-                                            color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)
+                            if (progressiveTitleBlur) {
+                                // ★ 修复：开启渐进模糊时，使用 progressiveTextureBlur
+                                Modifier.progressiveTextureBlur(
+                                    backdrop = barBlurBackdrop,
+                                    shape = RectangleShape,
+                                    blurRadius = TOP_BAR_BLUR_RADIUS,
+                                    gradient = ProgressiveBlur.Top,
+                                    colors = BlurDefaults.blurColors(
+                                        blendColors = listOf(
+                                            BlendColorEntry(
+                                                color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)
+                                            ),
                                         ),
                                     ),
-                                ),
-                            )
+                                )
+                            } else {
+                                // ★ 关闭时保持原来的普通模糊
+                                Modifier.textureBlur(
+                                    backdrop = barBlurBackdrop,
+                                    shape = RectangleShape,
+                                    blurRadius = TOP_BAR_BLUR_RADIUS,
+                                    colors = BlurDefaults.blurColors(
+                                        blendColors = listOf(
+                                            BlendColorEntry(
+                                                color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)
+                                            ),
+                                        ),
+                                    ),
+                                )
+                            }
                         } else Modifier
                     )
                     .statusBarsPadding()
                     .onGloballyPositioned { coords ->
                         val bottomPx = coords.boundsInWindow().bottom.toInt()
-                        if (bottomPx != topBarBottomPx) topBarBottomPx = bottomPx
+                        // ★ 只记录历史最大高度（标题栏完全展开时）：滚动折叠时高度每帧变化，
+                        //   每帧回写会触发整页重组 + 列表 contentPadding 抖动，模糊区文字会闪烁。
+                        if (bottomPx > topBarBottomPx + 1) {
+                            topBarBottomPx = bottomPx
+                        }
                     }
             ) {
                 SmallTopAppBar(
@@ -770,49 +935,153 @@ fun SettingsAboutPage(
                     ),
                     defaultWindowInsetsPadding = false,
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = "返回",
-                                tint = MiuixTheme.colorScheme.onBackground,
-                            )
-                        }
+                        SettingsBackButton(
+                            onBack = actions.onBack,
+                            progressiveTitleBlur = progressiveTitleBlur,
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardMaterialModifier,
+                            iconTint = MiuixTheme.colorScheme.onBackground,
+                        )
                     }
                 )
             }
         }
     }
+}
 
-    // ==================================================
-    // 更新弹窗
-    // ==================================================
-    val updateInfo = updateState as? UpdateState.HasUpdate
+// ============================================================
+// Material 3 版 —— 页面背景 lerp(surface, White, 0.5f)
+// ============================================================
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsAboutMaterial(
+    state: AboutPageState,
+    actions: AboutPageActions,
+) {
+    val navOwner = rememberNavigationEventDispatcherOwner()
+
+    // ★ 页面背景：直接跟 M3 主题 surface（跟新标签页保持一致）
+    val pageBg = M3MaterialTheme.colorScheme.surface
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
     ) {
-        UpdateDialog(
-            show = showUpdateDialog && updateInfo != null,
-            info = updateInfo,
-            currentVersion = currentVersionRaw,
-            isDownloading = isDownloading,
-            onDismiss = { showUpdateDialog = false },
-            onDownload = {
-                if (updateInfo != null && !isDownloading) {
-                    isDownloading = true
-                    showUpdateDialog = false
-                    startApkDownload(
-                        context = context,
-                        downloadUrl = updateInfo.url,
-                        onComplete = { isDownloading = false },
-                        onFailed = { msg ->
-                            isDownloading = false
-                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                        },
-                    )
-                }
+        M3Scaffold(
+            containerColor = pageBg,
+            contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.captionBar),
+            topBar = {
+                M3TopAppBar(
+                    title = { M3Text("关于") },
+                    navigationIcon = {
+                        M3IconButton(onClick = actions.onBack) {
+                            M3Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    colors = M3TopAppBarDefaults.topAppBarColors(
+                        containerColor = pageBg,
+                    ),
+                )
             },
-        )
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                item(key = "about_logo") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(top = 24.dp, bottom = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(80.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MoteStarCanvas(modifier = Modifier.fillMaxSize())
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        M3Text(
+                            text = state.appName,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = M3MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        M3Text(
+                            text = state.versionName,
+                            fontSize = 14.sp,
+                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                item(key = "about_cards") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        // ★ 用 MoteSegmentedColumn 包裹 —— 圆角才会被注入
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentItem(
+                                        headline = { M3Text("检查更新") },
+                                        supporting = {
+                                            M3Text(
+                                                text = state.updateStateText,
+                                                color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                                style = M3MaterialTheme.typography.bodyMedium,
+                                            )
+                                        },
+                                        onClick = { actions.onCheckUpdate() },
+                                    )
+                                },
+                                {
+                                    M3SegmentDropdownItem(
+                                        title = "自动检查更新",
+                                        summary = null,
+                                        options = state.autoCheckUpdateOptions,
+                                        selectedIndex = state.autoCheckUpdateIndex,
+                                        onSelected = actions.onAutoCheckUpdateChange,
+                                    )
+                                },
+                                {
+                                    M3SegmentDropdownItem(
+                                        title = "更新来源",
+                                        summary = null,
+                                        options = state.downloadSourceOptions.map { it.first },
+                                        selectedIndex = state.downloadSourceIndex,
+                                        onSelected = actions.onDownloadSourceChange,
+                                    )
+                                },
+                            )
+                        )
+
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentItem(
+                                        headline = { M3Text("联系与反馈") },
+                                        onClick = { },
+                                    )
+                                },
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -879,16 +1148,16 @@ internal fun UpdateDialog(
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Button(
+                    top.yukonga.miuix.kmp.basic.Button(
                         onClick = { if (!isDownloading) onDismiss() },
                         modifier = Modifier.weight(1f),
                         enabled = !isDownloading,
                     ) { Text("暂时忽略") }
-                    Button(
+                    top.yukonga.miuix.kmp.basic.Button(
                         onClick = onDownload,
                         modifier = Modifier.weight(1f),
                         enabled = !isDownloading,
-                        colors = ButtonDefaults.buttonColors(
+                        colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors(
                             color = MiuixTheme.colorScheme.primary,
                             contentColor = Color.White,
                         ),
@@ -913,7 +1182,7 @@ private sealed interface MdBlock {
 }
 
 @Composable
-private fun MarkdownText(
+internal fun MarkdownText(
     text: String,
     baseColor: Color,
     modifier: Modifier = Modifier,
@@ -1370,6 +1639,9 @@ fun AutoUpdateChecker() {
     }
 
     LaunchedEffect(Unit) {
+        // ★ 方案5：延迟 2.5 秒，等首帧渲染完成后再发起网络检查。
+        kotlinx.coroutines.delay(2_500)
+
         if (!shouldAutoCheck(prefs)) return@LaunchedEffect
         val sourceIndex = prefs
             .getInt(KEY_DOWNLOAD_SOURCE, DOWNLOAD_SOURCE_DEFAULT)

@@ -5,6 +5,90 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+val generatedSettingsSearchDir: File = layout.buildDirectory
+    .dir("generated/settingssearch/kotlin")
+    .get()
+    .asFile
+
+val generateSettingsSearchCatalog by tasks.registering {
+    group = "build"
+    description = "扫描 Settings_*.kt，自动生成设置项搜索目录"
+
+    val sourceDir = file("src/main/java/com/torachen/mote/ui/settings")
+    val outputDir = generatedSettingsSearchDir
+
+    inputs.dir(sourceDir).withPropertyName("settingsSources")
+    outputs.dir(outputDir).withPropertyName("generatedCatalog")
+
+    doLast {
+        outputDir.mkdirs()
+        val outFile = File(outputDir, "SettingsSearchCatalog.kt")
+
+        val entries = mutableListOf<String>()
+
+        if (sourceDir.exists()) {
+            val itemCallRegex = Regex("SearchableItem\\s*\\(([^)]*)\\)")
+            val fieldRegex = Regex("(\\w+)\\s*=\\s*\"([^\"]*)\"")
+            val tabIndexRegex = Regex("tabIndex\\s*=\\s*(\\d+)")
+
+            sourceDir.listFiles { f ->
+                f.isFile && f.name.startsWith("Settings_") && f.name.endsWith(".kt")
+            }
+                ?.sortedBy { it.name }
+                ?.forEach { file ->
+                    val content = file.readText()
+                    itemCallRegex.findAll(content).forEach { match ->
+                        val body = match.groupValues[1]
+                        var title: String? = null
+                        var route: String? = null
+                        var pageTitle: String? = null
+                        var itemKey: String? = null
+                        var tabIndex: String? = null
+
+                        fieldRegex.findAll(body).forEach { f ->
+                            val k = f.groupValues[1]
+                            val v = f.groupValues[2]
+                            when (k) {
+                                "title" -> title = v
+                                "pageRoute" -> route = v
+                                "pageTitle" -> pageTitle = v
+                                "itemKey" -> itemKey = v
+                            }
+                        }
+                        tabIndexRegex.find(body)?.let { tabIndex = it.groupValues[1] }
+
+                        if (title != null && route != null &&
+                            pageTitle != null && itemKey != null
+                        ) {
+                            val tabArg =
+                                if (tabIndex != null) ", tabIndex = $tabIndex" else ""
+                            entries.add(
+                                "    SearchableEntry(\"$title\", \"$route\", \"$pageTitle\", \"$itemKey\"$tabArg),"
+                            )
+                        }
+                    }
+                }
+        }
+
+        val content = buildString {
+            appendLine("// 此文件由 build.gradle.kts 的 generateSettingsSearchCatalog 任务自动生成。")
+            appendLine("// 请勿手动修改；重新编译即可根据源码里的 SearchableItem 自动刷新。")
+            appendLine()
+            appendLine("package com.torachen.mote.ui")
+            appendLine()
+            appendLine("internal val SETTINGS_SEARCH_CATALOG: List<SearchableEntry> = listOf(")
+            entries.forEach { appendLine(it) }
+            appendLine(")")
+        }
+
+        outFile.writeText(content)
+        println(
+            "[generateSettingsSearchCatalog] 扫描到 ${entries.size} 个设置项 -> " +
+                    outFile.absolutePath
+        )
+    }
+}
+
 android {
     namespace = "com.torachen.mote"
     compileSdk {
@@ -14,20 +98,11 @@ android {
         applicationId = "com.torachen.mote"
         minSdk = 24
         targetSdk = 37
-        versionCode = 18
-        versionName = "0.2.7"
+        versionCode = 20
+        versionName = "0.2.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    //构建 Release APK 时仅保留 arm64 和 x86_64，减小包体大小，但不兼容 arm32 与 x86
-    //splits {
-    //    abi {
-    //        isEnable = true
-    //        reset()
-    //        include("arm64-v8a", "x86_64")
-    //        isUniversalApk = false
-    //    }
-    //}
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
@@ -46,12 +121,19 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets["main"].java.srcDir(generatedSettingsSearchDir)
+    sourceSets["main"].kotlin.srcDir(generatedSettingsSearchDir)
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions {
         freeCompilerArgs.add("-opt-in=androidx.media3.common.util.UnstableApi")
     }
+}
+
+tasks.named("preBuild") {
+    dependsOn(generateSettingsSearchCatalog)
 }
 
 dependencies {
@@ -69,6 +151,10 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
+    // ===== Material 3 =====
+    implementation("org.jetbrains.compose.material3:material3:1.9.0")
+    implementation("com.materialkolor:material-kolor:5.0.1")
+
     // ===== JetBrains 导航库 =====
     implementation(libs.jetbrains.navigation.compose)
     implementation("androidx.navigationevent:navigationevent-compose:1.1.2")
@@ -82,7 +168,7 @@ dependencies {
     implementation("top.yukonga.miuix.kmp:miuix-nav:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-shader:0.9.4")
 
-    // ===== AndroidX WebKit（推测加载 API） =====
+    // ===== AndroidX WebKit =====
     implementation("androidx.webkit:webkit:1.17.1")
 
     // ===== 测试 =====
@@ -98,14 +184,16 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
-    // ===== 原生视频播放器（ExoPlayer / Media3）=====
+    // ===== 原生视频播放器 =====
     val media3Version = "1.11.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
-    implementation("androidx.media3:media3-ui:$media3Version") // 使用基础的 PlayerView 视图
+    implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media:media:1.7.0")
 
+    // ★ 关键：主工程引入子模块
     baselineProfile(project(":baselineprofile"))
 }

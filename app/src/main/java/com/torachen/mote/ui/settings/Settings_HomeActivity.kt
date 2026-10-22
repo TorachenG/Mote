@@ -9,12 +9,11 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,11 +34,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,7 +53,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -58,11 +65,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ★★★ NavigationEvent ★★★
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 
-// ★★★ MIUIX 组件 ★★★
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -71,25 +76,34 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.preference.RadioButtonPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-
-// ★★★ MIUIX 模糊 ★★★
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
-
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Ok
-
-// ★★★ MIUIX 工具（overscroll 回弹） ★★★
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.Icon as M3Icon
+import androidx.compose.material3.IconButton as M3IconButton
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
+import androidx.compose.material3.RadioButton as M3RadioButton
+import androidx.compose.material3.Scaffold as M3Scaffold
+import androidx.compose.material3.Switch as M3Switch
+import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TopAppBar as M3TopAppBar
+import androidx.compose.material3.TopAppBarDefaults as M3TopAppBarDefaults
 
 // ============================================================
 // 常量
@@ -125,12 +139,7 @@ private const val KEY_ASK_RESTORE_MEMORY = "home_ask_restore_memory_v2"
 private const val KEY_NEWTAB_PAGE_TYPE = "home_newtab_page_type"
 private const val KEY_NEWTAB_CUSTOM_URL = "home_newtab_custom_url"
 
-// ★ 校验 + 规范化用户输入的主页 URL：
-//   - 空白 → null
-//   - 已带 http:// / https:// 且 host 有效 → 原样返回
-//   - 未带协议 → 自动补 https://，再校验 host
-//   - 含空格 / 中文字符 → null
-//   - host 不含"."且不是 localhost → null
+// ★ 校验 + 规范化用户输入的主页 URL
 internal fun normalizeHomeUrl(raw: String): String? {
     val trimmed = raw.trim()
     if (trimmed.isBlank()) return null
@@ -144,7 +153,6 @@ internal fun normalizeHomeUrl(raw: String): String? {
         } catch (_: Exception) { null }
     }
 
-    // 不允许空格 / 中文字符（避免用户误填搜索词）
     if (trimmed.any { it == ' ' || it.code in 0x4E00..0x9FFF }) return null
 
     val candidate = "https://$trimmed"
@@ -158,7 +166,35 @@ internal fun normalizeHomeUrl(raw: String): String? {
 }
 
 // ============================================================
-// 主页设置页
+// 状态
+// ============================================================
+
+@Immutable
+private data class HomePageState(
+    val startupOptionIndex: Int,
+    val startupUrlDraft: String,
+    val startupCustomUrl: String,
+    val askRestoreMemory: Boolean,
+    val newtabPageType: Int,
+    val newtabUrlDraft: String,
+    val newtabCustomUrl: String,
+)
+
+@Immutable
+private data class HomePageActions(
+    val onBack: () -> Unit,
+    val onStartupOptionChange: (Int) -> Unit,
+    val onStartupUrlDraftChange: (String) -> Unit,
+    val onCommitStartupUrl: () -> Unit,
+    val onAskRestoreMemoryChange: (Boolean) -> Unit,
+    val onNewtabPageTypeChange: (Int) -> Unit,
+    val onNewtabUrlDraftChange: (String) -> Unit,
+    val onCommitNewtabUrl: () -> Unit,
+    val onNavigateToNewTabCustomization: () -> Unit,
+)
+
+// ============================================================
+// 入口
 // ============================================================
 
 @Composable
@@ -166,34 +202,11 @@ fun SettingsHomePage(
     onBack: () -> Unit,
     onNavigateToNewTabCustomization: () -> Unit = {},
 ) {
-    val navOwner = rememberNavigationEventDispatcherOwner(parent = null)
-    val scrollBehavior = MiuixScrollBehavior()
-
-    val surfaceColor = MiuixTheme.colorScheme.surface
-    val blurSupported = isRuntimeShaderSupported()
-    val backdrop = if (blurSupported) {
-        rememberLayerBackdrop {
-            drawRect(surfaceColor)
-            drawContent()
-        }
-    } else {
-        null
-    }
-
-    val density = LocalDensity.current
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-
-    var topBarBottomPx by remember { mutableIntStateOf(0) }
-    val measuredTop = with(density) { topBarBottomPx.toDp() }
-    val contentTopPadding = if (topBarBottomPx > 0) measuredTop
-    else statusBarHeight + TOP_BAR_FALLBACK_HEIGHT
-
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
     }
 
-    // ---------------- 一、启动时 ----------------
     var startupOptionIndex by remember {
         mutableIntStateOf(
             prefs.getInt(KEY_STARTUP_OPTION, 0).coerceIn(0, STARTUP_OPTIONS.lastIndex)
@@ -217,7 +230,6 @@ fun SettingsHomePage(
     val isLastSessionSelected = startupOptionIndex == STARTUP_OPTION_LAST_SESSION
     val effectiveAskRestore = if (isLastSessionSelected) false else askRestoreMemory
 
-    // ---------------- 二、新标签页 ----------------
     var newtabPageType by remember {
         mutableIntStateOf(
             prefs.getInt(KEY_NEWTAB_PAGE_TYPE, NEWTAB_PAGE_TYPE_DEFAULT)
@@ -236,7 +248,6 @@ fun SettingsHomePage(
     }
 
     fun commitStartupCustomUrl() {
-        // ★ 校验 + 规范化
         val normalized = normalizeHomeUrl(startupUrlDraft)
         if (normalized == null) {
             Toast.makeText(
@@ -252,7 +263,6 @@ fun SettingsHomePage(
     }
 
     fun commitNewtabCustomUrl() {
-        // ★ 校验 + 规范化
         val normalized = normalizeHomeUrl(newtabUrlDraft)
         if (normalized == null) {
             Toast.makeText(
@@ -266,6 +276,118 @@ fun SettingsHomePage(
         newtabUrlDraft = normalized
         prefs.edit().putString(KEY_NEWTAB_CUSTOM_URL, normalized).apply()
     }
+
+    val state = HomePageState(
+        startupOptionIndex = startupOptionIndex,
+        startupUrlDraft = startupUrlDraft,
+        startupCustomUrl = startupCustomUrl,
+        askRestoreMemory = effectiveAskRestore,
+        newtabPageType = newtabPageType,
+        newtabUrlDraft = newtabUrlDraft,
+        newtabCustomUrl = newtabCustomUrl,
+    )
+
+    val actions = HomePageActions(
+        onBack = onBack,
+        onStartupOptionChange = { index ->
+            startupOptionIndex = index
+            prefs.edit().putInt(KEY_STARTUP_OPTION, index).apply()
+        },
+        onStartupUrlDraftChange = { startupUrlDraft = it },
+        onCommitStartupUrl = { commitStartupCustomUrl() },
+        onAskRestoreMemoryChange = { checked ->
+            askRestoreMemory = checked
+            prefs.edit().putBoolean(KEY_ASK_RESTORE_MEMORY, checked).apply()
+        },
+        onNewtabPageTypeChange = { index ->
+            newtabPageType = index
+            prefs.edit().putInt(KEY_NEWTAB_PAGE_TYPE, index).apply()
+        },
+        onNewtabUrlDraftChange = { newtabUrlDraft = it },
+        onCommitNewtabUrl = { commitNewtabCustomUrl() },
+        onNavigateToNewTabCustomization = onNavigateToNewTabCustomization,
+    )
+
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> SettingsHomeMiuix(state, actions)
+        UiMode.Material -> SettingsHomeMaterial(state, actions)
+    }
+}
+
+// ============================================================
+// MIUIX 版
+// ============================================================
+
+@Composable
+private fun SettingsHomeMiuix(
+    state: HomePageState,
+    actions: HomePageActions,
+) {
+    val navOwner = rememberNavigationEventDispatcherOwner()
+    val scrollBehavior = MiuixScrollBehavior()
+
+    val surfaceColor = MiuixTheme.colorScheme.surface
+    val blurSupported = isRuntimeShaderSupported()
+    val backdrop = if (blurSupported) {
+        rememberLayerBackdrop {
+            drawRect(surfaceColor)
+            drawContent()
+        }
+    } else null
+
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var progressiveTitleBlur by remember {
+        mutableStateOf(prefs.getBoolean(KEY_PROGRESSIVE_TITLE_BLUR, true))
+    }
+    var materialStyle by remember {
+        mutableIntStateOf(prefs.getInt("ui_material_style", 2))
+    }
+    DisposableEffect(Unit) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                KEY_PROGRESSIVE_TITLE_BLUR -> progressiveTitleBlur = prefs.getBoolean(key, true)
+                "ui_material_style" -> materialStyle = prefs.getInt(key, 2)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    val listState = rememberLazyListState()
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0 &&
+                    !listState.isScrollInProgress
+        }
+    }
+    val themeIsDark = surfaceColor.luminance() < 0.5f
+    val backCardAlpha by animateFloatAsState(
+        targetValue = if (isAtTop || !progressiveTitleBlur) 0f else 1f,
+        animationSpec = tween(400, easing = SmoothEase),
+        label = "settingsBackCardAlpha",
+    )
+    val backCardMaterialModifier = if (progressiveTitleBlur) {
+        buildBackCardMaterialModifier(materialStyle, blurSupported, backdrop, themeIsDark)
+    } else {
+        Modifier
+    }
+    val titleBarBlendColorEntries = remember(surfaceColor) {
+        listOf(BlendColorEntry(color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)))
+    }
+
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    var topBarBottomPx by remember { mutableIntStateOf(0) }
+    val measuredTop = with(density) { topBarBottomPx.toDp() }
+    val contentTopPadding = if (topBarBottomPx > 0) measuredTop else statusBarHeight + TOP_BAR_FALLBACK_HEIGHT
+
+    val isLastSessionSelected = state.startupOptionIndex == STARTUP_OPTION_LAST_SESSION
+    val effectiveAskRestore = if (isLastSessionSelected) false else state.askRestoreMemory
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -281,12 +403,11 @@ fun SettingsHomePage(
                     .then(
                         if (blurSupported && backdrop != null) {
                             Modifier.layerBackdrop(backdrop)
-                        } else {
-                            Modifier
-                        }
+                        } else Modifier
                     )
             ) {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -298,9 +419,6 @@ fun SettingsHomePage(
                 ) {
                     item(key = "content") {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            // ==================================================
-                            // 一、启动时
-                            // ==================================================
                             SmallTitle("启动时")
 
                             Card(
@@ -309,34 +427,30 @@ fun SettingsHomePage(
                                     .padding(bottom = 12.dp),
                             ) {
                                 STARTUP_OPTIONS.forEachIndexed { index, label ->
-                                    RadioButtonPreference(
+                                    SearchableItem(
                                         title = label,
-                                        selected = startupOptionIndex == index,
-                                        onClick = {
-                                            startupOptionIndex = index
-                                            prefs.edit()
-                                                .putInt(KEY_STARTUP_OPTION, index)
-                                                .apply()
-                                        },
-                                    )
+                                        pageRoute = "settings_home",
+                                        pageTitle = "主页设置",
+                                        itemKey = "settings_home_startup_$index",
+                                    ) {
+                                        RadioButtonPreference(
+                                            title = label,
+                                            selected = state.startupOptionIndex == index,
+                                            onClick = {
+                                                actions.onStartupOptionChange(index)
+                                            },
+                                        )
+                                    }
 
                                     if (index == STARTUP_OPTION_CUSTOM) {
                                         AnimatedVisibility(
-                                            visible = startupOptionIndex == STARTUP_OPTION_CUSTOM,
-                                            enter = expandVertically(
-                                                animationSpec = tween(260, easing = SmoothEase),
-                                                expandFrom = Alignment.Top,
-                                            ) + fadeIn(tween(200, easing = SmoothEase)),
-                                            exit = shrinkVertically(
-                                                animationSpec = tween(220, easing = SmoothEase),
-                                                shrinkTowards = Alignment.Top,
-                                            ) + fadeOut(tween(140, easing = SmoothEase)),
+                                            visible = state.startupOptionIndex == STARTUP_OPTION_CUSTOM,
                                         ) {
                                             UrlEditRow(
-                                                value = startupUrlDraft,
-                                                onValueChange = { startupUrlDraft = it },
-                                                showConfirm = startupUrlDraft.trim() != startupCustomUrl,
-                                                onConfirm = { commitStartupCustomUrl() },
+                                                value = state.startupUrlDraft,
+                                                onValueChange = actions.onStartupUrlDraftChange,
+                                                showConfirm = state.startupUrlDraft.trim() != state.startupCustomUrl,
+                                                onConfirm = actions.onCommitStartupUrl,
                                                 label = "自定义网页地址",
                                             )
                                         }
@@ -349,22 +463,21 @@ fun SettingsHomePage(
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
                             ) {
-                                SwitchPreference(
+                                SearchableItem(
                                     title = "询问恢复上次退出时的网页",
-                                    checked = effectiveAskRestore,
-                                    enabled = !isLastSessionSelected,
-                                    onCheckedChange = { checked ->
-                                        askRestoreMemory = checked
-                                        prefs.edit()
-                                            .putBoolean(KEY_ASK_RESTORE_MEMORY, checked)
-                                            .apply()
-                                    },
-                                )
+                                    pageRoute = "settings_home",
+                                    pageTitle = "主页设置",
+                                    itemKey = "settings_home_ask_restore_memory",
+                                ) {
+                                    SwitchPreference(
+                                        title = "询问恢复上次退出时的网页",
+                                        checked = effectiveAskRestore,
+                                        enabled = !isLastSessionSelected,
+                                        onCheckedChange = actions.onAskRestoreMemoryChange,
+                                    )
+                                }
                             }
 
-                            // ==================================================
-                            // 二、新标签页
-                            // ==================================================
                             SmallTitle("新标签页")
 
                             Card(
@@ -373,34 +486,30 @@ fun SettingsHomePage(
                                     .padding(bottom = 12.dp),
                             ) {
                                 NEWTAB_PAGE_TYPE_OPTIONS.forEachIndexed { index, label ->
-                                    RadioButtonPreference(
+                                    SearchableItem(
                                         title = label,
-                                        selected = newtabPageType == index,
-                                        onClick = {
-                                            newtabPageType = index
-                                            prefs.edit()
-                                                .putInt(KEY_NEWTAB_PAGE_TYPE, index)
-                                                .apply()
-                                        },
-                                    )
+                                        pageRoute = "settings_home",
+                                        pageTitle = "主页设置",
+                                        itemKey = "settings_home_newtab_type_$index",
+                                    ) {
+                                        RadioButtonPreference(
+                                            title = label,
+                                            selected = state.newtabPageType == index,
+                                            onClick = {
+                                                actions.onNewtabPageTypeChange(index)
+                                            },
+                                        )
+                                    }
 
                                     if (index == NEWTAB_PAGE_TYPE_CUSTOM) {
                                         AnimatedVisibility(
-                                            visible = newtabPageType == NEWTAB_PAGE_TYPE_CUSTOM,
-                                            enter = expandVertically(
-                                                animationSpec = tween(260, easing = SmoothEase),
-                                                expandFrom = Alignment.Top,
-                                            ) + fadeIn(tween(200, easing = SmoothEase)),
-                                            exit = shrinkVertically(
-                                                animationSpec = tween(220, easing = SmoothEase),
-                                                shrinkTowards = Alignment.Top,
-                                            ) + fadeOut(tween(140, easing = SmoothEase)),
+                                            visible = state.newtabPageType == NEWTAB_PAGE_TYPE_CUSTOM,
                                         ) {
                                             UrlEditRow(
-                                                value = newtabUrlDraft,
-                                                onValueChange = { newtabUrlDraft = it },
-                                                showConfirm = newtabUrlDraft.trim() != newtabCustomUrl,
-                                                onConfirm = { commitNewtabCustomUrl() },
+                                                value = state.newtabUrlDraft,
+                                                onValueChange = actions.onNewtabUrlDraftChange,
+                                                showConfirm = state.newtabUrlDraft.trim() != state.newtabCustomUrl,
+                                                onConfirm = actions.onCommitNewtabUrl,
                                                 label = "自定义网页地址",
                                             )
                                         }
@@ -408,9 +517,6 @@ fun SettingsHomePage(
                                 }
                             }
 
-                            // ==================================================
-                            // ★ 新增分类：在查找其它设置吗？
-                            // ==================================================
                             SmallTitle("在查找其它设置吗？")
 
                             Card(
@@ -421,19 +527,18 @@ fun SettingsHomePage(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onNavigateToNewTabCustomization() }
-                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        .clickable { actions.onNavigateToNewTabCustomization() }
+                                        .padding(horizontal = 16.dp, vertical = 16.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
                                         text = "定制新标签页",
                                         color = MiuixTheme.colorScheme.primary,
-                                        fontSize = 16.sp,
+                                        fontSize = MiuixTheme.textStyles.body1.fontSize,
                                     )
                                 }
                             }
 
-                            // ★ 底部导航栏占位
                             Spacer(
                                 Modifier.height(
                                     WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
@@ -443,28 +548,37 @@ fun SettingsHomePage(
                         }
                     }
                 }
+
+                SettingsPageAutoScroll(
+                    lazyListState = listState,
+                    pageRoute = "settings_home",
+                    contentTopPadding = contentTopPadding,
+                )
             }
 
-            // ========== 顶栏层 ==========
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
                     .then(
-                        if (blurSupported && backdrop != null) {
-                            Modifier.textureBlur(
-                                backdrop = backdrop,
-                                shape = RectangleShape,
-                                blurRadius = TOP_BAR_BLUR_RADIUS,
-                                noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                colors = BlurDefaults.blurColors(
-                                    blendColors = listOf(
-                                        BlendColorEntry(
-                                            color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA),
-                                        ),
-                                    ),
-                                ),
-                            )
+                        if (blurSupported && backdrop != null && materialStyle != 0) {
+                            if (progressiveTitleBlur) {
+                                Modifier.progressiveTextureBlur(
+                                    backdrop = backdrop,
+                                    shape = RectangleShape,
+                                    blurRadius = TOP_BAR_BLUR_RADIUS,
+                                    gradient = ProgressiveBlur.Top,
+                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                )
+                            } else {
+                                Modifier.textureBlur(
+                                    backdrop = backdrop,
+                                    shape = RectangleShape,
+                                    blurRadius = TOP_BAR_BLUR_RADIUS,
+                                    noiseCoefficient = BlurDefaults.NoiseCoefficient,
+                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                )
+                            }
                         } else {
                             Modifier.background(surfaceColor)
                         }
@@ -472,7 +586,9 @@ fun SettingsHomePage(
                     .statusBarsPadding()
                     .onGloballyPositioned { coords ->
                         val bottomPx = coords.boundsInWindow().bottom.toInt()
-                        if (bottomPx != topBarBottomPx) {
+                        // ★ 只记录历史最大高度（标题栏完全展开时）：滚动折叠时高度每帧变化，
+                        //   每帧回写会触发整页重组 + 列表 contentPadding 抖动，模糊区文字会闪烁。
+                        if (bottomPx > topBarBottomPx + 1) {
                             topBarBottomPx = bottomPx
                         }
                     }
@@ -484,13 +600,13 @@ fun SettingsHomePage(
                     color = Color.Transparent,
                     defaultWindowInsetsPadding = false,
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = MiuixIcons.Back,
-                                contentDescription = "返回",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                            )
-                        }
+                        SettingsBackButton(
+                            onBack = actions.onBack,
+                            progressiveTitleBlur = progressiveTitleBlur,
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardMaterialModifier,
+                            iconTint = MiuixTheme.colorScheme.onSurface,
+                        )
                     }
                 )
             }
@@ -499,8 +615,284 @@ fun SettingsHomePage(
 }
 
 // ============================================================
-// URL 输入行
+// Material 3 版
 // ============================================================
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsHomeMaterial(
+    state: HomePageState,
+    actions: HomePageActions,
+) {
+    val navOwner = rememberNavigationEventDispatcherOwner()
+
+    val pageBg = M3MaterialTheme.colorScheme.surface
+
+    val isLastSessionSelected = state.startupOptionIndex == STARTUP_OPTION_LAST_SESSION
+
+    CompositionLocalProvider(
+        LocalNavigationEventDispatcherOwner provides navOwner
+    ) {
+        M3Scaffold(
+            containerColor = pageBg,
+            contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.captionBar),
+            topBar = {
+                M3TopAppBar(
+                    title = { M3Text("主页设置") },
+                    navigationIcon = {
+                        M3IconButton(onClick = actions.onBack) {
+                            M3Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    colors = M3TopAppBarDefaults.topAppBarColors(
+                        containerColor = pageBg,
+                    ),
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                item(key = "startup_header") {
+                    HomeSectionHeader("启动时")
+                }
+
+                item(key = "startup_items") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        val startupItems: List<@Composable () -> Unit> = buildList {
+                            STARTUP_OPTIONS.forEachIndexed { index, label ->
+                                add {
+                                    M3SegmentRadioItem(
+                                        title = label,
+                                        selected = state.startupOptionIndex == index,
+                                        onClick = { actions.onStartupOptionChange(index) },
+                                    )
+                                }
+                                if (index == STARTUP_OPTION_CUSTOM &&
+                                    state.startupOptionIndex == STARTUP_OPTION_CUSTOM
+                                ) {
+                                    add {
+                                        M3SegmentUrlEditItem(
+                                            value = state.startupUrlDraft,
+                                            onValueChange = actions.onStartupUrlDraftChange,
+                                            label = "自定义网页地址",
+                                            showConfirm = state.startupUrlDraft.trim() != state.startupCustomUrl,
+                                            onConfirm = actions.onCommitStartupUrl,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        MoteSegmentedColumn(content = startupItems)
+                    }
+                }
+
+                item(key = "startup_ask_restore") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentSwitchItem(
+                                        title = "询问恢复上次退出时的网页",
+                                        summary = null,
+                                        checked = if (isLastSessionSelected) false
+                                        else state.askRestoreMemory,
+                                        onCheckedChange = actions.onAskRestoreMemoryChange,
+                                    )
+                                }
+                            )
+                        )
+                    }
+                }
+
+                item(key = "newtab_header") {
+                    HomeSectionHeader("新标签页")
+                }
+
+                item(key = "newtab_items") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        val newtabItems: List<@Composable () -> Unit> = buildList {
+                            NEWTAB_PAGE_TYPE_OPTIONS.forEachIndexed { index, label ->
+                                add {
+                                    M3SegmentRadioItem(
+                                        title = label,
+                                        selected = state.newtabPageType == index,
+                                        onClick = { actions.onNewtabPageTypeChange(index) },
+                                    )
+                                }
+                                if (index == NEWTAB_PAGE_TYPE_CUSTOM &&
+                                    state.newtabPageType == NEWTAB_PAGE_TYPE_CUSTOM
+                                ) {
+                                    add {
+                                        M3SegmentUrlEditItem(
+                                            value = state.newtabUrlDraft,
+                                            onValueChange = actions.onNewtabUrlDraftChange,
+                                            label = "自定义网页地址",
+                                            showConfirm = state.newtabUrlDraft.trim() != state.newtabCustomUrl,
+                                            onConfirm = actions.onCommitNewtabUrl,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        MoteSegmentedColumn(content = newtabItems)
+                    }
+                }
+
+                item(key = "find_more_header") {
+                    HomeSectionHeader("在查找其它设置吗？")
+                }
+
+                item(key = "find_more_item") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentItem(
+                                        headline = {
+                                            M3Text(
+                                                text = "定制新标签页",
+                                                color = M3MaterialTheme.colorScheme.primary,
+                                            )
+                                        },
+                                        onClick = {
+                                            actions.onNavigateToNewTabCustomization()
+                                        },
+                                    )
+                                }
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// Material 专用小件
+// ============================================================
+
+@Composable
+private fun HomeSectionHeader(text: String) {
+    M3Text(
+        text = text,
+        color = M3MaterialTheme.colorScheme.primary,
+        style = M3MaterialTheme.typography.titleSmall,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                start = 32.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = 8.dp,
+            ),
+    )
+}
+
+@Composable
+private fun M3SegmentRadioItem(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    M3SegmentItem(
+        headline = { M3Text(title) },
+        leading = {
+            M3RadioButton(
+                selected = selected,
+                onClick = null,
+            )
+        },
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun M3SegmentUrlEditItem(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    showConfirm: Boolean,
+    onConfirm: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = 16.dp,
+                vertical = 8.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier.weight(1f),
+        ) {
+            androidx.compose.material3.OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                label = { M3Text(label) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showConfirm,
+            enter = androidx.compose.animation.expandHorizontally(
+                animationSpec = tween(240, easing = SmoothEase),
+                expandFrom = Alignment.Start,
+            ) + fadeIn(tween(180, easing = SmoothEase)),
+            exit = androidx.compose.animation.shrinkHorizontally(
+                animationSpec = tween(200, easing = SmoothEase),
+                shrinkTowards = Alignment.Start,
+            ) + fadeOut(tween(140, easing = SmoothEase)),
+        ) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(M3MaterialTheme.colorScheme.primary)
+                    .clickable(onClick = onConfirm),
+                contentAlignment = Alignment.Center,
+            ) {
+                M3Icon(
+                    imageVector = MiuixIcons.Ok,
+                    contentDescription = "确定",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun UrlEditRow(

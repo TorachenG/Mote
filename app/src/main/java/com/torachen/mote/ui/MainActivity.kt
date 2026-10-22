@@ -6,13 +6,14 @@ package com.torachen.mote.ui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.content.ContentValues
+import android.provider.MediaStore
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.RenderEffect
@@ -21,20 +22,32 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.media.MediaMetadataRetriever
+import androidx.lifecycle.lifecycleScope
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.Message
+import android.os.SystemClock
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.view.ActionMode
+import android.view.HapticFeedbackConstants
 import android.view.Menu
 import android.view.MenuItem
+import android.view.MotionEvent
 import android.view.RoundedCorner
+import android.view.ViewConfiguration
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.JsResult
+import android.webkit.JsPromptResult
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
@@ -58,6 +71,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -78,10 +96,13 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -90,6 +111,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -118,9 +140,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -140,17 +162,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusState
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -164,6 +191,9 @@ import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -174,36 +204,48 @@ import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextRange
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
+import androidx.webkit.ScriptHandler
+import androidx.webkit.WebViewCompat
+
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Public
 
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
-import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
+
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
+import top.yukonga.miuix.kmp.theme.ThemeColorSpec
+import top.yukonga.miuix.kmp.theme.darkColorScheme
+import top.yukonga.miuix.kmp.theme.lightColorScheme
 
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -211,9 +253,11 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
@@ -224,8 +268,6 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.BreadcrumbBarDefaults
 import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.InputField
-import top.yukonga.miuix.kmp.theme.ThemePaletteStyle
-import top.yukonga.miuix.kmp.theme.ThemeColorSpec
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.SnackbarDuration
@@ -233,10 +275,14 @@ import top.yukonga.miuix.kmp.basic.SnackbarResult
 
 import top.yukonga.miuix.kmp.window.WindowBottomSheet
 import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.basic.DropdownDefaults
+import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 import top.yukonga.miuix.kmp.menu.WindowIconCascadingDropdownMenu
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
@@ -245,6 +291,7 @@ import top.yukonga.miuix.kmp.icon.extended.All
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Settings
@@ -261,6 +308,7 @@ import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Photos
 import top.yukonga.miuix.kmp.icon.extended.Scan
 import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.icon.extended.Translate
 import top.yukonga.miuix.kmp.icon.extended.Rename
 import top.yukonga.miuix.kmp.icon.extended.RecordingTape
@@ -270,13 +318,26 @@ import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Weeks
+import top.yukonga.miuix.kmp.icon.extended.Notes
 import top.yukonga.miuix.kmp.icon.extended.Forward
 import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Filter
+import top.yukonga.miuix.kmp.icon.extended.Lock
+import top.yukonga.miuix.kmp.icon.extended.Share
+import top.yukonga.miuix.kmp.icon.extended.Link
 
 import com.torachen.mote.service.HomeWallpaperCropOverlay
 import com.torachen.mote.service.saveCroppedWallpaper
+import com.torachen.mote.service.TrackerBlockList
+import com.torachen.mote.service.UserScriptStore
+import com.torachen.mote.ui.scripts.ScriptEditorPage
+import com.torachen.mote.ui.scripts.ScriptsNavArgs
+import com.torachen.mote.ui.scripts.ScriptsPage
+
+import com.materialkolor.PaletteStyle
+import com.materialkolor.rememberDynamicColorScheme
 
 import org.json.JSONArray
 import org.json.JSONObject
@@ -288,6 +349,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
@@ -310,8 +372,6 @@ private const val DESKTOP_UA =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
-// ★ 已删除 HOME_PAGE 常量（不再硬编码内置主页 limestart.cn）
-
 private const val STYLE_ID_NIGHT = "__mote_night__"
 private const val STYLE_ID_NO_IMG = "__mote_noimg__"
 
@@ -319,8 +379,8 @@ private const val MAX_HISTORY_SIZE = 500
 private const val MAX_BOOKMARK_SIZE = 1000
 private const val MAX_SEARCH_HISTORY_SIZE = 20
 
-private const val SHAKE_G_FORCE_THRESHOLD = 2.5f
-private const val SHAKE_COOLDOWN_MS = 800L
+private const val SHAKE_G_FORCE_THRESHOLD = 2.1f
+private const val SHAKE_COOLDOWN_MS = 700L
 
 private const val FULLSCREEN_ANIM_MS = 320
 private val FULLSCREEN_EASING = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
@@ -343,17 +403,14 @@ internal object PendingScanResultStore {
     var pending by mutableStateOf<String?>(null)
 }
 
-// ★ 待裁剪的壁纸 Bitmap（从设置页 → 裁剪页传递）
 internal object PendingCropBitmapStore {
     var pending: Bitmap? = null
 }
 
-// ★ 需求 1：壁纸保存完成事件（裁剪页 → 界面设置页，用于弹"控件颜色"建议弹窗）
 internal object WallpaperSavedEventStore {
     var pending by mutableStateOf(false)
 }
 
-// ★ 需求 2：SSL 证书错误弹窗（WebViewClient → BrowserScreen）
 internal object PendingSslErrorStore {
     var pending by mutableStateOf<PendingSslError?>(null)
 }
@@ -364,19 +421,29 @@ internal data class PendingSslError(
     val cancel: () -> Unit,
 )
 
-// ★ 界面设置导航参数（跨页面传递）
+internal enum class JsDialogType {
+    ALERT, CONFIRM, PROMPT
+}
+
+internal data class PendingJsDialog(
+    val message: String,
+    val type: JsDialogType,
+    val defaultValue: String = "",
+    val confirm: (String) -> Unit,
+    val cancel: () -> Unit
+)
+
+internal object PendingJsDialogStore {
+    var pending by mutableStateOf<PendingJsDialog?>(null)
+}
+
 internal object SettingsLayoutNavArgs {
-    // 界面设置初始选中 Tab（0=新标签页, 1=敬请期待）
     var initialTab: Int = 0
-    // 从界面设置跳转到搜索设置时，是否要闪烁搜索历史模块
     var flashSearchHistoryOnEnter: Boolean = false
 }
 
-// ★ 会话快照：用于判断上次是否非正常关闭
 internal object SessionSnapshotStore {
-    // 应用启动时读一次，用来判断是否需要提示恢复
     var pendingRestore: List<String>? = null
-    // 用户主动退出中（true 时不更新 snapshot）
     var userExiting: Boolean = false
 }
 
@@ -384,17 +451,36 @@ internal object InitialLaunchUrlStore {
     var pending by mutableStateOf<String?>(null)
 }
 
+internal data class PendingPassword(
+    val url: String,
+    val username: String,
+    val password: String,
+)
+
+internal object PasswordCaptureStore {
+    var pending by mutableStateOf<PendingPassword?>(null)
+}
+
 internal object InitialInsetsFallback {
     var navBarBottomPx: Int = 0
 }
 
+internal object GlobalOverlayState {
+    var isOpen by mutableStateOf(false)
+}
+
+// ★ 新增：用于在 Activity 重建时保留页面栈和窗口数据
+internal object PageNavigationStateHolder {
+    val pageStack = mutableStateListOf(PageEntry(id = "browser_0", route = "browser"))
+}
+
+internal object BrowserWindowStateHolder {
+    val windows = mutableStateListOf<BrowserWindow>()
+    var activeWindowId: String? = null
+}
 private class SearchQueryHolder {
     var value: String = ""
 }
-
-// ============================================================
-// 下拉刷新守卫状态
-// ============================================================
 
 internal object PullRefreshStateHolder {
     private val map = java.util.concurrent.ConcurrentHashMap<
@@ -402,9 +488,7 @@ internal object PullRefreshStateHolder {
             java.util.concurrent.atomic.AtomicBoolean
             >()
 
-    fun get(windowId: String): Boolean {
-        return map[windowId]?.get() ?: true
-    }
+    fun get(windowId: String): Boolean = map[windowId]?.get() ?: true
 
     fun set(windowId: String, allowed: Boolean) {
         map.getOrPut(windowId) {
@@ -416,10 +500,6 @@ internal object PullRefreshStateHolder {
         map.remove(windowId)
     }
 }
-
-// ============================================================
-// 左右滑动导航守卫状态
-// ============================================================
 
 internal object SwipeNavStateHolder {
     private val map = java.util.concurrent.ConcurrentHashMap<
@@ -427,9 +507,7 @@ internal object SwipeNavStateHolder {
             java.util.concurrent.atomic.AtomicBoolean
             >()
 
-    fun get(windowId: String): Boolean {
-        return map[windowId]?.get() ?: true
-    }
+    fun get(windowId: String): Boolean = map[windowId]?.get() ?: true
 
     fun set(windowId: String, allowed: Boolean) {
         map.getOrPut(windowId) {
@@ -442,13 +520,8 @@ internal object SwipeNavStateHolder {
     }
 }
 
-// ============================================================
-// 最近嗅探到的视频 URL（供 onShowCustomView 兜底）
-// ============================================================
-
 internal object RecentVideoUrlStore {
     private val map = java.util.concurrent.ConcurrentHashMap<String, String>()
-    // ★ 记录每个窗口最后一次存 URL 的时间戳，超过 30 秒视为过期
     private val timestamps = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private const val TTL_MS = 30_000L
 
@@ -476,6 +549,227 @@ internal object RecentVideoUrlStore {
     fun remove(windowId: String) {
         map.remove(windowId)
         timestamps.remove(windowId)
+    }
+}
+
+internal object LongPressSkipStore {
+    private val map = java.util.Collections.synchronizedMap(
+        java.util.WeakHashMap<WebView, Boolean>()
+    )
+
+    fun setSkip(wv: WebView) {
+        map[wv] = true
+    }
+
+    fun consumeSkip(wv: WebView): Boolean {
+        synchronized(map) {
+            if (map[wv] == true) {
+                map.remove(wv)
+                return true
+            }
+            return false
+        }
+    }
+}
+
+// ============================================================
+// 网页安全中心 - 数据模型
+// ============================================================
+
+internal data class SecurityInfo(
+    val url: String = "",
+    val host: String = "",
+    val isHttps: Boolean = false,
+    val hasSslError: Boolean = false,
+    val sslErrorText: String? = null,
+    val certIssuer: String = "",
+    val certSubject: String = "",
+    val certValidFrom: String = "",
+    val certValidTo: String = "",
+    val isCertExpired: Boolean = false,
+    val hasMixedContent: Boolean = false,
+    val siteBlockAdsEnabled: Boolean = true,
+    val siteTrackingProtectionEnabled: Boolean = true,
+    val globalBlockAdsEnabled: Boolean = true,
+    val globalTrackingProtectionEnabled: Boolean = true,
+    val blockedTrackers: Int = 0,
+    val blockedAds: Int = 0,
+    val blockedTotal: Int = 0,
+) {
+    val effectiveBlockAdsEnabled: Boolean
+        get() = globalBlockAdsEnabled && siteBlockAdsEnabled
+
+    val effectiveTrackingProtectionEnabled: Boolean
+        get() = globalTrackingProtectionEnabled && siteTrackingProtectionEnabled
+}
+
+internal object SecurityStateHolder {
+
+    internal data class SiteProtection(
+        val blockAds: Boolean = true,
+        val trackingProtection: Boolean = true,
+    )
+
+    var info by mutableStateOf(SecurityInfo())
+
+    var globalBlockAdsEnabled by mutableStateOf(true)
+    var globalTrackingProtectionEnabled by mutableStateOf(true)
+
+    var trackingLevel by mutableIntStateOf(1)
+        private set
+    var whitelistVersion by mutableIntStateOf(0)
+        private set
+
+    private val siteProtectionMap =
+        java.util.concurrent.ConcurrentHashMap<String, SiteProtection>()
+
+    private var prefsRef: SharedPreferences? = null
+
+    fun attachPrefs(prefs: SharedPreferences) {
+        if (prefsRef === prefs) return
+        prefsRef = prefs
+        loadFromPrefs()
+    }
+
+    private fun loadFromPrefs() {
+        val p = prefsRef ?: return
+        globalBlockAdsEnabled = p.getBoolean("web_block_ads_global", true)
+        globalTrackingProtectionEnabled = p.getBoolean("web_tracking_protection_global", true)
+        trackingLevel = p.getInt("web_tracking_level", 1).coerceIn(0, 2)
+        try {
+            val raw = p.getString("web_site_protection", null)
+            if (!raw.isNullOrBlank()) {
+                val json = JSONObject(raw)
+                siteProtectionMap.clear()
+                json.keys().forEach { host ->
+                    val o = json.optJSONObject(host) ?: return@forEach
+                    siteProtectionMap[host] = SiteProtection(
+                        blockAds = o.optBoolean("ads", true),
+                        trackingProtection = o.optBoolean("tracking", true),
+                    )
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun persistSiteProtection() {
+        try {
+            val json = JSONObject()
+            siteProtectionMap.forEach { (host, sp) ->
+                json.put(host, JSONObject().apply {
+                    put("ads", sp.blockAds)
+                    put("tracking", sp.trackingProtection)
+                })
+            }
+            prefsRef?.edit()?.putString("web_site_protection", json.toString())?.apply()
+        } catch (_: Exception) {}
+    }
+
+    private fun getSite(host: String): SiteProtection {
+        val base = getBaseDomain(host)
+        return siteProtectionMap[base] ?: SiteProtection()
+    }
+
+    fun setSiteBlockAds(host: String, enabled: Boolean) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        siteProtectionMap[base] = cur.copy(blockAds = enabled)
+        persistSiteProtection()
+        info = info.copy(siteBlockAdsEnabled = enabled)
+    }
+
+    fun setSiteTrackingProtection(host: String, enabled: Boolean) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        siteProtectionMap[base] = cur.copy(trackingProtection = enabled)
+        persistSiteProtection()
+        info = info.copy(siteTrackingProtectionEnabled = enabled)
+        whitelistVersion++
+    }
+
+    fun updateTrackingLevel(level: Int) {
+        trackingLevel = level.coerceIn(0, 2)
+        prefsRef?.edit()?.putInt("web_tracking_level", trackingLevel)?.apply()
+    }
+
+    fun getTrackingWhitelist(): List<String> {
+        @Suppress("UNUSED_VARIABLE")
+        val v = whitelistVersion
+        return siteProtectionMap
+            .filter { it.value.trackingProtection == false }
+            .keys
+            .toList()
+            .sorted()
+    }
+
+    fun addToTrackingWhitelist(host: String) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        if (cur.trackingProtection == false) return
+        siteProtectionMap[base] = cur.copy(trackingProtection = false)
+        persistSiteProtection()
+        whitelistVersion++
+    }
+
+    fun removeFromTrackingWhitelist(host: String) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: return
+        if (cur.trackingProtection == true) return
+        siteProtectionMap[base] = cur.copy(trackingProtection = true)
+        persistSiteProtection()
+        whitelistVersion++
+    }
+
+    fun reset(url: String) {
+        val isHttps = url.startsWith("https://", ignoreCase = true)
+        val host = try { Uri.parse(url).host ?: "" } catch (_: Exception) { "" }
+        val base = getBaseDomain(host)
+        val site = siteProtectionMap[base] ?: SiteProtection()
+        info = SecurityInfo(
+            url = url,
+            host = host,
+            isHttps = isHttps,
+            siteBlockAdsEnabled = site.blockAds,
+            siteTrackingProtectionEnabled = site.trackingProtection,
+            globalBlockAdsEnabled = globalBlockAdsEnabled,
+            globalTrackingProtectionEnabled = globalTrackingProtectionEnabled,
+        )
+    }
+
+    fun updateCertInfo(
+        issuer: String,
+        subject: String,
+        validFrom: String,
+        validTo: String,
+        isExpired: Boolean,
+    ) {
+        info = info.copy(
+            certIssuer = issuer,
+            certSubject = subject,
+            certValidFrom = validFrom,
+            certValidTo = validTo,
+            isCertExpired = isExpired,
+            hasSslError = isExpired,
+        )
+    }
+
+    fun markSslError(errorText: String) {
+        info = info.copy(
+            hasSslError = true,
+            sslErrorText = errorText,
+        )
+    }
+
+    fun onTrackerBlocked(url: String, category: String) {
+        info = info.copy(
+            blockedAds = if (category == "ad") info.blockedAds + 1 else info.blockedAds,
+            blockedTrackers = if (category != "ad") info.blockedTrackers + 1 else info.blockedTrackers,
+            blockedTotal = info.blockedTotal + 1,
+        )
     }
 }
 
@@ -551,6 +845,10 @@ private fun getHistoryDayLabel(timestamp: Long): String {
         }
     }
 }
+
+// ============================================================
+// JS 脚本
+// ============================================================
 
 private val JS_INTERCEPT_VIDEO = """
 (function(){
@@ -667,6 +965,30 @@ private val JS_DETECT_ENGLISH_PAGE = """
 })();
 """.trimIndent()
 
+
+private val JS_CONTEXTMENU_TRACKER = """
+(function(){
+  if (window.__mote_lp_hooked) return;
+  window.__mote_lp_hooked = true;
+  window.__mote_lp_x = -1;
+  window.__mote_lp_y = -1;
+  document.addEventListener('contextmenu', function(e){
+    try {
+      window.__mote_lp_x = e.clientX;
+      window.__mote_lp_y = e.clientY;
+    } catch(err) {}
+  }, true);
+  document.addEventListener('touchstart', function(e){
+    try {
+      if (e.touches && e.touches.length === 1) {
+        window.__mote_lp_x = e.touches[0].clientX;
+        window.__mote_lp_y = e.touches[0].clientY;
+      }
+    } catch(err) {}
+  }, { passive: true, capture: true });
+})();
+""".trimIndent()
+
 private val JS_HOOK_XHR_FETCH = """
 (function(){
   if (window.__mote_xhr_hooked) return;
@@ -734,146 +1056,302 @@ private val JS_HOOK_XHR_FETCH = """
 })();
 """.trimIndent()
 
-private val JS_PULL_REFRESH_GUARD = """
+// 统一手势守卫：方向锁定 + 滚动容器边界检测。
+// 在 touchstart 时根据起点坐标检测当前位置是否允许触发原生下拉刷新 / 左右切页，
+// 并在 touchmove 早期锁定手势方向，避免后续手指轻微抖动导致方向误判。
+private val JS_GESTURE_GUARD = """
 (function(){
-  if (window.__mote_pull_guard) return;
-  window.__mote_pull_guard = true;
+  if (window.__mote_gesture_guard__) return;
+  window.__mote_gesture_guard__ = true;
 
-  function checkAllowed(x, y) {
-    try {
-      var doc = document.documentElement;
-      var body = document.body;
-      var topScroll = Math.max(
-        window.pageYOffset || 0,
-        (doc && doc.scrollTop) || 0,
-        (body && body.scrollTop) || 0
-      );
-      if (topScroll > 2) return false;
+  var DIRECTION_THRESHOLD = 6; // 方向判定阈值（px）
 
-      var el = document.elementFromPoint(x, y);
-      if (!el) return true;
+  var touchStartX = 0, touchStartY = 0;
+  var lockedDirection = null; // 'horizontal' | 'vertical' | null
 
-      var node = el;
-      var depth = 0;
-      while (node && node !== body && node !== doc && depth < 50) {
-        var style = window.getComputedStyle(node);
-        var oy = style.overflowY;
-        if ((oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
-            node.scrollHeight > node.clientHeight + 1 &&
-            node.scrollTop > 2) {
-          return false;
-        }
-        node = node.parentElement;
-        depth++;
-      }
-      return true;
-    } catch(e) {
+    function isScrollableX(node) {
+    var ox = window.getComputedStyle(node).overflowX;
+    if ((ox === 'auto' || ox === 'scroll' || ox === 'overlay') && node.scrollWidth > node.clientWidth + 2) {
       return true;
     }
+    // ★ 识别图片放大后的拖拽行为（解决百度图片横滑冲突）
+    var transform = window.getComputedStyle(node).transform;
+    if (transform && transform !== 'none' && transform !== 'matrix(1, 0, 0, 1, 0, 0)') {
+      if (node.tagName === 'IMG' || node.tagName === 'CANVAS' || (node.querySelector && node.querySelector('img'))) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  function notify(allowed) {
+  function isScrollableY(node) {
+    var oy = window.getComputedStyle(node).overflowY;
+    if (oy !== 'auto' && oy !== 'scroll' && oy !== 'overlay') return false;
+    return node.scrollHeight > node.clientHeight + 2;
+  }
+
+  function isAtXBoundary(node, dir) {
+    if (dir === 'right') return node.scrollLeft <= 2;
+    return node.scrollLeft + node.clientWidth >= node.scrollWidth - 2;
+  }
+
+  function isAtYBoundary(node) {
+    return node.scrollTop <= 2;
+  }
+
+  function notify(name, allowed) {
     try {
-      if (window.moteBridge && window.moteBridge.setPullRefreshAllowed) {
-        window.moteBridge.setPullRefreshAllowed(!!allowed);
+      if (window.moteBridge && window.moteBridge[name]) {
+        window.moteBridge[name](!!allowed);
       }
     } catch(e) {}
+  }
+
+  function notifyAll(allowed) {
+    notify('setPullRefreshAllowed', allowed);
+    notify('setSwipeNavAllowed', allowed);
+  }
+
+      function checkAtStart(x, y) {
+    var doc = document.documentElement;
+    var body = document.body;
+
+    var topScroll = Math.max(
+      window.pageYOffset || 0,
+      (doc && doc.scrollTop) || 0,
+      (body && body.scrollTop) || 0
+    );
+    
+    if (topScroll > 2) {
+      notify('setPullRefreshAllowed', false);
+    } else {
+      var el = document.elementFromPoint(x, y);
+      var hasScrollableY = false;
+      if (el) {
+        var node = el;
+        var depth = 0;
+        while (node && node !== body && node !== doc && depth < 60) {
+          if (isScrollableY(node)) {
+            hasScrollableY = true;
+            break;
+          }
+          node = node.parentElement;
+          depth++;
+        }
+      }
+      
+      var docHeight = Math.max(doc ? doc.scrollHeight : 0, body ? body.scrollHeight : 0);
+      var winHeight = window.innerHeight || (doc ? doc.clientHeight : 0);
+      
+      // ★ 精确判断：如果没有内部滚动区域，且整个文档刚好一屏，说明是全屏 H5，禁止触发原生下拉
+      // 这样不会误杀包含内部滚动容器的正常 SPA
+      if (!hasScrollableY && docHeight <= winHeight + 10) {
+        notify('setPullRefreshAllowed', false);
+      } else {
+        notify('setPullRefreshAllowed', true);
+      }
+    }
+
+    var el = document.elementFromPoint(x, y);
+    if (!el) {
+      notify('setSwipeNavAllowed', true);
+      return;
+    }
+
+    var hasScrollableX = false;
+    var node = el;
+    var depth = 0;
+    while (node && node !== body && node !== doc && depth < 60) {
+      if (isScrollableX(node)) {
+        hasScrollableX = true;
+        break;
+      }
+      node = node.parentElement;
+      depth++;
+    }
+    if (hasScrollableX) {
+      notify('setSwipeNavAllowed', false);
+    } else {
+      notify('setSwipeNavAllowed', true);
+    }
   }
 
   document.addEventListener('touchstart', function(e){
     if (!e.touches || e.touches.length !== 1) return;
     var t = e.touches[0];
-    notify(checkAllowed(t.clientX, t.clientY));
+    touchStartX = t.clientX;
+    touchStartY = t.clientY;
+    lockedDirection = null;
+    checkAtStart(t.clientX, t.clientY);
+  }, { passive: true, capture: true });
+
+  document.addEventListener('touchmove', function(e){
+    if (!e.touches || e.touches.length !== 1) return;
+    var t = e.touches[0];
+    var dx = t.clientX - touchStartX;
+    var dy = t.clientY - touchStartY;
+
+    if (!lockedDirection) {
+      if (Math.abs(dx) > DIRECTION_THRESHOLD || Math.abs(dy) > DIRECTION_THRESHOLD) {
+        lockedDirection = Math.abs(dx) >= Math.abs(dy) ? 'horizontal' : 'vertical';
+      }
+      return;
+    }
+
+    if (lockedDirection === 'horizontal') {
+      notify('setPullRefreshAllowed', false);
+      notify('setSwipeNavAllowed', true);
+      return;
+    }
+
+    if (lockedDirection === 'vertical') {
+      notify('setSwipeNavAllowed', false);
+
+      var el = document.elementFromPoint(t.clientX, t.clientY);
+      if (!el) {
+        notify('setPullRefreshAllowed', true);
+        return;
+      }
+
+      var doc = document.documentElement;
+      var body = document.body;
+      var hasScrollableY = false;
+      var node = el;
+      var depth = 0;
+      while (node && node !== body && node !== doc && depth < 60) {
+        if (isScrollableY(node) && !isAtYBoundary(node)) {
+          hasScrollableY = true;
+          break;
+        }
+        node = node.parentElement;
+        depth++;
+      }
+      if (hasScrollableY) {
+        notify('setPullRefreshAllowed', false);
+      } else {
+        notify('setPullRefreshAllowed', true);
+      }
+    }
   }, { passive: true, capture: true });
 
   document.addEventListener('touchend', function(){
-    notify(true);
+    lockedDirection = null;
+    notifyAll(true);
   }, { passive: true, capture: true });
 
   document.addEventListener('touchcancel', function(){
-    notify(true);
+    lockedDirection = null;
+    notifyAll(true);
   }, { passive: true, capture: true });
 })();
 """.trimIndent()
 
-private val JS_HORIZONTAL_SCROLL_GUARD = """
+private val JS_PASSWORD_DETECT = """
 (function(){
-  if (window.__mote_hscroll_guard) return;
-  window.__mote_hscroll_guard = true;
+    if (window.__mote_pwd_hooked) return;
+    window.__mote_pwd_hooked = true;
 
-  function checkAllowed(x, y) {
-    try {
-      var doc = document.documentElement;
-      var body = document.body;
+    var lastReport = { url: '', username: '', password: '', time: 0 };
 
-      var el = document.elementFromPoint(x, y);
-      if (!el) return true;
+    function findPasswordAndUsername() {
+        try {
+            var pwdInputs = document.querySelectorAll('input[type="password"]');
+            if (!pwdInputs || pwdInputs.length === 0) return null;
 
-      // ★ 需求 1：如果触摸点在 <video> / <audio> 或它们的祖先内 → 不允许横滑
-      var videoCheck = el;
-      var vDepth = 0;
-      while (videoCheck && videoCheck !== body && videoCheck !== doc && vDepth < 12) {
-        var tag = (videoCheck.tagName || '').toLowerCase();
-        if (tag === 'video' || tag === 'audio') return false;
-        var cls = (videoCheck.className || '').toString().toLowerCase();
-        if (cls.indexOf('video') >= 0 || cls.indexOf('player') >= 0 ||
-            cls.indexOf('xgplayer') >= 0 || cls.indexOf('dplayer') >= 0 ||
-            cls.indexOf('artplayer') >= 0 || cls.indexOf('prism') >= 0 ||
-            cls.indexOf('jwplayer') >= 0 || cls.indexOf('video-js') >= 0 ||
-            cls.indexOf('plyr') >= 0 || cls.indexOf('vjs-') >= 0 ||
-            cls.indexOf('mpegts') >= 0) {
-          if (videoCheck.querySelector && videoCheck.querySelector('video')) {
-            return false;
-          }
-        }
-        videoCheck = videoCheck.parentElement;
-        vDepth++;
-      }
-
-      var node = el;
-      var depth = 0;
-      while (node && node !== body && node !== doc && depth < 60) {
-        var style = window.getComputedStyle(node);
-        var ox = style.overflowX;
-        if (ox === 'auto' || ox === 'scroll' || ox === 'overlay') {
-          if (node.scrollWidth > node.clientWidth + 2) {
-            var atLeft = node.scrollLeft <= 2;
-            var atRight = node.scrollLeft + node.clientWidth >= node.scrollWidth - 2;
-            if (!atLeft && !atRight) {
-              return false;
+            var pwdInput = null;
+            var pwdValue = '';
+            for (var i = 0; i < pwdInputs.length; i++) {
+                var v = pwdInputs[i].value || '';
+                if (v.length > 0) {
+                    pwdInput = pwdInputs[i];
+                    pwdValue = v;
+                    break;
+                }
             }
-          }
-        }
-        node = node.parentElement;
-        depth++;
-      }
-      return true;
-    } catch(e) {
-      return true;
+            if (!pwdInput || !pwdValue) return null;
+
+            var form = pwdInput.form;
+            var username = '';
+            var candidates;
+            if (form) {
+                candidates = form.querySelectorAll(
+                    'input[type="text"],input[type="email"],input[type="tel"],input:not([type])'
+                );
+            } else {
+                candidates = document.querySelectorAll(
+                    'input[type="text"],input[type="email"],input[type="tel"]'
+                );
+            }
+            for (var j = 0; j < candidates.length; j++) {
+                var c = candidates[j];
+                if (c === pwdInput) continue;
+                var cv = c.value || '';
+                if (cv.length > 0) {
+                    username = cv;
+                    break;
+                }
+            }
+
+            return { username: username, password: pwdValue };
+        } catch (e) { return null; }
     }
-  }
 
-  function notify(allowed) {
-    try {
-      if (window.moteBridge && window.moteBridge.setSwipeNavAllowed) {
-        window.moteBridge.setSwipeNavAllowed(!!allowed);
-      }
-    } catch(e) {}
-  }
+    function reportIfNeeded() {
+        try {
+            var result = findPasswordAndUsername();
+            if (!result || !result.password || result.password.length === 0) return;
 
-  document.addEventListener('touchstart', function(e){
-    if (!e.touches || e.touches.length !== 1) return;
-    var t = e.touches[0];
-    notify(checkAllowed(t.clientX, t.clientY));
-  }, { passive: true, capture: true });
+            var now = Date.now();
+            if (
+                lastReport.url === location.href &&
+                lastReport.username === result.username &&
+                lastReport.password === result.password &&
+                now - lastReport.time < 60000
+            ) return;
 
-  document.addEventListener('touchend', function(){
-    notify(true);
-  }, { passive: true, capture: true });
+            lastReport.url = location.href;
+            lastReport.username = result.username || '';
+            lastReport.password = result.password;
+            lastReport.time = now;
 
-  document.addEventListener('touchcancel', function(){
-    notify(true);
-  }, { passive: true, capture: true });
+            if (window.moteBridge && window.moteBridge.onPasswordSubmit) {
+                window.moteBridge.onPasswordSubmit(
+                    location.href,
+                    result.username || '',
+                    result.password
+                );
+            }
+        } catch (e) {}
+    }
+
+    document.addEventListener('submit', function(e) {
+        try { reportIfNeeded(); } catch (err) {}
+    }, true);
+
+    document.addEventListener('click', function(e) {
+        try {
+            var t = e.target;
+            if (!t) return;
+            var tag = t.tagName;
+            if (tag !== 'BUTTON' && tag !== 'INPUT' && tag !== 'A') return;
+            var type = (t.getAttribute('type') || '').toLowerCase();
+            var text = (t.innerText || t.value || '').trim().toLowerCase();
+            var isSubmitLike =
+                type === 'submit' ||
+                (type === 'button' && (
+                    text.indexOf('登录') >= 0 || text.indexOf('登陆') >= 0 ||
+                    text.indexOf('login') >= 0 || text.indexOf('sign in') >= 0 ||
+                    text.indexOf('signin') >= 0 || text.indexOf('提交') >= 0 ||
+                    text.indexOf('确定') >= 0 || text.indexOf('确认') >= 0 ||
+                    text.indexOf('搜索') >= 0 || text.indexOf('search') >= 0
+                )) ||
+                (text.indexOf('登录') >= 0 && text.length < 10) ||
+                (text.indexOf('login') >= 0 && text.length < 20);
+            if (isSubmitLike) {
+                setTimeout(reportIfNeeded, 150);
+            }
+        } catch (err) {}
+    }, true);
 })();
 """.trimIndent()
 
@@ -984,8 +1462,7 @@ private val JS_NIGHT_ON = """
   s.id = id;
   s.textContent =
     'html{filter:invert(100%) hue-rotate(180deg) !important;background-color:#000 !important;}' +
-    'img,video,picture,canvas,svg,iframe,' +
-    '[style*="background-image"],[style*="background: url"]{' +
+    'img,video,picture,canvas,svg,input[type="image"]{' +
     'filter:invert(100%) hue-rotate(180deg) !important;}';
   (document.head || document.documentElement).appendChild(s);
 })();
@@ -997,6 +1474,380 @@ private val JS_NIGHT_OFF = """
   if (s) s.remove();
 })();
 """.trimIndent()
+
+// Dark Reader 风格动态主题引擎：遍历 DOM，按色相保留 + 亮度反转生成覆盖式深色 CSS。
+// 能处理白色横幅、卡片、未适配 prefers-color-scheme 的页面，效果远好于简单 invert。
+// 刷新策略：不再使用 MutationObserver（会造成 style 反复重建、页面闪白/闪灰），
+// 改为固定时机刷新（立即 / DOMContentLoaded / load / 若干延迟兜底）。
+// 关闭时调用 engine.stop() 清理所有 pending setTimeout，避免「关闭后又变回深色」。
+// dim = true 时，html/body 底色更深，且所有反转后的背景色额外乘以暗度系数。
+private fun buildDarkReaderScript(dim: Boolean): String {
+    val htmlBg = if (dim) "#080808" else "#111111"
+    val bodyBg = if (dim) "#0d0d0d" else "#1a1a1a"
+    val dimFactor = if (dim) "0.72" else "1.0"
+    return """
+(function(){
+  if (window.__mote_dark_engine__) {
+    try { window.__mote_dark_engine__.refresh(); } catch(e) {}
+    return;
+  }
+
+  var DIM_FACTOR = $dimFactor;
+
+  function parseColor(str) {
+    if (!str) return null;
+    str = String(str).trim();
+    if (str === 'transparent' || str === 'rgba(0, 0, 0, 0)' || str === 'rgba(0,0,0,0)') return null;
+    var m = str.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s\/]+([\d.]+))?/);
+    if (m) {
+      var a = m[4] === undefined ? 1 : parseFloat(m[4]);
+      if (a < 0.05) return null;
+      return { r: +m[1], g: +m[2], b: +m[3], a: a };
+    }
+    return null;
+  }
+
+  function luminance(c) {
+    return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255;
+  }
+
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h, s, l = (max + min) / 2;
+    if (max === min) { h = s = 0; }
+    else {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+      else if (max === g) h = (b - r) / d + 2;
+      else h = (r - g) / d + 4;
+      h /= 6;
+    }
+    return [h, s, l];
+  }
+
+  function hslToRgb(h, s, l) {
+    var r, g, b;
+    if (s === 0) { r = g = b = l; }
+    else {
+      function hue2rgb(p, q, t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      }
+      var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      var p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  function invertColor(c) {
+    var hsl = rgbToHsl(c.r, c.g, c.b);
+    var h = hsl[0], s = hsl[1], l = hsl[2];
+    var newS = Math.min(1, s * 0.9);
+    var newL = 1 - l;
+    if (newL < 0.05) newL = 0.05;
+    if (newL > 0.95) newL = 0.95;
+    var rgb = hslToRgb(h, newS, newL);
+    return { r: rgb[0], g: rgb[1], b: rgb[2], a: c.a };
+  }
+
+  function toRgba(c) {
+    if (c.a >= 0.99) return 'rgb(' + c.r + ',' + c.g + ',' + c.b + ')';
+    return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + c.a + ')';
+  }
+
+  function clearMarks() {
+    try {
+      var old = document.querySelectorAll('[data-mote-dr]');
+      for (var i = 0; i < old.length; i++) {
+        old[i].removeAttribute('data-mote-dr');
+      }
+    } catch(e) {}
+  }
+
+  function buildStyle() {
+    var parts = [];
+    parts.push('*,*::before,*::after{transition:none !important;}');
+    parts.push('html{background-color:$htmlBg !important;color-scheme:dark !important;}');
+    parts.push('body{background-color:$bodyBg !important;color:#dcdcdc !important;}');
+
+    var els = document.querySelectorAll('*');
+    var count = 0;
+    for (var i = 0; i < els.length && count < 3000; i++) {
+      var el = els[i];
+      var tag = el.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'LINK' ||
+          tag === 'META' || tag === 'TITLE' || tag === 'HEAD') continue;
+
+      var style;
+      try { style = window.getComputedStyle(el); } catch(e) { continue; }
+
+      var bg = parseColor(style.backgroundColor);
+      var fg = parseColor(style.color);
+      var bgImage = style.backgroundImage;
+
+      var rules = [];
+
+      if (bg && luminance(bg) > 0.35) {
+        var newBg = invertColor(bg);
+        if (newBg.a >= 0.99) {
+          var bl = luminance(newBg);
+          if (bl < 0.08) {
+            newBg.r = Math.min(255, newBg.r + 20);
+            newBg.g = Math.min(255, newBg.g + 20);
+            newBg.b = Math.min(255, newBg.b + 20);
+          }
+        }
+        if (DIM_FACTOR < 1.0) {
+          newBg.r = Math.round(newBg.r * DIM_FACTOR);
+          newBg.g = Math.round(newBg.g * DIM_FACTOR);
+          newBg.b = Math.round(newBg.b * DIM_FACTOR);
+        }
+        rules.push('background-color:' + toRgba(newBg) + ' !important');
+      }
+
+      if (fg && luminance(fg) < 0.45) {
+        var newFg = invertColor(fg);
+        var fl = luminance(newFg);
+        if (fl < 0.6) {
+          newFg.r = Math.min(255, Math.round(newFg.r + 40));
+          newFg.g = Math.min(255, Math.round(newFg.g + 40));
+          newFg.b = Math.min(255, Math.round(newFg.b + 40));
+        }
+        rules.push('color:' + toRgba(newFg) + ' !important');
+      }
+
+      var borderColor = parseColor(style.borderTopColor);
+      if (borderColor && luminance(borderColor) > 0.5) {
+        var nb = invertColor(borderColor);
+        rules.push('border-color:' + toRgba(nb) + ' !important');
+      }
+
+      if (bgImage && bgImage !== 'none') {
+        rules.push('background-blend-mode:multiply !important');
+      }
+
+      if (rules.length > 0) {
+        var id = '__mote_dr_' + count;
+        el.setAttribute('data-mote-dr', id);
+        parts.push('[data-mote-dr="' + id + '"]{' + rules.join(';') + '}');
+        count++;
+      }
+    }
+
+    parts.push('img,video,picture,canvas,svg,[style*="background-image"],iframe{filter:none !important;}');
+    return parts.join('\n');
+  }
+
+  function ensureStyleEl() {
+    var style = document.getElementById('__mote_dark_style__');
+    if (!style) {
+      style = document.createElement('style');
+      style.id = '__mote_dark_style__';
+      (document.head || document.documentElement).appendChild(style);
+    }
+    return style;
+  }
+
+  function refresh() {
+    try {
+      clearMarks();
+      var css = buildStyle();
+      ensureStyleEl().textContent = css;
+    } catch(e) {}
+  }
+
+  var scheduledTimeouts = [];
+  function scheduleRefresh(delayMs) {
+    var t = setTimeout(function() {
+      try { refresh(); } catch(e) {}
+    }, delayMs);
+    scheduledTimeouts.push(t);
+  }
+
+  function stop() {
+    for (var i = 0; i < scheduledTimeouts.length; i++) {
+      try { clearTimeout(scheduledTimeouts[i]); } catch(e) {}
+    }
+    scheduledTimeouts.length = 0;
+  }
+
+  window.__mote_dark_engine__ = { refresh: refresh, stop: stop };
+
+  function start() {
+    refresh();
+    scheduleRefresh(200);
+    scheduleRefresh(1000);
+    scheduleRefresh(2500);
+    scheduleRefresh(5000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      try { refresh(); } catch(e) {}
+    }, { once: true });
+    document.addEventListener('load', function() {
+      try { refresh(); } catch(e) {}
+    }, { once: true });
+    start();
+  } else {
+    start();
+  }
+})();
+""".trimIndent()
+}
+
+private val JS_DARK_READER_OFF = """
+(function(){
+  try {
+    var engine = window.__mote_dark_engine__;
+    if (engine && engine.stop) engine.stop();
+  } catch(e) {}
+  try { delete window.__mote_dark_engine__; } catch(e) { window.__mote_dark_engine__ = null; }
+  try {
+    var s = document.getElementById('__mote_dark_style__');
+    if (s) s.remove();
+    var els = document.querySelectorAll('[data-mote-dr]');
+    for (var i = 0; i < els.length; i++) {
+      els[i].removeAttribute('data-mote-dr');
+    }
+  } catch(e) {}
+})();
+""".trimIndent()
+
+/**
+ * WebView 是否支持原生算法暗色（效果远好于手动 invert）。
+ * 现代网页大多声明了 prefers-color-scheme，原生算法暗色会直接触发
+ * 网页自身的深色主题，不会出现「半黑半白」「白横幅」这类问题。
+ */
+private fun isNativeDarkModeSupported(): Boolean {
+    return try {
+        WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)
+    } catch (_: Exception) { false }
+}
+
+// 管理每个 WebView 的 DocumentStartScript 句柄。
+// DocumentStartScript 在页面 HTML 开始解析的最早期注入 Dark Reader，
+// 彻底消除「先浅后深」的白闪；WebView 被 GC 后 WeakHashMap 自动回收。
+// 同时缓存注册时使用的 dim 状态，dim 变化时自动重注册并返回 true。
+internal object NightModeScriptHandlers {
+    private val handlers = java.util.Collections.synchronizedMap(
+        java.util.WeakHashMap<android.webkit.WebView, Pair<androidx.webkit.ScriptHandler, Boolean>>()
+    )
+
+    /**
+     * 确保已注册。返回 true 表示本次注册/重新注册了（调用方应重建当前页面）。
+     * 返回 false 表示 dim 未变、句柄已存在，无需重建。
+     */
+    fun ensure(
+        wv: android.webkit.WebView,
+        dim: Boolean,
+        provider: () -> androidx.webkit.ScriptHandler?,
+    ): Boolean {
+        synchronized(handlers) {
+            val existing = handlers[wv]
+            if (existing != null && existing.second == dim) return false
+            try { existing?.first?.remove() } catch (_: Exception) {}
+            val handler = try { provider() } catch (_: Exception) { null }
+            if (handler == null) {
+                handlers.remove(wv)
+                return false
+            }
+            handlers[wv] = handler to dim
+            return true
+        }
+    }
+
+    fun remove(wv: android.webkit.WebView) {
+        synchronized(handlers) {
+            try {
+                handlers.remove(wv)?.first?.remove()
+            } catch (_: Exception) {}
+        }
+    }
+}
+
+/**
+ * 给单个 WebView 应用夜间模式。
+ * 优先使用 Android WebView 原生算法暗色（跟随 CSS prefers-color-scheme）；
+ * 不支持时回退到 JS invert。
+ */
+private fun isSystemDarkMode(context: Context): Boolean {
+    val uiMode = context.resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK
+    return uiMode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+}
+
+
+private fun applyNightModeToWebView(wv: WebView, enabled: Boolean) {
+    val nativeSupported = isNativeDarkModeSupported()
+    val systemDark = isSystemDarkMode(wv.context)
+
+    if (!enabled) {
+        NightModeScriptHandlers.remove(wv)
+        try {
+            if (nativeSupported) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, false)
+            }
+        } catch (_: Exception) {}
+        try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
+        try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
+        try { wv.setBackgroundColor(android.graphics.Color.WHITE) } catch (_: Exception) {}
+        return
+    }
+
+    // 立刻把 WebView 底层背景设为深色，消除加载过程中的白屏
+    try {
+        wv.setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
+    } catch (_: Exception) {}
+
+    // 系统深色 + 原生支持：无条件走原生算法暗化
+    if (nativeSupported && systemDark) {
+        NightModeScriptHandlers.remove(wv)
+        try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
+        try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
+        try {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, true)
+        } catch (_: Exception) {}
+        return
+    }
+
+    // Dark Reader 动态主题引擎（恒传 false，全局调暗交给 UI 蒙版）
+    val script = buildDarkReaderScript(false)
+
+    val reRegistered = NightModeScriptHandlers.ensure(wv, false) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(wv, script, setOf("*"))
+        } else null
+    }
+
+    if (reRegistered) {
+        try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
+        try { wv.evaluateJavascript(script, null) } catch (_: Exception) {}
+    } else {
+        try {
+            wv.evaluateJavascript(
+                "(function(){try{return !!window.__mote_dark_engine__;}catch(e){return false;}})()"
+            ) { raw ->
+                try {
+                    if (raw == "true") {
+                        wv.evaluateJavascript("window.__mote_dark_engine__.refresh();", null)
+                    } else {
+                        wv.evaluateJavascript(script, null)
+                    }
+                } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+}
 
 private val JS_NO_IMG_ON = """
 (function(){
@@ -1023,21 +1874,37 @@ private val JS_NO_IMG_OFF = """
 private val JS_FORCE_ZOOM_ON = """
 (function(){
   try {
-    var m = document.querySelector('meta[name="viewport"]');
-    if (m) {
-      var c = m.getAttribute('content') || '';
-      c = c.replace(/user-scalable\s*=\s*(no|0)/gi, 'user-scalable=yes');
-      c = c.replace(/maximum-scale\s*=\s*[\d.]+/gi, 'maximum-scale=10');
-      c = c.replace(/minimum-scale\s*=\s*[\d.]+/gi, 'minimum-scale=0.25');
-      if (c.indexOf('user-scalable') < 0) c += ', user-scalable=yes';
-      if (c.indexOf('maximum-scale') < 0) c += ', maximum-scale=10';
-      m.setAttribute('content', c);
-    } else {
+    function applyZoomUnlock() {
+      var metas = document.querySelectorAll('meta[name="viewport"]');
+      if (metas.length > 0) {
+        for (var i = 0; i < metas.length; i++) {
+          metas[i].remove();
+        }
+      }
       var nm = document.createElement('meta');
       nm.name = 'viewport';
-      nm.content = 'width=device-width, initial-scale=1.0, minimum-scale=0.25, maximum-scale=10.0, user-scalable=yes';
+      nm.content = 'width=device-width, initial-scale=1.0, minimum-scale=0.1, maximum-scale=20.0, user-scalable=yes';
       (document.head || document.documentElement).appendChild(nm);
     }
+
+    applyZoomUnlock();
+
+    // 针对 SPA 动态渲染：在 DOM 变化后再次确保缩放未被重新锁死
+    if (window.__mote_force_zoom_observer__) {
+      try { window.__mote_force_zoom_observer__.disconnect(); } catch(e) {}
+    }
+    var observer = new MutationObserver(function() {
+      var metas = document.querySelectorAll('meta[name="viewport"]');
+      for (var i = 0; i < metas.length; i++) {
+        var c = (metas[i].getAttribute('content') || '').toLowerCase();
+        if (c.indexOf('user-scalable=no') >= 0 || c.indexOf('user-scalable=0') >= 0 || c.indexOf('maximum-scale=1') >= 0) {
+          applyZoomUnlock();
+          break;
+        }
+      }
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    window.__mote_force_zoom_observer__ = observer;
   } catch(e) {}
 })();
 """.trimIndent()
@@ -1300,6 +2167,117 @@ private val JS_SNIFF_RESOURCES = """
 })();
 """.trimIndent()
 
+private const val TRANSLATE_TARGET_LANG = "zh-CN"
+
+private val JS_EXTRACT_TEXT_NODES = """
+(function(){
+  if (window.__mote_translate_nodes && window.__mote_translate_original) {
+    return JSON.stringify({
+      already: true,
+      texts: window.__mote_translate_original
+    });
+  }
+  var nodes = [];
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(node) {
+      var parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      var tag = parent.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' ||
+          tag === 'TEXTAREA' || tag === 'CODE' || tag === 'PRE') {
+        return NodeFilter.FILTER_REJECT;
+      }
+      var text = node.nodeValue;
+      if (!text || !text.trim()) return NodeFilter.FILTER_REJECT;
+      try {
+        var style = window.getComputedStyle(parent);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          return NodeFilter.FILTER_REJECT;
+        }
+      } catch(e) {}
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  while (walker.nextNode()) { nodes.push(walker.currentNode); }
+  window.__mote_translate_nodes = nodes;
+  window.__mote_translate_original = nodes.map(function(n){ return n.nodeValue; });
+  return JSON.stringify({
+    already: false,
+    texts: nodes.map(function(n){ return n.nodeValue; })
+  });
+})();
+""".trimIndent()
+
+private fun buildJsApplyTranslation(translationsJson: String): String = """
+(function(payload){
+  var nodes = window.__mote_translate_nodes;
+  if (!nodes) return;
+  var translations = payload;
+  for (var i = 0; i < nodes.length && i < translations.length; i++) {
+    if (translations[i] != null && translations[i] !== '') {
+      nodes[i].nodeValue = translations[i];
+    }
+  }
+})($translationsJson);
+""".trimIndent()
+
+private val JS_RESTORE_ORIGINAL = """
+(function(){
+  if (!window.__mote_translate_nodes || !window.__mote_translate_original) return;
+  var nodes = window.__mote_translate_nodes;
+  var originals = window.__mote_translate_original;
+  for (var i = 0; i < nodes.length && i < originals.length; i++) {
+    nodes[i].nodeValue = originals[i];
+  }
+  delete window.__mote_translate_nodes;
+  delete window.__mote_translate_original;
+})();
+""".trimIndent()
+
+private val JS_EXTRACT_ARTICLE_TEXT = """
+(function(){
+  try {
+    var body = document.body;
+    if (!body) return '[]';
+    var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(node) {
+        var parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        var tag = parent.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEXTAREA' || tag === 'CODE' || tag === 'PRE') {
+          return NodeFilter.FILTER_REJECT;
+        }
+        var text = node.nodeValue;
+        if (!text || !text.trim()) return NodeFilter.FILTER_REJECT;
+        try {
+          var style = window.getComputedStyle(parent);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+            return NodeFilter.FILTER_REJECT;
+          }
+        } catch(e) {}
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var paragraphs = [];
+    var currentText = '';
+    while (walker.nextNode()) {
+      var text = walker.currentNode.nodeValue.trim();
+      if (text) {
+        currentText += text;
+        // 遇到标点符号或换行时切分，方便 TTS 朗读
+        if (/[.。!！?？\n]/.test(text)) {
+          paragraphs.push(currentText);
+          currentText = '';
+        }
+      }
+    }
+    if (currentText) paragraphs.push(currentText);
+    return JSON.stringify(paragraphs);
+  } catch(e) {
+    return '[]';
+  }
+})();
+""".trimIndent()
 // ============================================================
 // 数据模型
 // ============================================================
@@ -1312,6 +2290,16 @@ data class PendingDownload(
     val fileName: String
 )
 
+private data class LongPressInfo(
+    val imageUrl: String = "",
+    val linkUrl: String = "",
+    val text: String = "",
+    val pageUrl: String = "",
+    val filename: String = "",
+    val xPx: Int = 0,
+    val yPx: Int = 0,
+    val selectable: Boolean = false,
+)
 data class PageEntry(val id: String, val route: String)
 
 data class ToolDef(
@@ -1336,6 +2324,7 @@ data class BrowserWindow(
     var desktopMode: Boolean = false,
     var incognito: Boolean = false,
     var translated: Boolean = false,
+    var isProgrammatic: Boolean = false,
 )
 
 data class HistoryEntry(
@@ -1446,7 +2435,6 @@ fun rememberScreenCornerRadius(fallback: Dp = 28.dp): Dp {
 }
 
 private fun defaultTools(): List<ToolDef> = listOf(
-    ToolDef("add_bookmark", "添加书签", MiuixIcons.Favorites),
     ToolDef("bookmarks", "书签列表", MiuixIcons.FavoritesFill),
     ToolDef("history", "历史记录", MiuixIcons.Recent),
     ToolDef("downloads", "下载管理", MiuixIcons.Download),
@@ -1457,23 +2445,42 @@ private fun defaultTools(): List<ToolDef> = listOf(
     ToolDef("fullscreen", "全屏模式", MiuixIcons.ExpandMore, isToggle = true),
     ToolDef("no_image", "无图模式", MiuixIcons.Photos, isToggle = true),
     ToolDef("home", "主页", MiuixIcons.Home),
-    ToolDef("share", "分享网页", MiuixIcons.Forward),
+    ToolDef("share", "分享网页", MiuixIcons.Share),
     ToolDef("find_in_page", "页面查找", MiuixIcons.Search),
     ToolDef("zoom", "网页缩放", MiuixIcons.VerticalSplit),
     ToolDef("translate", "网页翻译", MiuixIcons.Translate, isToggle = true),
     ToolDef("print", "网页打印", MiuixIcons.Rename),
     ToolDef("sniff", "资源嗅探", MiuixIcons.RecordingTape),
+    ToolDef("view_source", "网页源码", MiuixIcons.Weeks),
+    ToolDef("run_script", "脚本", MiuixIcons.Notes),
     ToolDef("play_in_player", "播放视频", MiuixIcons.Play),
     ToolDef("tts", "语音朗读", MiuixIcons.AppRecording),
     ToolDef("save_page", "保存网页", MiuixIcons.File),
-    ToolDef("dev_tools", "开发工具", MiuixIcons.Weeks),
-    ToolDef("exit", "退出", MiuixIcons.Close2),
 )
 
 @Composable
-private fun WindowManagerIcon(count: Int, tint: Color) {
+private fun WindowManagerIcon(count: Int, tint: Color, pulseTrigger: Int = 0) {
+    val iconScale = remember { Animatable(1f) }
+    LaunchedEffect(pulseTrigger) {
+        if (pulseTrigger > 0) {
+            iconScale.snapTo(1f)
+            iconScale.animateTo(
+                targetValue = 1.35f,
+                animationSpec = tween(160, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+            )
+            iconScale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+            )
+        }
+    }
     Box(
-        modifier = Modifier.size(24.dp),
+        modifier = Modifier
+            .size(24.dp)
+            .graphicsLayer {
+                scaleX = iconScale.value
+                scaleY = iconScale.value
+            },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(
@@ -1482,7 +2489,7 @@ private fun WindowManagerIcon(count: Int, tint: Color) {
                 .padding(2.5.dp),
         ) {
             val cornerRadius = 5.dp.toPx()
-            val strokeWidth = 1.5.dp.toPx()
+            val strokeWidth = 1.7.dp.toPx()
             drawRoundRect(
                 color = tint,
                 cornerRadius = CornerRadius(cornerRadius, cornerRadius),
@@ -1585,22 +2592,36 @@ private fun looksLikeMediaByHeaders(request: WebResourceRequest?): Boolean {
     val range = headers.entries.firstOrNull { it.key.equals("Range", ignoreCase = true) }?.value
     val accept = headers.entries.firstOrNull { it.key.equals("Accept", ignoreCase = true) }?.value
 
+    // 1. 明确声明是 video/audio
     if (accept != null && (accept.contains("video/", true) || accept.contains("audio/", true))) {
         return true
     }
 
+    // 2. 带了 Range 头，要严格排查是否是伪装的大文件/API
     if (range != null) {
         val clean = request.url.toString().lowercase().substringBefore('#').substringBefore('?')
-        val hasExt = clean.substringAfterLast('/').contains(".")
-        if (!hasExt) return true
+        if (clean.endsWith(".js") || clean.endsWith(".css") || clean.endsWith(".json") ||
+            clean.endsWith(".html") || clean.endsWith(".htm") ||
+            clean.endsWith(".jpg") || clean.endsWith(".jpeg") || clean.endsWith(".png") ||
+            clean.endsWith(".gif") || clean.endsWith(".webp") || clean.endsWith(".svg") ||
+            clean.endsWith(".woff") || clean.endsWith(".woff2") || clean.endsWith(".ttf")
+        ) {
+            return false
+        }
 
-        val m = Regex("bytes=(\\d+)-(\\d*)").find(range)
-        if (m != null) {
-            val start = m.groupValues[1].toLongOrNull() ?: 0
-            if (start > 0) return true
+        if (sniffCategoryFromNetwork(request.url.toString()) != null) {
+            return true
+        }
+
+        val hasExt = clean.substringAfterLast('/').contains(".")
+        if (!hasExt) {
+            val m = Regex("bytes=(\\d+)-(\\d*)").find(range)
+            if (m != null) {
+                val start = m.groupValues[1].toLongOrNull() ?: 0
+                if (start > 0) return true
+            }
         }
     }
-
     return false
 }
 
@@ -1689,9 +2710,16 @@ internal class SystemTextToolbar(private val view: View) : TextToolbar {
     }
 }
 
+// ============================================================
+// MainActivity
+// ============================================================
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // ★ 方案4：尽早启动 WebView 后台预热，主线程不等待
+        prewarmWebView()
 
         MoteAppContextHolder.appContext = applicationContext
 
@@ -1731,30 +2759,30 @@ class MainActivity : ComponentActivity() {
         window.decorView.requestApplyInsets()
 
         run {
-            val p = getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-            if (!p.getBoolean("web_saved_zooms_cleaned_v2", false)) {
-                p.edit()
-                    .remove("web_saved_zooms")
-                    .putBoolean("web_saved_zooms_cleaned_v2", true)
-                    .apply()
-            }
-        }
-
-        run {
-            val p = getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-            if (!p.getBoolean("home_banner_content_migrated_v1", false)) {
-                val oldContent = p.getInt("home_banner_content", 0)
-                val oldShow = p.getBoolean("home_show_banner", true)
-                val newContent = if (!oldShow) 0 else oldContent + 1
-                p.edit()
-                    .putInt("home_banner_content", newContent)
-                    .putBoolean("home_banner_content_migrated_v1", true)
-                    .apply()
-            }
-        }
-
-        run {
             val prefs = getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+
+            // ★ 方案3：数据迁移移到 IO 线程，不阻塞首帧。
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    if (!prefs.getBoolean("web_saved_zooms_cleaned_v2", false)) {
+                        prefs.edit()
+                            .remove("web_saved_zooms")
+                            .putBoolean("web_saved_zooms_cleaned_v2", true)
+                            .apply()
+                    }
+                    if (!prefs.getBoolean("home_banner_content_migrated_v1", false)) {
+                        val oldContent = prefs.getInt("home_banner_content", 0)
+                        val oldShow = prefs.getBoolean("home_show_banner", true)
+                        val newContent = if (!oldShow) 0 else oldContent + 1
+                        prefs.edit()
+                            .putInt("home_banner_content", newContent)
+                            .putBoolean("home_banner_content_migrated_v1", true)
+                            .apply()
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // ★ session_snapshot 仍需同步读取（BrowserScreen 初始化依赖它）
             val snapshotRaw = prefs.getString("session_snapshot", null)
             if (!snapshotRaw.isNullOrBlank()) {
                 try {
@@ -1778,21 +2806,26 @@ class MainActivity : ComponentActivity() {
             if (!launchUrl.isNullOrBlank()) {
                 InitialLaunchUrlStore.pending = launchUrl
             }
+            if (intent?.getBooleanExtra("open_downloads", false) == true) {
+                intent.removeExtra("open_downloads")
+                PendingOpenDownloadsStore.pending = true
+            }
         } catch (_: Exception) {}
+
         try {
             val playingUrl = PlaybackSessionHolder.currentUrl
-            val player = PlaybackSessionHolder.player
             val isLauncherIntent = intent?.action == Intent.ACTION_MAIN &&
                     intent?.categories?.contains(Intent.CATEGORY_LAUNCHER) == true
-            if (playingUrl.isNotBlank() && player != null && isLauncherIntent) {
+            if (playingUrl.isNotBlank() && isLauncherIntent) {
                 NativePlayerActivity.start(
                     context = this,
                     url = playingUrl,
                     title = PlaybackSessionHolder.currentTitle.ifBlank { "视频播放" },
-                    startPositionMs = player.currentPosition,
+                    startPositionMs = PlaybackPositionHolder.positionMs,
                 )
             }
         } catch (_: Exception) {}
+
         setContent {
             MoteThemeWrapper {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -1806,6 +2839,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ★ 方案4：预热 WebView 的方法，加在 onCreate 方法的下方
+    @androidx.annotation.OptIn(androidx.webkit.WebViewCompat.ExperimentalAsyncStartUp::class)
+    @Suppress("DEPRECATION")
+    private fun prewarmWebView() {
+        try {
+            val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+            val config = androidx.webkit.WebViewStartUpConfig.Builder(executor).build()
+
+            // WebKit 1.17.1：使用 WebViewOutcomeReceiver 配合 WebViewStartupException
+            androidx.webkit.WebViewCompat.startUpWebView(
+                applicationContext,
+                config,
+                object : androidx.webkit.WebViewOutcomeReceiver<
+                        androidx.webkit.WebViewStartUpResult,
+                        androidx.webkit.WebViewStartupException> {
+                    override fun onResult(result: androidx.webkit.WebViewStartUpResult) {
+                        // 预热成功，无需操作
+                    }
+
+                    override fun onError(error: androidx.webkit.WebViewStartupException) {
+                        // 预热失败，静默处理
+                    }
+                }
+            )
+        } catch (_: Throwable) {
+            // 老版本 / 系统 WebView 缺失时静默跳过
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -1814,19 +2876,22 @@ class MainActivity : ComponentActivity() {
             if (!launchUrl.isNullOrBlank()) {
                 PendingOpenInNewWindowStore.pending = launchUrl
             }
+            if (intent.getBooleanExtra("open_downloads", false) == true) {
+                intent.removeExtra("open_downloads")
+                PendingOpenDownloadsStore.pending = true
+            }
         } catch (_: Exception) {}
 
         try {
             val playingUrl = PlaybackSessionHolder.currentUrl
-            val player = PlaybackSessionHolder.player
             val isLauncherIntent = intent.action == Intent.ACTION_MAIN &&
                     intent.categories?.contains(Intent.CATEGORY_LAUNCHER) == true
-            if (playingUrl.isNotBlank() && player != null && isLauncherIntent) {
+            if (playingUrl.isNotBlank() && isLauncherIntent) {
                 NativePlayerActivity.start(
                     context = this,
                     url = playingUrl,
                     title = PlaybackSessionHolder.currentTitle.ifBlank { "视频播放" },
-                    startPositionMs = player.currentPosition,
+                    startPositionMs = PlaybackPositionHolder.positionMs,
                 )
             }
         } catch (_: Exception) {}
@@ -1879,6 +2944,188 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ============================================================
+// 主题包装器
+// ============================================================
+
+@Composable
+private fun MoteThemeWrapper(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+
+    var uiMode by remember {
+        mutableStateOf(
+            UiMode.fromValue(
+                prefs.getString("ui_style", UiMode.DEFAULT_VALUE) ?: UiMode.DEFAULT_VALUE
+            )
+        )
+    }
+
+    var colorMode by remember {
+        mutableIntStateOf(prefs.getInt("ui_color_mode", 0).coerceIn(0, 3))
+    }
+    var monetEnabled by remember {
+        mutableStateOf(prefs.getBoolean("ui_color_monet_enabled", false))
+    }
+    var keyColor by remember {
+        mutableIntStateOf(prefs.getInt("ui_color_key_color", 0))
+    }
+    var paletteStyleName by remember {
+        mutableStateOf(prefs.getString("ui_color_palette_style", "TonalSpot") ?: "TonalSpot")
+    }
+    var colorSpecName by remember {
+        mutableStateOf(prefs.getString("ui_color_spec", "Spec2021") ?: "Spec2021")
+    }
+
+    DisposableEffect(Unit) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                "ui_style" -> uiMode = UiMode.fromValue(
+                    prefs.getString(key, UiMode.DEFAULT_VALUE) ?: UiMode.DEFAULT_VALUE
+                )
+                "ui_color_mode" -> colorMode = prefs.getInt(key, 0).coerceIn(0, 3)
+                "ui_color_monet_enabled" -> monetEnabled = prefs.getBoolean(key, false)
+                "ui_color_key_color" -> keyColor = prefs.getInt(key, 0)
+                "ui_color_palette_style" -> paletteStyleName =
+                    prefs.getString(key, "TonalSpot") ?: "TonalSpot"
+                "ui_color_spec" -> colorSpecName =
+                    prefs.getString(key, "Spec2021") ?: "Spec2021"
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isAmoled = colorMode == 3
+    val isDark = when (colorMode) {
+        1 -> false
+        2 -> true
+        3 -> true
+        else -> systemDark
+    }
+
+    val currentContent by rememberUpdatedState(content)
+    val movableContent = remember { movableContentOf { currentContent() } }
+
+    CompositionLocalProvider(LocalUiMode provides uiMode) {
+        when (uiMode) {
+            UiMode.Miuix -> {
+                val useMonet = monetEnabled
+                val paletteStyle = try {
+                    ThemePaletteStyle.valueOf(paletteStyleName)
+                } catch (_: Exception) {
+                    ThemePaletteStyle.TonalSpot
+                }
+                val colorSpec = try {
+                    ThemeColorSpec.valueOf(colorSpecName)
+                } catch (_: Exception) {
+                    ThemeColorSpec.Spec2021
+                }
+
+                if (useMonet) {
+                    // 开启系统壁纸取色时：走原生 Monet 动态取色
+                    val schemeMode = when (colorMode) {
+                        0 -> ColorSchemeMode.MonetSystem
+                        1 -> ColorSchemeMode.MonetLight
+                        2, 3 -> ColorSchemeMode.MonetDark
+                        else -> ColorSchemeMode.MonetSystem
+                    }
+                    val themeController = ThemeController(
+                        colorSchemeMode = schemeMode,
+                        keyColor = null,
+                        isDark = isDark,
+                        paletteStyle = paletteStyle,
+                        colorSpec = colorSpec,
+                    )
+                    MiuixTheme(controller = themeController) {
+                        movableContent()
+                    }
+                } else {
+                    // 1. 先用全限定名显式获取基础颜色，防止和 Material 的同名函数混淆
+                    val baseColors = if (isDark) {
+                        top.yukonga.miuix.kmp.theme.darkColorScheme()
+                    } else {
+                        top.yukonga.miuix.kmp.theme.lightColorScheme()
+                    }
+
+                    // 2. 显式指定类型为 MIUIX 的 Colors，彻底解决 Any 类型推断报错
+                    val finalScheme: top.yukonga.miuix.kmp.theme.Colors = if (keyColor != 0) {
+                        val customPrimary = Color(keyColor)
+                        val customOnPrimary = if (customPrimary.luminance() > 0.5f) Color.Black else Color.White
+                        val customPrimaryVariant = customPrimary.copy(alpha = 0.8f)
+                        val customOnPrimaryVariant = customOnPrimary.copy(alpha = 0.9f)
+
+                        baseColors.copy(
+                            primary = customPrimary,
+                            onPrimary = customOnPrimary,
+                            primaryVariant = customPrimaryVariant,
+                            onPrimaryVariant = customOnPrimaryVariant,
+                            primaryContainer = customPrimary.copy(alpha = 0.15f),
+                            onPrimaryContainer = customOnPrimary
+                        )
+                    } else {
+                        baseColors
+                    }
+
+                    // 3. 应用配色
+                    MiuixTheme(colors = finalScheme) {
+                        movableContent()
+                    }
+                }
+            }
+
+            UiMode.Material -> {
+                val paletteStyle = try {
+                    PaletteStyle.valueOf(paletteStyleName)
+                } catch (_: Exception) {
+                    PaletteStyle.TonalSpot
+                }
+
+                val baseScheme: androidx.compose.material3.ColorScheme = if (keyColor == 0) {
+                    remember(isDark, context) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            if (isDark) dynamicDarkColorScheme(context)
+                            else dynamicLightColorScheme(context)
+                        } else {
+                            if (isDark) darkColorScheme()
+                            else lightColorScheme()
+                        }
+                    }
+                } else {
+                    rememberDynamicColorScheme(
+                        seedColor = Color(keyColor),
+                        isDark = isDark,
+                        isAmoled = isAmoled,
+                        style = paletteStyle,
+                    )
+                }
+
+                val m3Scheme = remember(baseScheme, isAmoled) {
+                    if (isAmoled) {
+                        baseScheme.copy(
+                            background = Color.Black,
+                            surface = Color.Black,
+                            surfaceContainerLowest = Color(0xFF000000),
+                            surfaceContainerLow = Color(0xFF0A0A0A),
+                            surfaceContainer = Color(0xFF121212),
+                            surfaceContainerHigh = Color(0xFF1A1A1A),
+                            surfaceContainerHighest = Color(0xFF222222),
+                        )
+                    } else baseScheme
+                }
+
+                androidx.compose.material3.MaterialTheme(
+                    colorScheme = m3Scheme,
+                    content = { movableContent() },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun AppRoot() {
     val density = LocalDensity.current
@@ -1894,13 +3141,14 @@ fun AppRoot() {
     val rootView = LocalView.current
     val systemTextToolbar = remember(rootView) { SystemTextToolbar(rootView) }
 
-    val pageStack = remember {
-        mutableStateListOf(PageEntry(id = "browser_0", route = "browser"))
-    }
+    val pageStack = PageNavigationStateHolder.pageStack
 
     var exitingPageId by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableFloatStateOf(1f) }
     var animJob by remember { mutableStateOf<Job?>(null) }
+    // ★ 返回是否已经"在飞"：手势 pop 与按钮 pop 共用同一把锁，
+    //   防止两者在 exitingPageId 置位前的那几毫秒同时删栈（会多掉一层 → 再返回直接回桌面）。
+    var backInFlight by remember { mutableStateOf(false) }
 
     val ease = remember { CubicBezierEasing(0.32f, 0.72f, 0f, 1f) }
     val pushSpec = remember { tween<Float>(durationMillis = 400, easing = ease) }
@@ -1910,19 +3158,22 @@ fun AppRoot() {
     val isSettled by remember { derivedStateOf { progress >= 1f } }
 
     fun pushPage(route: String) {
-        // ★ 修复：不用时间节流，改为"栈顶已经是这个 route 才忽略"
-        //   之前的时间节流（350ms）会把动画期间的所有 push 操作都吞掉，
-        //   导致用户感觉"打开后要等动画结束才能操作"
-        if (pageStack.lastOrNull()?.route == route) return
+        // ★ 只有"当前页面且没有在退场"才拦截重复 push。
+        //   退场动画期间，栈顶是正在消失的那一页，若用户点的正是它同名的入口
+        //   （例如从「搜索设置」返回时立刻再点「搜索设置」），旧判断会直接 return，
+        //   表现为"有触摸反馈但不跳转"。
+        val topRoute = pageStack.lastOrNull()?.route
+        if (exitingPageId == null && topRoute == route) return
 
         animJob?.cancel()
         animJob = null
 
         if (exitingPageId != null) {
-            if (pageStack.isNotEmpty()) {
-                pageStack.removeAt(pageStack.lastIndex)
-            }
+            // ★ 按 id 移除正在退场的页面（原来按 lastIndex 删，栈变化时会删错层）
+            val exitingId = exitingPageId
+            pageStack.removeAll { it.id == exitingId }
             exitingPageId = null
+            backInFlight = false
         }
 
         progress = 0f
@@ -1942,36 +3193,52 @@ fun AppRoot() {
 
     fun popPage() {
         if (pageStack.size <= 1) return
-        if (exitingPageId != null) return
+        // ★ backInFlight 和 exitingPageId 一起当守卫：手势 pop 进行中也算"在飞"
+        if (exitingPageId != null || backInFlight) return
+
+        val target = pageStack.lastOrNull() ?: return
 
         animJob?.cancel()
         animJob = null
 
-        val target = pageStack.last()
+        backInFlight = true
         exitingPageId = target.id
         progress = 1f
 
         animJob = scope.launch {
             try {
-                animate(
-                    initialValue = 1f,
-                    targetValue = 0f,
-                    animationSpec = popSpec,
-                ) { value, _ -> progress = value }
-            } catch (_: CancellationException) {
-                return@launch
-            }
-            withContext(NonCancellable) {
-                if (exitingPageId == target.id) {
-                    progress = 1f
-                    pageStack.removeAt(pageStack.lastIndex)
-                    exitingPageId = null
+                try {
+                    animate(
+                        initialValue = 1f,
+                        targetValue = 0f,
+                        animationSpec = popSpec,
+                    ) { value, _ -> progress = value }
+                } catch (_: CancellationException) {
+                    return@launch
                 }
+                withContext(NonCancellable) {
+                    if (exitingPageId == target.id) {
+                        progress = 1f
+                        // ★ 按 id 删，不按 lastIndex 删：栈在此期间变化也不会删错
+                        pageStack.removeAll { it.id == target.id }
+                        exitingPageId = null
+                    }
+                }
+            } finally {
+                backInFlight = false
             }
         }
     }
 
-    PredictiveBackHandler(enabled = pageStack.size > 1 && exitingPageId == null) { backEvents ->
+    // ★ 只要栈里还有页面就保持注册（不再随 exitingPageId 反注册），
+    //   否则状态翻转的那一帧会有"回调空窗"，返回事件落到系统默认 → 直接 finish() 回桌面。
+    PredictiveBackHandler(enabled = pageStack.size > 1 && !GlobalOverlayState.isOpen) { backEvents ->
+        // 已经有一次返回在飞：把手势吃掉，绝不再 pop 一次
+        if (exitingPageId != null || backInFlight) {
+            backEvents.collect { }
+            return@PredictiveBackHandler
+        }
+
         animJob?.cancel()
         animJob = null
 
@@ -1981,6 +3248,7 @@ fun AppRoot() {
             return@PredictiveBackHandler
         }
 
+        backInFlight = true
         var completed = false
         try {
             var firstEvent = true
@@ -1997,9 +3265,11 @@ fun AppRoot() {
             completed = false
         } finally {
             try {
-                withContext(NonCancellable) {
-                    if (completed) {
-                        exitingPageId = target.id
+                val stillTop = pageStack.lastOrNull()?.id == target.id
+                if (completed && stillTop) {
+                    // ★ 关键：在进入任何挂起之前同步置位，堵住 popPage() 看到的竞态窗口
+                    exitingPageId = target.id
+                    withContext(NonCancellable) {
                         try {
                             animate(
                                 initialValue = progress,
@@ -2009,21 +3279,28 @@ fun AppRoot() {
                         } catch (_: Exception) { }
                         if (exitingPageId == target.id) {
                             progress = 1f
-                            pageStack.removeAt(pageStack.lastIndex)
+                            // ★ 按 id 删，不按 lastIndex 删
+                            pageStack.removeAll { it.id == target.id }
                             exitingPageId = null
                         }
-                    } else {
-                        try {
-                            animate(
-                                initialValue = progress,
-                                targetValue = 1f,
-                                animationSpec = cancelSpec,
-                            ) { value, _ -> progress = value }
-                        } catch (_: Exception) { }
-                        progress = 1f
                     }
+                } else if (!completed) {
+                    try {
+                        animate(
+                            initialValue = progress,
+                            targetValue = 1f,
+                            animationSpec = cancelSpec,
+                        ) { value, _ -> progress = value }
+                    } catch (_: Exception) { }
+                    progress = 1f
+                } else {
+                    // 手势完成但栈已变化（例如期间点了返回按钮）：不重复删栈，只恢复位移
+                    progress = 1f
                 }
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+            } finally {
+                backInFlight = false
+            }
         }
     }
 
@@ -2063,17 +3340,8 @@ fun AppRoot() {
 
                 val zi = if (isExiting) 9999f else index.toFloat()
 
-                // ★ 用 Modifier.offset（layout 阶段）代替 graphicsLayer.translationX，
-                //   让 hit test 位置与视觉位置一致
-                val translationXf = when {
-                    isExiting -> screenWidthPx * (1f - progress)
-                    isBelowExiting -> -screenWidthPx / 6f * progress
-                    isTop -> screenWidthPx * (1f - progress)
-                    isSecondTop -> -screenWidthPx / 6f * progress
-                    else -> 0f
-                }
-                val translationXpx = translationXf.roundToInt()
-
+                // ★ 位移不在 composition 阶段读 progress（否则动画期间整个页面栈每帧重组），
+                //   改到 offset 的 placement lambda 里读；像素结果完全一致，只是省掉每帧重组。
                 key(entry.id) {
                     Box(
                         modifier = Modifier
@@ -2083,7 +3351,34 @@ fun AppRoot() {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .offset { IntOffset(translationXpx, 0) }
+                                .offset {
+                                    val f = when {
+                                        isExiting -> screenWidthPx * (1f - progress)
+                                        isBelowExiting -> -screenWidthPx / 6f * progress
+                                        isTop -> screenWidthPx * (1f - progress)
+                                        isSecondTop -> -screenWidthPx / 6f * progress
+                                        else -> 0f
+                                    }
+                                    IntOffset(f.roundToInt(), 0)
+                                }
+                                // ★ 触摸拦截必须放在"带位移的这一层"：
+                                //   它只覆盖退场页当前可见的区域，页面滑走露出的部分立刻可以操作下层页面。
+                                //   放在外层（不位移的整屏 Box）会把全屏触摸吃掉，导致必须等动画结束才能操作。
+                                .then(
+                                    if (isExiting) {
+                                        Modifier.pointerInput(Unit) {
+                                            awaitPointerEventScope {
+                                                while (true) {
+                                                    awaitPointerEvent(PointerEventPass.Initial)
+                                                        .changes
+                                                        .forEach { it.consume() }
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                                 .graphicsLayer {
                                     if (supportBlur && shouldBlur) {
                                         val blurPx = maxBlurPx * progress
@@ -2117,7 +3412,10 @@ fun AppRoot() {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .offset { IntOffset(translationXpx, 0) }
+                                    // 只有 isBelowExiting / isSecondTop 会走到这里，位移公式与主内容一致
+                                    .offset {
+                                        IntOffset((-screenWidthPx / 6f * progress).roundToInt(), 0)
+                                    }
                                     .graphicsLayer { alpha = 0.2f * progress }
                                     .background(Color.Black)
                             )
@@ -2127,6 +3425,16 @@ fun AppRoot() {
             }
 
             AutoUpdateChecker()
+
+            val openDownloads = PendingOpenDownloadsStore.pending
+            LaunchedEffect(openDownloads) {
+                if (openDownloads) {
+                    if (pageStack.lastOrNull()?.route != "downloads") {
+                        pushPage("downloads")
+                    }
+                    PendingOpenDownloadsStore.pending = false
+                }
+            }
         }
     }
 }
@@ -2148,17 +3456,18 @@ private fun RenderPageContent(
     ) {
         when (entry.route) {
             "browser" -> {
-                val navOwner = rememberNavigationEventDispatcherOwner(parent = null)
-                CompositionLocalProvider(
-                    LocalNavigationEventDispatcherOwner provides navOwner
-                ) {
-                    BrowserScreen(
-                        onOpenSettings = openSettings,
-                        onOpenScanner = openScanner,
-                        onOpenDownloads = { onPush("downloads") },
-                        isTop = isTop,
-                    )
-                }
+                BrowserScreen(
+                    onOpenSettings = openSettings,
+                    onOpenScanner = openScanner,
+                    onOpenDownloads = { onPush("downloads") },
+                    onOpenScripts = { onPush("scripts") },
+                    onOpenNewTabCustomization = {
+                        SettingsLayoutNavArgs.initialTab = 1
+                        onPush("settings_layout")
+                    },
+                    onOpenCrop = { onPush("crop") },
+                    isTop = isTop,
+                )
             }
             "scanner" -> ScannerScreen(
                 onCodeScanned = { raw ->
@@ -2174,14 +3483,19 @@ private fun RenderPageContent(
             "settings_home" -> SettingsHomePage(
                 onBack = { onPop() },
                 onNavigateToNewTabCustomization = {
-                    SettingsLayoutNavArgs.initialTab = 0
+                    SettingsLayoutNavArgs.initialTab = 1
                     onPush("settings_layout")
                 }
             )
-            "settings_search" -> SettingsSearchPage(onBack = { onPop() })
+            "settings_search" -> SettingsSearchPage(
+                onBack = { onPop() },
+                onOpenCustomEngineManager = { onPush("settings_custom_engines") },
+            )
+            "settings_custom_engines" -> CustomSearchEnginesPage(
+                onBack = { onPop() },
+            )
             "settings_web" -> SettingsWebPage(onBack = { onPop() })
             "settings_icon" -> SettingsIconPage(onBack = { onPop() })
-            "settings_color" -> SettingsColorPage(onBack = { onPop() })
             "settings_layout" -> SettingsLayoutPage(
                 onBack = { onPop() },
                 onOpenCrop = { onPush("crop") },
@@ -2191,14 +3505,47 @@ private fun RenderPageContent(
                 }
             )
             "crop" -> CropScreenPage(onPop = { onPop() })
-            "settings_permission" -> SettingsPermissionsPage(onBack = { onPop() })
-            "settings_notification" -> SettingsNotificationPage(onBack = { onPop() })
+            "settings_web_security" -> SettingsWebSecurityPage(
+                onBack = { onPop() },
+                onOpenWhitelist = { onPush("settings_tracking_whitelist") },
+            )
+            "settings_tracking_whitelist" -> TrackingWhitelistPage(onBack = { onPop() })
+            "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
+            "settings_personal_info" -> SettingsPersonalInfoPage(
+                onBack = { onPop() },
+                onOpenPasswordManager = { onPush("settings_password_manager") },
+            )
+            "settings_password_manager" -> PasswordManagerPage(
+                onBack = { onPop() },
+            )
             "settings_legal" -> SettingsLegalPage(
                 onBack = { onPop() },
                 onOpenDoc = { docRoute -> onPush(docRoute) },
             )
+            // ★ 法律文档：开源许可 / 第三方许可 / 隐私政策 / 用户协议 / 体验改进计划
+            in LEGAL_DOC_ROUTES -> LegalDocumentPage(
+                route = entry.route,
+                onBack = { onPop() },
+                onOpenDoc = { docRoute -> onPush(docRoute) },
+            )
+            "scripts" -> ScriptsPage(
+                onBack = { onPop() },
+                onOpenEditor = { onPush("script_editor") },
+            )
+            "script_editor" -> ScriptEditorPage(
+                onBack = { onPop() },
+                onSaved = { onPop() },
+            )
             "downloads" -> DownloadManagerScreen(
                 onBack = { onPop() },
+                onOpenDownloadSettings = { onPush("download_settings") },
+                onOpenTaskDetail = { onPush("download_task_detail") }
+            )
+            "download_task_detail" -> DownloadTaskDetailScreen(
+                onBack = { onPop() }
+            )
+            "download_settings" -> DownloadSettingsScreen(
+                onBack = { onPop() }
             )
             "settings_about" -> SettingsAboutPage(onBack = { onPop() })
             else -> SettingsSubPage(
@@ -2212,20 +3559,18 @@ private fun RenderPageContent(
 private fun routeTitle(route: String): String = when (route) {
     "settings_home" -> "主页设置"
     "settings_search" -> "搜索设置"
+    "settings_custom_engines" -> "默认搜索引擎"
     "settings_web" -> "网页浏览设置"
     "settings_icon" -> "图标"
-    "settings_color" -> "颜色"
-    "settings_layout" -> "界面"
-    "settings_permission" -> "权限设置"
-    "settings_notification" -> "通知设置"
+    "settings_layout" -> "主题与界面"
+    "settings_web_security" -> "网页安全中心"
+    "settings_app_permissions" -> "通知与权限"
+    "settings_personal_info" -> "个人信息"
+    "settings_password_manager" -> "密码管理器"
     "settings_legal" -> "法律信息"
     "settings_about" -> "关于"
     else -> ""
 }
-
-// ============================================================
-// ★ 壁纸裁剪页（作为页面栈里的一个普通页面）
-// ============================================================
 
 @Composable
 private fun CropScreenPage(
@@ -2246,9 +3591,9 @@ private fun CropScreenPage(
             if (ok) {
                 context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
                     .edit()
-                    .putInt("home_background_content", 1)
+                    // ★ 修复：自定义背景图索引是 2，不是 1（1 是必应壁纸）
+                    .putInt("home_background_content", 2)
                     .apply()
-                // ★ 需求 1：通知界面设置页弹"控件颜色"建议弹窗
                 WallpaperSavedEventStore.pending = true
             } else {
                 Toast.makeText(context, "保存图片失败", Toast.LENGTH_SHORT).show()
@@ -2291,6 +3636,7 @@ fun PageSurface(
 private class BrowserBottomBarItem(
     val id: String,
     val visible: Boolean = true,
+    val enabled: Boolean = true,
     val content: @Composable (isEnabled: Boolean) -> Unit,
 )
 
@@ -2350,7 +3696,7 @@ private fun BrowserBottomBar(
                                     .graphicsLayer { alpha = alphaAnim }
                                     .clipToBounds()
                                     .clickable(
-                                        enabled = alphaAnim > 0.5f,
+                                        enabled = alphaAnim > 0.5f && item.enabled,
                                         onClick = { onItemClick(item.id) },
                                     ),
                                 contentAlignment = Alignment.Center,
@@ -2365,12 +3711,19 @@ private fun BrowserBottomBar(
     }
 }
 
+// ============================================================
+// 浏览器主界面
+// ============================================================
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
     onOpenSettings: () -> Unit,
     onOpenScanner: () -> Unit,
     onOpenDownloads: () -> Unit,
+    onOpenScripts: () -> Unit = {},
+    onOpenNewTabCustomization: () -> Unit,
+    onOpenCrop: () -> Unit = {},
     isTop: Boolean
 ) {
     val context = LocalContext.current
@@ -2386,46 +3739,52 @@ fun BrowserScreen(
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
     }
-
-    val initialWindowId = remember { UUID.randomUUID().toString() }
-    val windows = remember {
-        mutableStateListOf<BrowserWindow>().apply {
-            val pending = InitialLaunchUrlStore.pending
-            val finalUrl: String = if (!pending.isNullOrBlank()) {
-                InitialLaunchUrlStore.pending = null
-                pending
-            } else {
-                val startupOption = prefs.getInt("home_startup_option", 0)
-                when (startupOption) {
-                    0 -> ""
-                    1 -> prefs.getString("home_startup_custom_url", "") ?: ""
-                    2 -> prefs.getString("last_session_url", "") ?: ""
-                    else -> ""
-                }
-            }
-            val nightIdx = try {
-                prefs.getInt("web_night_mode", 0)
-            } catch (_: Exception) {
-                0
-            }
-            val nightMode = when (nightIdx) {
-                1 -> false
-                2 -> true
-                else -> isUiDarkMode
-            }
-            add(
-                BrowserWindow(
-                    id = initialWindowId,
-                    title = if (finalUrl.isBlank()) "新标签页" else "加载中…",
-                    url = finalUrl,
-                    nightMode = nightMode,
-                    noImage = prefs.getBoolean("web_no_image", false),
-                    desktopMode = prefs.getBoolean("web_desktop_mode", false),
-                )
-            )
-        }
+    LaunchedEffect(Unit) {
+        SecurityStateHolder.attachPrefs(prefs)
     }
-    var activeWindowId by remember { mutableStateOf<String?>(initialWindowId) }
+    val windows = BrowserWindowStateHolder.windows
+    if (windows.isEmpty()) {
+        val pending = InitialLaunchUrlStore.pending
+        val finalUrl: String = if (!pending.isNullOrBlank()) {
+            InitialLaunchUrlStore.pending = null
+            pending
+        } else {
+            val startupOption = prefs.getInt("home_startup_option", 0)
+            when (startupOption) {
+                0 -> ""
+                1 -> prefs.getString("home_startup_custom_url", "") ?: ""
+                2 -> prefs.getString("last_session_url", "") ?: ""
+                else -> ""
+            }
+        }
+        val nightIdx = try {
+            prefs.getInt("web_night_mode", 0)
+        } catch (_: Exception) {
+            0
+        }
+        val nightMode = when (nightIdx) {
+            1 -> false
+            2 -> true
+            else -> isUiDarkMode
+        }
+        windows.add(
+            BrowserWindow(
+                id = UUID.randomUUID().toString(),
+                title = if (finalUrl.isBlank()) "新标签页" else "加载中…",
+                url = finalUrl,
+                nightMode = nightMode,
+                noImage = prefs.getBoolean("web_no_image", false),
+                desktopMode = prefs.getBoolean("web_desktop_mode", false),
+            )
+        )
+    }
+
+    var activeWindowId by remember {
+        mutableStateOf<String?>(BrowserWindowStateHolder.activeWindowId ?: windows.first().id)
+    }
+    LaunchedEffect(activeWindowId) {
+        BrowserWindowStateHolder.activeWindowId = activeWindowId
+    }
     val webViewMap = remember { mutableMapOf<String, WebView>() }
 
     val activeWindow: BrowserWindow? = windows.firstOrNull { it.id == activeWindowId }
@@ -2446,6 +3805,11 @@ fun BrowserScreen(
     var bookmarkTargetFolderId by remember { mutableStateOf<String?>(null) }
     var showAddFolderDialog by remember { mutableStateOf(false) }
     var folderTitleInput by remember { mutableStateOf("") }
+
+    var showSourceDialog by remember { mutableStateOf(false) }
+    var showScriptDialog by remember { mutableStateOf(false) }
+    var sourceContent by remember { mutableStateOf("") }
+    var scriptContent by remember { mutableStateOf("") }
     var pendingDeleteBookmarkId by remember { mutableStateOf<String?>(null) }
     var showDeleteBookmarkDialog by remember { mutableStateOf(false) }
     var addFromBookmarkSheet by remember { mutableStateOf(false) }
@@ -2459,6 +3823,19 @@ fun BrowserScreen(
     val sniffedResources = remember { mutableStateListOf<SniffedResource>() }
     val networkSniffedResources = remember { mutableStateListOf<SniffedResource>() }
 
+    var showSecuritySheet by remember { mutableStateOf(false) }
+    var securityPage by remember { mutableIntStateOf(0) }
+    var securitySheetBounds by remember { mutableStateOf<Rect?>(null) }
+    var searchBarBounds by remember { mutableStateOf<Rect?>(null) }
+    val secInfo = SecurityStateHolder.info
+
+    LaunchedEffect(showSecuritySheet) {
+        if (!showSecuritySheet && securityPage != 0) {
+            delay(280)
+            securityPage = 0
+        }
+    }
+
     var urlInput by remember { mutableStateOf(TextFieldValue("")) }
     var isSearchFocused by remember { mutableStateOf(false) }
     var searchBarExpanded by remember { mutableStateOf(false) }
@@ -2466,6 +3843,10 @@ fun BrowserScreen(
 
     var pendingDownload by remember { mutableStateOf<PendingDownload?>(null) }
     var showDownloadDialog by remember { mutableStateOf(false) }
+    var longPressInfo by remember { mutableStateOf<LongPressInfo?>(null) }
+    var longPressMenuVisible by remember { mutableStateOf(false) }
+    var windowIconPulse by remember { mutableIntStateOf(0) }
+    var longPressCounter by remember { mutableIntStateOf(0) }
 
     var showFindBar by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
@@ -2477,6 +3858,7 @@ fun BrowserScreen(
     var pendingDefaultZoomChange by remember { mutableStateOf<Int?>(null) }
 
     var isFullscreen by remember { mutableStateOf(false) }
+    var pendingExternalSchemeUrl by remember { mutableStateOf<String?>(null) }
 
     var isRefreshing by remember { mutableStateOf(false) }
     var pullDistance by remember { mutableFloatStateOf(0f) }
@@ -2506,6 +3888,119 @@ fun BrowserScreen(
     val snackbarJob = remember { mutableStateOf<Job?>(null) }
     val translateJob = remember { mutableStateOf<Job?>(null) }
 
+    var showTtsBar by remember { mutableStateOf(false) }
+    var isTtsPlaying by remember { mutableStateOf(false) }
+    var ttsTextChunks by remember { mutableStateOf<List<String>>(emptyList()) }
+    var ttsCurrentIndex by remember { mutableIntStateOf(0) }
+
+    var ttsReady by remember { mutableStateOf(false) }
+    var ttsInitFailed by remember { mutableStateOf(false) }
+    var ttsEngine by remember { mutableStateOf<TextToSpeech?>(null) }
+    var showTtsErrorDialog by remember { mutableStateOf(false) }
+    var ttsRetryKey by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(ttsRetryKey) {
+        ttsReady = false
+        ttsInitFailed = false
+        var isDisposed = false
+        val mainHandler = Handler(Looper.getMainLooper())
+
+        try {
+            ttsEngine?.stop()
+            ttsEngine?.shutdown()
+        } catch (_: Exception) {}
+        ttsEngine = null
+
+        val initListener = TextToSpeech.OnInitListener { status ->
+            mainHandler.post {
+                if (isDisposed) return@post
+                if (status == TextToSpeech.SUCCESS) {
+                    ttsEngine?.let { engine ->
+                        try {
+                            engine.setLanguage(Locale.CHINESE)
+                        } catch (_: Exception) {}
+                        ttsReady = true
+                        ttsInitFailed = false
+                    } ?: run {
+                        ttsInitFailed = true
+                    }
+                } else {
+                    ttsReady = false
+                    ttsInitFailed = true
+                }
+            }
+        }
+
+        // 使用 applicationContext 避免 Activity Context 泄漏
+        val engine = TextToSpeech(context.applicationContext, initListener)
+        ttsEngine = engine
+
+        // 5 秒超时兜底，给小米系统留出足够拉起引擎的时间
+        val timeoutRunnable = Runnable {
+            if (!ttsReady && !ttsInitFailed) {
+                ttsInitFailed = true
+            }
+        }
+        mainHandler.postDelayed(timeoutRunnable, 5000L)
+
+        onDispose {
+            isDisposed = true
+            mainHandler.removeCallbacks(timeoutRunnable)
+            try {
+                engine.stop()
+                engine.shutdown()
+            } catch (_: Exception) {}
+            ttsEngine = null
+        }
+    }
+
+    fun speakChunk(index: Int) {
+        val engine = ttsEngine ?: return
+        if (index !in ttsTextChunks.indices) {
+            isTtsPlaying = false
+            return
+        }
+        if (!ttsReady) {
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "语音引擎未就绪",
+                    duration = SnackbarDuration.Short,
+                )
+            }
+            return
+        }
+        val text = ttsTextChunks[index]
+        ttsCurrentIndex = index
+        isTtsPlaying = true
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) {
+                Handler(Looper.getMainLooper()).post {
+                    if (isTtsPlaying) {
+                        speakChunk(index + 1)
+                    }
+                }
+            }
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                Handler(Looper.getMainLooper()).post { isTtsPlaying = false }
+            }
+        })
+        try {
+            val params = Bundle()
+            engine.speak(text, TextToSpeech.QUEUE_FLUSH, params, index.toString())
+        } catch (_: Exception) {
+            isTtsPlaying = false
+        }
+    }
+
+    fun stopTts() {
+        try {
+            isTtsPlaying = false
+            ttsEngine?.stop()
+        } catch (_: Exception) {}
+    }
+
     var pendingDialogInfo by remember { mutableStateOf<UpdateState.HasUpdate?>(null) }
     var showPendingDialog by remember { mutableStateOf(false) }
     var isPendingDownloading by remember { mutableStateOf(false) }
@@ -2529,6 +4024,16 @@ fun BrowserScreen(
         mutableStateOf(prefs.getBoolean("web_dynamic_tool_suggest", true))
     }
     var isEnglishPage by remember { mutableStateOf(false) }
+
+    fun getActiveCustomEngineUrl(): String {
+        val engines = loadCustomSearchEngines(prefs)
+        val activeId = prefs.getString("active_custom_engine_id", null)
+        return engines.find { it.id == activeId }?.url
+            ?: engines.firstOrNull()?.url
+            ?: ""
+    }
+
+    var customEngineUrl by remember { mutableStateOf(getActiveCustomEngineUrl()) }
 
     var controlColorMode by remember {
         mutableIntStateOf(prefs.getInt("ui_control_color_mode", 0).coerceIn(0, 3))
@@ -2608,6 +4113,11 @@ fun BrowserScreen(
     var historyModuleEnabled by remember {
         mutableStateOf(prefs.getBoolean("history_module_enabled", true))
     }
+
+    var searchSuggestEnabled by remember {
+        mutableStateOf(prefs.getBoolean("search_suggest_enabled", true))
+    }
+    var currentSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
 
     var textZoomValue by remember {
         mutableIntStateOf(
@@ -2690,6 +4200,9 @@ fun BrowserScreen(
     var globalNightMode by remember {
         mutableStateOf(readNightModeFromPrefs())
     }
+    var globalNightDim by remember {
+        mutableStateOf(prefs.getBoolean("web_night_mode_dim", true))
+    }
     var globalNoImage by remember {
         mutableStateOf(prefs.getBoolean("web_no_image", false))
     }
@@ -2744,11 +4257,12 @@ fun BrowserScreen(
                         val id = activeWindowId
                         if (id != null) {
                             updateWindow(id) { it.nightMode = enabled }
-                            webViewMap[id]?.evaluateJavascript(
-                                if (enabled) JS_NIGHT_ON else JS_NIGHT_OFF, null
-                            )
+                            webViewMap[id]?.let { applyNightModeToWebView(it, enabled) }
                         }
                     }
+                }
+                "web_night_mode_dim" -> {
+                    globalNightDim = prefs.getBoolean(key, true)
                 }
                 "web_no_image" -> {
                     val enabled = prefs.getBoolean(key, false)
@@ -2774,6 +4288,7 @@ fun BrowserScreen(
                                 val ua = if (enabled) DESKTOP_UA
                                 else getMobileUserAgent(context)
                                 wv.settings.userAgentString = ua
+                                applyDesktopViewportSettings(wv, enabled)
                                 wv.reload()
                             }
                         }
@@ -2797,8 +4312,14 @@ fun BrowserScreen(
                 "web_dynamic_tool_suggest" -> {
                     dynamicToolSuggestEnabled = prefs.getBoolean(key, true)
                 }
+                "search_suggest_enabled" -> {
+                    searchSuggestEnabled = prefs.getBoolean(key, true)
+                }
                 "web_video_player" -> {
                     useNativePlayerEnabled = prefs.getInt(key, 0) == 0
+                }
+                "custom_search_engines", "active_custom_engine_id" -> {
+                    customEngineUrl = getActiveCustomEngineUrl()
                 }
                 "ui_control_color_mode" -> {
                     controlColorMode = prefs.getInt(key, 0).coerceIn(0, 3)
@@ -2886,11 +4407,10 @@ fun BrowserScreen(
         saveSearchHistory()
     }
 
-    var customEngineUrl by remember {
-        mutableStateOf(prefs.getString("custom_search_engine_url", "") ?: "")
+    val customEngines = remember(customEngineUrl) {
+        loadCustomSearchEngines(prefs)
     }
-
-    val searchEngines: List<Pair<String, String>> = remember(customEngineUrl) {
+    val searchEngines: List<Pair<String, String>> = remember(customEngines) {
         buildList {
             add("必应" to "https://cn.bing.com/search?q=%s")
             add("抖音" to "https://www.douyin.com/search/%s")
@@ -2898,8 +4418,8 @@ fun BrowserScreen(
             add("神马" to "https://m.sm.cn/s?q=%s")
             add("搜狗" to "https://m.sogou.com/web/searchList.jsp?keyword=%s")
             add("谷歌" to "https://www.google.com/search?q=%s")
-            if (customEngineUrl.isNotBlank()) {
-                add("自定义" to customEngineUrl)
+            customEngines.forEach {
+                add(it.name to it.url)
             }
         }
     }
@@ -3216,7 +4736,9 @@ fun BrowserScreen(
 
     LaunchedEffect(isFullscreen) {
         if (isFullscreen) {
-            Toast.makeText(context, "摇一摇退出全屏", Toast.LENGTH_SHORT).show()
+            if (prefs.getBoolean("toast_fullscreen_enabled", true)) {
+                Toast.makeText(context, "摇一摇退出全屏", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -3305,7 +4827,7 @@ fun BrowserScreen(
                 return
             }
         }
-        updateWindow(id) { it.url = ""; it.title = "新标签页" }
+        updateWindow(id) { it.url = ""; it.title = "新标签页"; it.favicon = null }
         webViewMap[id]?.loadUrl("about:blank")
     }
 
@@ -3347,21 +4869,25 @@ fun BrowserScreen(
                 wv.clearFormData()
                 wv.settings.cacheMode = WebSettings.LOAD_NO_CACHE
             } catch (_: Exception) {}
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "无痕模式已开启",
-                    duration = SnackbarDuration.Short,
-                )
+            if (prefs.getBoolean("toast_incognito_enabled", true)) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "无痕模式已开启",
+                        duration = SnackbarDuration.Short,
+                    )
+                }
             }
         } else {
             try {
                 wv.settings.cacheMode = WebSettings.LOAD_DEFAULT
             } catch (_: Exception) {}
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "无痕模式已关闭",
-                    duration = SnackbarDuration.Short,
-                )
+            if (prefs.getBoolean("toast_incognito_enabled", true)) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "无痕模式已关闭",
+                        duration = SnackbarDuration.Short,
+                    )
+                }
             }
         }
     }
@@ -3388,9 +4914,7 @@ fun BrowserScreen(
         globalNightMode = isUiDarkMode
         val id = activeWindowId ?: return@LaunchedEffect
         updateWindow(id) { it.nightMode = isUiDarkMode }
-        webViewMap[id]?.evaluateJavascript(
-            if (isUiDarkMode) JS_NIGHT_ON else JS_NIGHT_OFF, null
-        )
+        webViewMap[id]?.let { applyNightModeToWebView(it, isUiDarkMode) }
     }
 
     LaunchedEffect(pendingDefaultZoomChange) {
@@ -3443,6 +4967,12 @@ fun BrowserScreen(
         }
     }
 
+    val hasActiveMoteDownloads = MoteDownloader.tasks.any {
+        it.status == MoteDownloadStatus.RUNNING ||
+                it.status == MoteDownloadStatus.PENDING ||
+                it.status == MoteDownloadStatus.PAUSED
+    }
+
     fun createWindow(url: String = ""): String {
         val inheritIncognito = windows.firstOrNull { it.id == activeWindowId }?.incognito == true
         val id = UUID.randomUUID().toString()
@@ -3467,6 +4997,7 @@ fun BrowserScreen(
                 nightMode = globalNightMode,
                 noImage = globalNoImage,
                 desktopMode = globalDesktopMode,
+                isProgrammatic = finalUrl.isNotBlank(),
             )
         )
         activeWindowId = id
@@ -3475,6 +5006,32 @@ fun BrowserScreen(
         isSearchResultPage = false
         clearSearchFocus()
         return id
+    }
+
+    fun createBackgroundWindow(url: String) {
+        if (url.isBlank()) return
+        val inheritIncognito =
+            windows.firstOrNull { it.id == activeWindowId }?.incognito == true
+        val id = UUID.randomUUID().toString()
+        val initialTitle: String = try {
+            val host = Uri.parse(url).host ?: ""
+            if (host.isNotBlank()) host.removePrefix("www.") else "加载中…"
+        } catch (_: Exception) {
+            "加载中…"
+        }
+        windows.add(
+            BrowserWindow(
+                id = id,
+                title = initialTitle,
+                url = url,
+                incognito = inheritIncognito,
+                nightMode = globalNightMode,
+                noImage = globalNoImage,
+                desktopMode = globalDesktopMode,
+                isProgrammatic = true,
+            )
+        )
+        // 不切换 activeWindowId
     }
 
     fun closeWindow(id: String) {
@@ -3527,6 +5084,37 @@ fun BrowserScreen(
             TextFieldValue(winUrl)
         }
         clearSearchFocus()
+    }
+
+    // ★ 统一导航判断（供底部工具栏与横滑手势使用）
+    //   返回：WebView 有历史 → goBack
+    //         无历史 + 不在 home → goToHomePage
+    fun canNavigateBack(): Boolean {
+        val wv = activeWindowId?.let { webViewMap[it] } ?: return false
+        if (wv.canGoBack()) return true
+        if (!isAtHomePage()) return true
+        return false
+    }
+
+    fun performNavigateBack() {
+        val wv = activeWindowId?.let { webViewMap[it] } ?: return
+        if (wv.canGoBack()) {
+            wv.goBack()
+            return
+        }
+        if (!isAtHomePage()) {
+            goToHomePage()
+        }
+    }
+
+    fun canNavigateForward(): Boolean {
+        val wv = activeWindowId?.let { webViewMap[it] } ?: return false
+        return wv.canGoForward()
+    }
+
+    fun performNavigateForward() {
+        val wv = activeWindowId?.let { webViewMap[it] } ?: return
+        if (wv.canGoForward()) wv.goForward()
     }
 
     fun loadUrlInActive(input: String) {
@@ -3654,6 +5242,7 @@ fun BrowserScreen(
     fun performSniff(windowId: String) {
         val wv = webViewMap[windowId] ?: return
         isSniffing = true
+        networkSniffedResources.clear()
         wv.evaluateJavascript(JS_SNIFF_RESOURCES) { raw ->
             val parsed = parseSniffedResources(raw)
             sniffedResources.clear()
@@ -3683,11 +5272,13 @@ fun BrowserScreen(
             snackbarJob.value = null
 
             wv.evaluateJavascript(JS_RESTORE_ORIGINAL, null)
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "已恢复原文",
-                    duration = SnackbarDuration.Short,
-                )
+            if (prefs.getBoolean("toast_translate_enabled", true)) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "已恢复原文",
+                        duration = SnackbarDuration.Short,
+                    )
+                }
             }
             return
         }
@@ -3705,8 +5296,10 @@ fun BrowserScreen(
                 return@evaluateJavascript
             }
 
-            val already = payload.optBoolean("already", false)
-            if (already) return@evaluateJavascript
+
+            if (payload.optBoolean("already", false)) {
+                return@evaluateJavascript
+            }
 
             val arr = payload.optJSONArray("texts") ?: return@evaluateJavascript
             val texts = ArrayList<String>(arr.length())
@@ -3723,42 +5316,85 @@ fun BrowserScreen(
                 return@evaluateJavascript
             }
 
-            snackbarJob.value?.cancel()
-            snackbarJob.value = scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "正在翻译…",
-                    withDismissAction = true,
-                    duration = SnackbarDuration.Indefinite,
-                )
+            if (prefs.getBoolean("toast_translate_enabled", true)) {
+                snackbarJob.value?.cancel()
+                snackbarJob.value = scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "正在翻译…",
+                        withDismissAction = true,
+                        duration = SnackbarDuration.Indefinite,
+                    )
+                }
             }
 
             translateJob.value?.cancel()
             translateJob.value = scope.launch {
-                val translated = withContext(Dispatchers.IO) {
-                    translateTextBatch(texts, TRANSLATE_TARGET_LANG)
-                }
-                if (!isActive) return@launch
+                try {
+                    val translated = withContext(Dispatchers.IO) {
+                        translateTextBatch(texts, TRANSLATE_TARGET_LANG)
+                    }
+                    if (!isActive) return@launch
 
-                val json = JSONArray().apply {
-                    translated.forEach { put(it) }
-                }
-                withContext(Dispatchers.Main) {
-                    if (!isActive) return@withContext
-                    val winNow = windows.firstOrNull { it.id == id }
-                    if (winNow?.translated != true) return@withContext
+                    val json = JSONArray().apply {
+                        translated.forEach { put(it) }
+                    }
 
-                    wv.evaluateJavascript(
-                        buildJsApplyTranslation(json.toString()),
-                        null
-                    )
-                    snackbarJob.value?.cancel()
-                    snackbarJob.value = null
-                    delay(80)
-                    if (!isActive) return@withContext
-                    snackbarHostState.showSnackbar(
-                        message = "翻译完成",
-                        duration = SnackbarDuration.Short,
-                    )
+                    withContext(Dispatchers.Main) {
+                        if (!isActive) return@withContext
+                        val winNow = windows.firstOrNull { it.id == id }
+                        if (winNow?.translated != true) return@withContext
+
+                        wv.evaluateJavascript(
+                            buildJsApplyTranslation(json.toString()),
+                            null
+                        )
+
+                        // ★ 修正：MIUIX 库使用 newestSnackbarData() 来获取当前最新并 dismiss
+                        snackbarHostState.newestSnackbarData()?.dismiss()
+                        snackbarJob.value?.cancel()
+                        snackbarJob.value = null
+                    }
+
+                    // 留出动画时间，让旧 Snackbar 彻底滑出
+                    delay(250)
+                    if (!isActive) return@launch
+
+                    if (prefs.getBoolean("toast_translate_enabled", true)) {
+                        withContext(Dispatchers.Main) {
+                            snackbarHostState.showSnackbar(
+                                message = "翻译完成",
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        snackbarHostState.newestSnackbarData()?.dismiss()
+                        snackbarJob.value?.cancel()
+                        snackbarJob.value = null
+                    }
+
+                    delay(150)
+
+                    if (prefs.getBoolean("toast_translate_enabled", true)) {
+                        withContext(Dispatchers.Main) {
+                            snackbarHostState.showSnackbar(
+                                message = "翻译失败：${e.message ?: "网络错误"}",
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    }
+                } finally {
+                    // 确保在退出页面或意外取消时，立刻清理掉悬而未决的 Indefinite Snackbar
+                    withContext(NonCancellable + Dispatchers.Main) {
+                        if (snackbarJob.value != null) {
+                            snackbarHostState.newestSnackbarData()?.dismiss()
+                            snackbarJob.value?.cancel()
+                            snackbarJob.value = null
+                        }
+                    }
                 }
             }
         }
@@ -3783,10 +5419,12 @@ fun BrowserScreen(
     }
 
     LaunchedEffect(Unit) {
-        loadHistory()
-        loadBookmarks()
-        loadSearchHistory()
-        loadSavedZooms()
+        withContext(Dispatchers.IO) {
+            loadHistory()
+            loadBookmarks()
+            loadSearchHistory()
+            loadSavedZooms()
+        }
     }
 
     LaunchedEffect(windows.toList()) {
@@ -3804,32 +5442,62 @@ fun BrowserScreen(
         if (snapshotUrls.isNotEmpty()) {
             try {
                 val json = JSONArray().apply { snapshotUrls.forEach { put(it) } }
-                prefs.edit().putString("session_snapshot", json.toString()).apply()
+                // ★ 核心修复：只要页面一发生变化，立刻同步写入磁盘！
+                prefs.edit().putString("session_snapshot", json.toString()).commit()
             } catch (_: Exception) {}
+        } else {
+            prefs.edit().putString("session_snapshot", "").commit()
         }
     }
 
-    val pendingRestore = SessionSnapshotStore.pendingRestore
-    LaunchedEffect(pendingRestore) {
-        val urls = pendingRestore ?: return@LaunchedEffect
+    var hasHandledRestore by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (hasHandledRestore) return@LaunchedEffect
+        val pendingRestore = SessionSnapshotStore.pendingRestore ?: return@LaunchedEffect
+        hasHandledRestore = true
         SessionSnapshotStore.pendingRestore = null
 
+        val urls = pendingRestore
         var waited = 0
         while (activeWindowId == null && waited < 3000) {
             delay(50); waited += 50
         }
-        delay(200)
+        delay(500) // 延迟半秒，等界面完全渲染，防止被 NewTabPage 遮挡
+
+        val startupOption = prefs.getInt("home_startup_option", 0)
+        val askRestore = prefs.getBoolean("home_ask_restore_memory_v2", true)
+
+        fun restoreSession() {
+            if (urls.isNotEmpty()) {
+                val currentWinId = activeWindowId
+                if (currentWinId != null) {
+                    updateWindow(currentWinId) { it.url = urls[0]; it.title = "加载中…" }
+                    webViewMap[currentWinId]?.loadUrl(urls[0])
+                }
+                for (i in 1 until urls.size) {
+                    try {
+                        createBackgroundWindow(urls[i])
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+
+        if (startupOption == 2) {
+            restoreSession()
+            return@LaunchedEffect
+        }
+
+        if (!askRestore) return@LaunchedEffect
 
         val result = snackbarHostState.showSnackbar(
             message = "上次打开过 ${urls.size} 个页面",
-            actionLabel = "打开",
+            actionLabel = "恢复",
             duration = SnackbarDuration.Long,
         )
 
         if (result == SnackbarResult.ActionPerformed) {
-            urls.forEach { url ->
-                try { createWindow(url) } catch (_: Exception) {}
-            }
+            restoreSession()
         }
     }
 
@@ -3903,6 +5571,38 @@ fun BrowserScreen(
         }
     }
 
+    val pendingPassword = PasswordCaptureStore.pending
+    LaunchedEffect(pendingPassword) {
+        val p = pendingPassword ?: return@LaunchedEffect
+        PasswordCaptureStore.pending = null
+
+        val existing = loadSavedPasswords(prefs)
+        val alreadySaved = existing.any {
+            it.url == p.url && it.username == p.username && it.password == p.password
+        }
+        if (alreadySaved) return@LaunchedEffect
+
+        val result = snackbarHostState.showSnackbar(
+            message = "是否保存该密码？",
+            actionLabel = "保存",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            val newEntry = PasswordEntry(
+                url = p.url,
+                username = p.username,
+                password = p.password,
+            )
+            saveSavedPasswords(prefs, existing + newEntry)
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "密码已保存",
+                    duration = SnackbarDuration.Short,
+                )
+            }
+        }
+    }
+
     LaunchedEffect(activeWindowId) {
         val id = activeWindowId ?: return@LaunchedEffect
         while (true) {
@@ -3922,14 +5622,38 @@ fun BrowserScreen(
         }
     }
 
+    LaunchedEffect(urlInput.text, isSearchFocused, searchSuggestEnabled) {
+        val text = urlInput.text
+        val engineIndex = prefs.getInt("default_search_engine", 0)
+        if (searchSuggestEnabled && isSearchFocused && text.isNotBlank()) {
+            delay(150)
+            try {
+                currentSuggestions = withContext(Dispatchers.IO) {
+                    fetchSearchSuggestions(text, engineIndex)
+                }
+            } catch (_: Exception) {
+                currentSuggestions = emptyList()
+            }
+        } else {
+            currentSuggestions = emptyList()
+        }
+    }
+
     LaunchedEffect(isTop) {
         if (!isTop) {
             focusManager.clearFocus()
             isSearchFocused = false
             searchBarExpanded = false
+            showSecuritySheet = false
         }
     }
-
+    LaunchedEffect(activeWindowId, isEnglishPage) {
+        val id = activeWindowId ?: return@LaunchedEffect
+        val win = windows.firstOrNull { it.id == id } ?: return@LaunchedEffect
+        if (win.translated && isEnglishPage) {
+            setPageTranslated(true)
+        }
+    }
     LaunchedEffect(findQuery, showFindBar, activeWindowId) {
         if (!showFindBar) return@LaunchedEffect
         val wv = activeWindowId?.let { webViewMap[it] } ?: return@LaunchedEffect
@@ -3952,7 +5676,6 @@ fun BrowserScreen(
             snackbarJob.value?.cancel()
             snackbarJob.value = null
 
-            // ★ 需求 2：退出浏览器时清空无痕浏览数据
             val clearIncognito = try {
                 prefs.getBoolean("web_clear_incognito_on_exit", true)
             } catch (_: Exception) { true }
@@ -4001,40 +5724,20 @@ fun BrowserScreen(
         }
     }
 
-    BackHandler(
-        enabled = isTop && windows.size > 1 &&
-                activeWindow?.canGoBack != true &&
-                isAtHomePage() &&
-                !showFindBar &&
-                !showToolSheet && !showWindowSheet && !showHistorySheet &&
-                !showBookmarkSheet && !showSniffSheet &&
-                !showAddBookmarkDialog && !showClearBookmarkDialog && !showClearHistoryDialog &&
-                !showClearSearchHistoryDialog && !showAddFolderDialog && !showDeleteBookmarkDialog
-    ) {
-        activeWindowId?.let { id -> closeWindow(id) }
-    }
+    val isNoDialogOpen = !showToolSheet && !showWindowSheet && !showHistorySheet &&
+            !showBookmarkSheet && !showSniffSheet && !showSecuritySheet &&
+            !showAddBookmarkDialog && !showClearBookmarkDialog && !showClearHistoryDialog &&
+            !showClearSearchHistoryDialog && !showAddFolderDialog && !showDeleteBookmarkDialog
 
+    val canSystemGoBack = canNavigateBack() || (windows.size > 1)
     BackHandler(
-        enabled = isTop &&
-                activeWindow?.canGoBack != true &&
-                !isAtHomePage() &&
-                !showFindBar &&
-                !showToolSheet && !showWindowSheet && !showHistorySheet &&
-                !showBookmarkSheet && !showSniffSheet &&
-                !showAddBookmarkDialog && !showClearBookmarkDialog && !showClearHistoryDialog &&
-                !showClearSearchHistoryDialog && !showAddFolderDialog && !showDeleteBookmarkDialog
+        enabled = isTop && canSystemGoBack && !showFindBar && isNoDialogOpen
     ) {
-        goToHomePage()
-    }
-
-    BackHandler(
-        enabled = isTop && (activeWindow?.canGoBack == true) &&
-                !showToolSheet && !showWindowSheet && !showHistorySheet &&
-                !showBookmarkSheet && !showSniffSheet &&
-                !showAddBookmarkDialog && !showClearBookmarkDialog && !showClearHistoryDialog &&
-                !showClearSearchHistoryDialog && !showAddFolderDialog && !showDeleteBookmarkDialog
-    ) {
-        activeWindowId?.let { id -> webViewMap[id]?.goBack() }
+        if (canNavigateBack()) {
+            performNavigateBack()
+        } else if (windows.size > 1) {
+            activeWindowId?.let { closeWindow(it) }
+        }
     }
 
     BackHandler(enabled = isTop && showFindBar) {
@@ -4052,19 +5755,33 @@ fun BrowserScreen(
         showZoomBar = false
     }
 
+    val hasActiveOverlay = showToolSheet || showWindowSheet || showHistorySheet ||
+            showBookmarkSheet || showClearHistoryDialog || showClearBookmarkDialog ||
+            showClearSearchHistoryDialog || showAddBookmarkDialog || showAddFolderDialog ||
+            showDeleteBookmarkDialog || showNightModeConfirmDialog || showSniffSheet ||
+            showSecuritySheet || showDownloadDialog || pendingExternalSchemeUrl != null ||
+            PendingSslErrorStore.pending != null || PendingJsDialogStore.pending != null ||
+            longPressMenuVisible
+
+    LaunchedEffect(hasActiveOverlay) {
+        GlobalOverlayState.isOpen = hasActiveOverlay
+    }
+
+    // 只有不受 Dialog 保护的非弹窗层（菜单、安全面板），才需要手动拦截返回键
+    BackHandler(enabled = isTop && showSecuritySheet) {
+        showSecuritySheet = false
+    }
+
+    BackHandler(enabled = isTop && longPressMenuVisible) {
+        longPressMenuVisible = false
+    }
+
     var historyMultiSelect by remember { mutableStateOf(false) }
     val historySelected = remember { mutableStateListOf<String>() }
     var bookmarkMultiSelect by remember { mutableStateOf(false) }
     val bookmarkSelected = remember { mutableStateListOf<String>() }
 
-    BackHandler(enabled = isTop && historyMultiSelect) {
-        historyMultiSelect = false
-        historySelected.clear()
-    }
-    BackHandler(enabled = isTop && bookmarkMultiSelect) {
-        bookmarkMultiSelect = false
-        bookmarkSelected.clear()
-    }
+
 
     var toolbarWallpaperIndex by remember {
         mutableIntStateOf(prefs.getInt("home_background_content", 0))
@@ -4098,46 +5815,45 @@ fun BrowserScreen(
     }
 
     val bottomBarIconTint: Color = if (showNewTabPage) {
-        val mode = controlColorMode
-        val bgIndex = toolbarWallpaperIndex
-        val wallpaperIsLight = when (bgIndex) {
-            0 -> !themeIsDarkForToolbar
-            1 -> {
-                val colorLong = toolbarCustomColor
-                if (colorLong != 0L) Color(colorLong.toInt()).luminance() > 0.5f
-                else !themeIsDarkForToolbar
+        NewTabControlColorStore.color
+            ?: if (LocalUiMode.current == UiMode.Material) {
+                M3MaterialTheme.colorScheme.onSurface
+            } else {
+                MiuixTheme.colorScheme.onSurface
             }
-            4 -> false
-            else -> true
-        }
-        when (mode) {
-            0 -> MiuixTheme.colorScheme.onSurface
-            1 -> if (wallpaperIsLight) Color(0xFF000000) else Color(0xFFFFFFFF)
-            2 -> Color(0xFF000000)
-            3 -> Color(0xFFFFFFFF)
-            else -> if (wallpaperIsLight) Color(0xFF000000) else Color(0xFFFFFFFF)
-        }
     } else {
-        MiuixTheme.colorScheme.onSurface
+        if (LocalUiMode.current == UiMode.Material) {
+            M3MaterialTheme.colorScheme.onSurface
+        } else {
+            MiuixTheme.colorScheme.onSurface
+        }
     }
 
-    val hasVideoResource =
-        networkSniffedResources.any { it.category == SniffCategory.VIDEO } ||
-                sniffedResources.any { it.category == SniffCategory.VIDEO }
+    val videoResourceCount = (networkSniffedResources + sniffedResources)
+        .distinctBy { it.url }
+        .count { it.category == SniffCategory.VIDEO }
+    val baseTool = when (dynamicToolIndex) {
+        1 -> "home"
+        2 -> "refresh"
+        3 -> "fullscreen"
+        4 -> "add_bookmark"
+        5 -> "bookmarks"
+        6 -> "history"
+        7 -> "downloads"
+        8 -> "translate"
+        9 -> "sniff"
+        else -> null
+    }
+
+    val isAnyHomePage = showNewTabPage || isAtHomePage()
     val effectiveDynamicTool: String? = when {
-        dynamicToolSuggestEnabled && hasActiveDownloads -> "downloads"
-        dynamicToolSuggestEnabled && hasVideoResource -> "play_in_player"
+        dynamicToolSuggestEnabled && (hasActiveDownloads || hasActiveMoteDownloads) -> "downloads"
+        dynamicToolSuggestEnabled && videoResourceCount > 1 -> "sniff"
+        dynamicToolSuggestEnabled && videoResourceCount == 1 -> "play_in_player"
         dynamicToolSuggestEnabled && isEnglishPage -> "translate"
-        else -> when (dynamicToolIndex) {
-            1 -> "home"
-            2 -> "refresh"
-            3 -> "fullscreen"
-            4 -> "add_bookmark"
-            5 -> "translate"
-            6 -> "sniff"
-            7 -> "dev_tools"
-            else -> null
-        }
+        dynamicToolSuggestEnabled && isAnyHomePage && baseTool == "home" -> "bookmarks"
+        dynamicToolSuggestEnabled && showNewTabPage && baseTool != "bookmarks" && baseTool != "history" -> "bookmarks"
+        else -> baseTool
     }
     fun runDynamicToolAction(toolId: String) {
         val id = activeWindowId
@@ -4162,11 +5878,21 @@ fun BrowserScreen(
                     ).show()
                 } else {
                     addFromBookmarkSheet = false
-                    scope.launch {
-                        delay(280)
-                        openAddBookmarkDialog(prefillCurrent = true)
-                    }
+                    openAddBookmarkDialog(prefillCurrent = true)
                 }
+            }
+            "bookmarks" -> {
+                clearSearchFocus()
+                bookmarkMultiSelect = false
+                bookmarkSelected.clear()
+                bookmarkFolderPath.clear()
+                showBookmarkSheet = true
+            }
+            "history" -> {
+                clearSearchFocus()
+                historyMultiSelect = false
+                historySelected.clear()
+                showHistorySheet = true
             }
             "translate" -> {
                 if (id != null) {
@@ -4177,10 +5903,7 @@ fun BrowserScreen(
             }
             "sniff" -> {
                 if (id != null) {
-                    scope.launch {
-                        delay(280)
-                        performSniff(id)
-                    }
+                    performSniff(id)
                 }
             }
             "play_in_player" -> {
@@ -4214,14 +5937,34 @@ fun BrowserScreen(
                 clearSearchFocus()
                 onOpenDownloads()
             }
-            "dev_tools" -> { }
         }
     }
 
     val swipeTriggerPx = with(LocalDensity.current) { 72.dp.toPx() }
     val swipePanelWidthPx = with(LocalDensity.current) { 80.dp.toPx() }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(showSecuritySheet, searchBarBounds, securitySheetBounds) {
+                if (!showSecuritySheet) return@pointerInput
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val down = event.changes.firstOrNull { it.changedToDown() }
+                        if (down != null) {
+                            val sb = searchBarBounds
+                            val ssb = securitySheetBounds
+                            val inSearchBar = sb != null && sb.contains(down.position)
+                            val inSheet = ssb != null && ssb.contains(down.position)
+                            if (!inSearchBar && !inSheet) {
+                                showSecuritySheet = false
+                            }
+                        }
+                    }
+                }
+            }
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
 
             AnimatedVisibility(
@@ -4247,6 +5990,9 @@ fun BrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
+                        .onGloballyPositioned { coords ->
+                            searchBarBounds = coords.boundsInWindow()
+                        }
                 ) {
                     SearchBar(
                         inputField = {
@@ -4254,10 +6000,29 @@ fun BrowserScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                FaviconOrFallback(
-                                    favicon = activeWindow?.favicon,
-                                    size = 22.dp,
-                                )
+                                val faviconWindowState = rememberUpdatedState(activeWindow)
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onTap = {
+                                                    val w = faviconWindowState.value
+                                                    val u = w?.url.orEmpty()
+                                                    if (u.isNotBlank() && u != "about:blank") {
+                                                        showSecuritySheet = !showSecuritySheet
+                                                    }
+                                                },
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    FaviconOrFallback(
+                                        favicon = activeWindow?.favicon,
+                                        size = 22.dp,
+                                    )
+                                }
                                 Spacer(Modifier.width(8.dp))
 
                                 InputField(
@@ -4275,6 +6040,7 @@ fun BrowserScreen(
                                         .onFocusChanged { focusState: FocusState ->
                                             isSearchFocused = focusState.isFocused
                                             if (focusState.isFocused) {
+                                                showSecuritySheet = false
                                                 activeWindow?.let { win ->
                                                     if (urlInput.text == win.title) {
                                                         urlInput = TextFieldValue(
@@ -4367,6 +6133,59 @@ fun BrowserScreen(
                             )
                         }
                     ) {
+                        AnimatedVisibility(
+                            visible = isSearchFocused && urlInput.text.isNotBlank() && currentSuggestions.isNotEmpty(),
+                            enter = expandVertically(
+                                animationSpec = tween(220),
+                                expandFrom = Alignment.Top,
+                            ) + fadeIn(tween(160)),
+                            exit = shrinkVertically(
+                                animationSpec = tween(200),
+                                shrinkTowards = Alignment.Top,
+                            ) + fadeOut(tween(120)),
+                        ) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 320.dp)
+                                    .animateContentSize(),
+                            ) {
+                                items(
+                                    count = currentSuggestions.size,
+                                    key = { idx -> "suggest_${currentSuggestions[idx]}" },
+                                ) { idx ->
+                                    val item = currentSuggestions[idx]
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem(fadeOutSpec = null)
+                                            .clickable {
+                                                urlInput = TextFieldValue(item)
+                                                loadUrlInActive(item)
+                                                clearSearchFocus()
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Search,
+                                            contentDescription = null,
+                                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            text = item,
+                                            fontSize = 14.sp,
+                                            color = MiuixTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         AnimatedVisibility(
                             visible = !forceHideHistory &&
                                     historyModuleEnabled &&
@@ -4554,8 +6373,8 @@ fun BrowserScreen(
                                 val w = size.width.toFloat()
                                 if (w <= 0f) continue
 
-                                val canBack = wv?.canGoBack() == true || !isAtHomePage()
-                                val canForward = wv?.canGoForward() == true
+                                val canBack = canNavigateBack()
+                                val canForward = canNavigateForward()
 
                                 var direction = 0
                                 var consumed = false
@@ -4607,14 +6426,8 @@ fun BrowserScreen(
                                 val didTrigger = consumed && direction != 0 &&
                                         swipeEdgeOffset >= swipeTriggerPx
                                 if (didTrigger) {
-                                    if (direction == -1) {
-                                        if (wv?.canGoBack() == true) {
-                                            wv.goBack()
-                                        } else {
-                                            goToHomePage()
-                                        }
-                                    }
-                                    if (direction == 1) wv?.goForward()
+                                    if (direction == -1) performNavigateBack()
+                                    if (direction == 1) performNavigateForward()
                                 }
                                 swipeEdgeOffset = 0f
                             }
@@ -4783,6 +6596,24 @@ fun BrowserScreen(
                         onFaviconLoad = { wid, url -> loadFaviconFromDomain(wid, url) },
                         onFaviconExplicit = { wid, furl, host -> loadFaviconFromExplicitUrl(wid, furl, host) },
                         onPendingDownload = { dl -> pendingDownload = dl; showDownloadDialog = true },
+                        onLongPress = { imageUrl, linkUrl, text, pageUrl, xPx, yPx, selectable ->
+                            val filename = if (imageUrl.isNotBlank()) {
+                                URLUtil.guessFileName(imageUrl, null, null)
+                                    .ifBlank { "image_${System.currentTimeMillis()}.jpg" }
+                            } else ""
+                            longPressInfo = LongPressInfo(
+                                imageUrl = imageUrl,
+                                linkUrl = linkUrl,
+                                text = text,
+                                pageUrl = pageUrl,
+                                filename = filename,
+                                xPx = xPx,
+                                yPx = yPx,
+                                selectable = selectable,
+                            )
+                            longPressMenuVisible = true
+                            longPressCounter++
+                        },
                         onFindResult = { total, current ->
                             findResultTotal = total; findResultCurrent = current + 1
                         },
@@ -4828,6 +6659,7 @@ fun BrowserScreen(
                         fileChooserLauncher = fileChooserLauncher,
                         pendingPermission = pendingPermission,
                         permissionLauncher = permissionLauncher,
+                        onExternalSchemeRequest = { pendingExternalSchemeUrl = it },
                     )
                 }
 
@@ -4876,6 +6708,7 @@ fun BrowserScreen(
             state = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .zIndex(999f)
                 .padding(bottom = navBarBottomPadding + bottomBarHeight)
                 .imePadding(),
         )
@@ -4930,6 +6763,44 @@ fun BrowserScreen(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = floatingBottomInset),
         ) {
+            TtsBar(
+                show = showTtsBar,
+                isPlaying = isTtsPlaying,
+                currentIndex = ttsCurrentIndex,
+                totalCount = ttsTextChunks.size,
+                currentText = ttsTextChunks.getOrNull(ttsCurrentIndex) ?: "",
+                onPlayPause = {
+                    if (isTtsPlaying) {
+                        stopTts()
+                    } else {
+                        speakChunk(ttsCurrentIndex)
+                    }
+                },
+                onPrev = {
+                    if (ttsCurrentIndex > 0) {
+                        stopTts()
+                        speakChunk(ttsCurrentIndex - 1)
+                    }
+                },
+                onNext = {
+                    if (ttsCurrentIndex < ttsTextChunks.lastIndex) {
+                        stopTts()
+                        speakChunk(ttsCurrentIndex + 1)
+                    }
+                },
+                onClose = {
+                    showTtsBar = false
+                    stopTts()
+                }
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(bottom = floatingBottomInset),
+        ) {
             ZoomBar(
                 show = showZoomBar && !isFullscreen && htmlFullscreenView == null,
                 percent = zoomFactor,
@@ -4954,50 +6825,45 @@ fun BrowserScreen(
 
         val dialogInfo = pendingDialogInfo
         if (dialogInfo != null) {
-            val dialogNavOwner = rememberNavigationEventDispatcherOwner(parent = null)
-            CompositionLocalProvider(
-                LocalNavigationEventDispatcherOwner provides dialogNavOwner
-            ) {
-                UpdateDialog(
-                    show = showPendingDialog,
-                    info = dialogInfo,
-                    currentVersion = currentVersionName,
-                    isDownloading = isPendingDownloading,
-                    onDismiss = {
-                        if (!isPendingDownloading) {
-                            showPendingDialog = false
-                            pendingDialogInfo = null
+            UpdateDialog(
+                show = showPendingDialog,
+                info = dialogInfo,
+                currentVersion = currentVersionName,
+                isDownloading = isPendingDownloading,
+                onDismiss = {
+                    if (!isPendingDownloading) {
+                        showPendingDialog = false
+                        pendingDialogInfo = null
+                    }
+                },
+                onDownload = {
+                    if (!isPendingDownloading) {
+                        isPendingDownloading = true
+                        showPendingDialog = false
+                        val url = dialogInfo.url
+                        scope.launch {
+                            delay(250)
+                            startApkDownload(
+                                context = context,
+                                downloadUrl = url,
+                                onComplete = {
+                                    isPendingDownloading = false
+                                    pendingDialogInfo = null
+                                },
+                                onFailed = { msg ->
+                                    isPendingDownloading = false
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            message = msg,
+                                            duration = SnackbarDuration.Short,
+                                        )
+                                    }
+                                },
+                            )
                         }
-                    },
-                    onDownload = {
-                        if (!isPendingDownloading) {
-                            isPendingDownloading = true
-                            showPendingDialog = false
-                            val url = dialogInfo.url
-                            scope.launch {
-                                delay(250)
-                                startApkDownload(
-                                    context = context,
-                                    downloadUrl = url,
-                                    onComplete = {
-                                        isPendingDownloading = false
-                                        pendingDialogInfo = null
-                                    },
-                                    onFailed = { msg ->
-                                        isPendingDownloading = false
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                message = msg,
-                                                duration = SnackbarDuration.Short,
-                                            )
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    },
-                )
-            }
+                    }
+                },
+            )
         }
 
         Box(
@@ -5084,15 +6950,8 @@ fun BrowserScreen(
                     }
                 },
                 onSwipeNav = { direction ->
-                    val id = activeWindowId
-                    if (id != null) {
-                        val wv = webViewMap[id]
-                        if (direction < 0) {
-                            if (wv?.canGoBack() == true) wv.goBack()
-                        } else if (direction > 0) {
-                            if (wv?.canGoForward() == true) wv.goForward()
-                        }
-                    }
+                    if (direction < 0) performNavigateBack()
+                    else if (direction > 0) performNavigateForward()
                 },
                 onSwipeVisual = { direction, offsetPx, dragging ->
                     if (direction != 0) {
@@ -5103,6 +6962,12 @@ fun BrowserScreen(
                 },
                 canSwipeBack = activeWindow?.canGoBack == true,
                 canSwipeForward = activeWindow?.canGoForward == true,
+                onOpenNewTabCustomization = onOpenNewTabCustomization,
+                onOpenCrop = onOpenCrop,
+                onRequestDownload = { dl ->
+                    pendingDownload = dl
+                    showDownloadDialog = true
+                },
             )
         }
 
@@ -5178,11 +7043,14 @@ fun BrowserScreen(
 
         val bottomBarItems = buildList {
             val onSurface = bottomBarIconTint
-            val canGoBack = activeWindow?.canGoBack == true || !isAtHomePage()
-            val canGoForward = activeWindow?.canGoForward == true
+            val canGoBack = canNavigateBack()
+            val canGoForward = canNavigateForward()
             val dynamicTool = effectiveDynamicTool?.let { tid ->
                 defaultTools().find { it.id == tid }
             }
+
+            val disabledInNewTab = setOf("translate", "zoom", "find_in_page", "tts", "sniff", "save_page", "print", "share", "play_in_player")
+            val dynamicToolEnabled = !(showNewTabPage && effectiveDynamicTool in disabledInNewTab)
 
             add(
                 BrowserBottomBarItem(
@@ -5216,34 +7084,9 @@ fun BrowserScreen(
             )
             add(
                 BrowserBottomBarItem(
-                    id = "tools",
-                    visible = true,
-                    content = { _ ->
-                        Icon(
-                            imageVector = MiuixIcons.GridView,
-                            contentDescription = "工具栏",
-                            tint = onSurface,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    },
-                )
-            )
-            add(
-                BrowserBottomBarItem(
-                    id = "windows",
-                    visible = true,
-                    content = { _ ->
-                        WindowManagerIcon(
-                            count = windows.size,
-                            tint = onSurface,
-                        )
-                    },
-                )
-            )
-            add(
-                BrowserBottomBarItem(
                     id = "dynamic",
                     visible = dynamicTool != null,
+                    enabled = dynamicToolEnabled,
                     content = { _ ->
                         AnimatedContent(
                             targetState = dynamicTool,
@@ -5273,13 +7116,40 @@ fun BrowserScreen(
                                 Icon(
                                     imageVector = tool.icon,
                                     contentDescription = tool.title,
-                                    tint = onSurface,
+                                    tint = if (dynamicToolEnabled) onSurface else onSurface.copy(alpha = 0.3f),
                                     modifier = Modifier.size(24.dp),
                                 )
                             } else {
                                 Spacer(Modifier.size(24.dp))
                             }
                         }
+                    },
+                )
+            )
+            add(
+                BrowserBottomBarItem(
+                    id = "windows",
+                    visible = true,
+                    content = { _ ->
+                        WindowManagerIcon(
+                            count = windows.size,
+                            tint = onSurface,
+                            pulseTrigger = windowIconPulse,
+                        )
+                    },
+                )
+            )
+            add(
+                BrowserBottomBarItem(
+                    id = "tools",
+                    visible = true,
+                    content = { _ ->
+                        Icon(
+                            imageVector = MiuixIcons.GridView,
+                            contentDescription = "工具栏",
+                            tint = onSurface,
+                            modifier = Modifier.size(24.dp),
+                        )
                     },
                 )
             )
@@ -5295,17 +7165,9 @@ fun BrowserScreen(
                 barVisible = !isFullscreen && htmlFullscreenView == null,
                 onItemClick = { id ->
                     clearSearchFocus()
-                    val windowId = activeWindowId
                     when (id) {
-                        "back" -> {
-                            val wv = windowId?.let { webViewMap[it] }
-                            if (wv?.canGoBack() == true) {
-                                wv.goBack()
-                            } else if (!isAtHomePage()) {
-                                goToHomePage()
-                            }
-                        }
-                        "forward" -> windowId?.let { webViewMap[it]?.goForward() }
+                        "back" -> performNavigateBack()
+                        "forward" -> performNavigateForward()
                         "tools" -> showToolSheet = true
                         "windows" -> showWindowSheet = true
                         "dynamic" -> effectiveDynamicTool?.let { runDynamicToolAction(it) }
@@ -5315,19 +7177,480 @@ fun BrowserScreen(
                 backgroundColor = toolbarColor,
             )
         }
+
+        val sb = searchBarBounds
+        if (sb != null) {
+            val dd = LocalDensity.current
+            val menuTopDp = with(dd) { sb.bottom.toDp() }
+            val menuEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+            AnimatedVisibility(
+                visible = showSecuritySheet,
+                enter = expandVertically(
+                    animationSpec = tween(240, easing = menuEase),
+                    expandFrom = Alignment.Top,
+                ) + fadeIn(tween(240, easing = menuEase)),
+                exit = shrinkVertically(
+                    animationSpec = tween(240, easing = menuEase),
+                    shrinkTowards = Alignment.Top,
+                ) + fadeOut(tween(240, easing = menuEase)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(201f)
+                    .offset(y = menuTopDp),
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coords ->
+                            securitySheetBounds = coords.boundsInWindow()
+                        }
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Final)
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+                        },
+                    shape = RoundedCornerShape(
+                        topStart = 0.dp,
+                        topEnd = 0.dp,
+                        bottomStart = 16.dp,
+                        bottomEnd = 16.dp,
+                    ),
+                    color = MiuixTheme.colorScheme.surface,
+                ) {
+                    AnimatedContent(
+                        targetState = securityPage,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                slideInHorizontally(
+                                    animationSpec = tween(300, easing = menuEase),
+                                    initialOffsetX = { it },
+                                ) togetherWith slideOutHorizontally(
+                                    animationSpec = tween(300, easing = menuEase),
+                                    targetOffsetX = { -it },
+                                )
+                            } else {
+                                slideInHorizontally(
+                                    animationSpec = tween(300, easing = menuEase),
+                                    initialOffsetX = { -it },
+                                ) togetherWith slideOutHorizontally(
+                                    animationSpec = tween(300, easing = menuEase),
+                                    targetOffsetX = { it },
+                                )
+                            }
+                        },
+                        label = "securitySheetPage",
+                    ) { page ->
+                        when (page) {
+                            0 -> SecurityMenuContent(
+                                info = secInfo,
+                                onOpenCertDetail = { securityPage = 1 },
+                                onOpenCookies = { securityPage = 2 },
+                                onToggleBlockAds = { enabled ->
+                                    val host = secInfo.host
+                                    if (host.isNotBlank()) {
+                                        SecurityStateHolder.setSiteBlockAds(host, enabled)
+                                    }
+                                },
+                                onToggleTrackingProtection = { enabled ->
+                                    val host = secInfo.host
+                                    if (host.isNotBlank()) {
+                                        SecurityStateHolder.setSiteTrackingProtection(host, enabled)
+                                    }
+                                },
+                            )
+                            1 -> CertDetailContent(
+                                info = secInfo,
+                                onBack = { securityPage = 0 },
+                            )
+                            2 -> CookieDetailContent(
+                                info = secInfo,
+                                onBack = { securityPage = 0 },
+                                onOpenSettings = {
+                                    showSecuritySheet = false
+                                    onOpenSettings()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        LaunchedEffect(longPressMenuVisible) {
+            if (!longPressMenuVisible && longPressInfo != null) {
+                delay(400L)
+                if (!longPressMenuVisible) {
+                    longPressInfo = null
+                }
+            }
+        }
+
+        BackHandler(enabled = longPressMenuVisible) {
+            longPressMenuVisible = false
+        }
+
+        val lpInfo = longPressInfo
+        if (lpInfo != null) {
+            val currentEngineIndex = prefs.getInt("default_search_engine", 0)
+
+            key("lp_${longPressCounter}") {
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(lpInfo.xPx, lpInfo.yPx) }
+                        .size(1.dp)
+                ) {
+                    WindowCascadingListPopup(
+                        show = longPressMenuVisible,
+                        entries = buildList {
+                            // ===== 组1：跳转链接 =====
+                            val openItems = mutableListOf<DropdownItem>()
+                            if (lpInfo.linkUrl.isNotBlank()) {
+                                openItems.add(
+                                    DropdownItem(
+                                        text = "新窗口中打开",
+                                        icon = { m ->
+                                            Icon(
+                                                imageVector = MiuixIcons.Forward,
+                                                contentDescription = null,
+                                                modifier = m,
+                                            )
+                                        },
+                                        onClick = {
+                                            createWindow(lpInfo.linkUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                                openItems.add(
+                                    DropdownItem(
+                                        text = "后台窗口打开",
+                                        icon = { m ->
+                                            Icon(
+                                                imageVector = MiuixIcons.Add,
+                                                contentDescription = null,
+                                                modifier = m,
+                                            )
+                                        },
+                                        onClick = {
+                                            createBackgroundWindow(lpInfo.linkUrl)
+                                            windowIconPulse++
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (openItems.isNotEmpty()) {
+                                add(DropdownEntry(items = openItems))
+                            }
+
+                            // ===== 组2：图片操作 + 搜索 + 选中文字（同一组，内部无分割线）=====
+                            val imageItems = mutableListOf<DropdownItem>()
+                            if (lpInfo.imageUrl.isNotBlank()) {
+                                imageItems.add(
+                                    DropdownItem(
+                                        text = "查看图片",
+                                        icon = { m ->
+                                            Icon(
+                                                imageVector = MiuixIcons.Photos,
+                                                contentDescription = null,
+                                                modifier = m,
+                                            )
+                                        },
+                                        onClick = {
+                                            createWindow(lpInfo.imageUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                                imageItems.add(
+                                    DropdownItem(
+                                        text = "下载图片",
+                                        icon = { m ->
+                                            Icon(
+                                                imageVector = MiuixIcons.Download,
+                                                contentDescription = null,
+                                                modifier = m,
+                                            )
+                                        },
+                                        onClick = {
+                                            val mime = guessMimeFromUrl(lpInfo.imageUrl)
+                                                ?: "image/*"
+                                            pendingDownload = PendingDownload(
+                                                url = lpInfo.imageUrl,
+                                                userAgent = getMobileUserAgent(context),
+                                                contentDisposition = null,
+                                                mimetype = mime,
+                                                fileName = lpInfo.filename.ifBlank { "image.jpg" },
+                                            )
+                                            longPressMenuVisible = false
+                                            showDownloadDialog = true
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.imageUrl.isNotBlank() || lpInfo.text.isNotBlank()) {
+                                imageItems.add(
+                                    DropdownItem(
+                                        text = "搜索",
+                                        icon = { m ->
+                                            Icon(
+                                                imageVector = MiuixIcons.Search,
+                                                contentDescription = null,
+                                                modifier = m,
+                                            )
+                                        },
+                                        onClick = {
+                                            val imgUrl = lpInfo.imageUrl
+                                            val searchText = lpInfo.text
+                                            val refUrl = activeWindow?.url ?: ""
+                                            val engIdx = currentEngineIndex
+                                            longPressMenuVisible = false
+                                            if (imgUrl.isNotBlank()) {
+                                                scope.launch {
+                                                    val resultUrl = performReverseImageSearch(
+                                                        context = context,
+                                                        imageUrl = imgUrl,
+                                                        referer = refUrl,
+                                                        engineIndex = engIdx,
+                                                    )
+                                                    if (!resultUrl.isNullOrBlank()) {
+                                                        createWindow(resultUrl)
+                                                    } else {
+                                                        snackbarHostState.showSnackbar(
+                                                            message = "以图搜图失败，请稍后重试",
+                                                            duration = SnackbarDuration.Short,
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                val engine = searchEngines.getOrElse(engIdx) {
+                                                    searchEngines[0]
+                                                }
+                                                val url = engine.second.replace(
+                                                    "%s",
+                                                    URLEncoder.encode(searchText, "UTF-8"),
+                                                )
+                                                createWindow(url)
+                                            }
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.text.isNotBlank() && lpInfo.selectable) {
+                                imageItems.add(
+                                    DropdownItem(
+                                        text = "选中文字",
+                                        icon = { m ->
+                                            Icon(
+                                                imageVector = MiuixIcons.Rename,
+                                                contentDescription = null,
+                                                modifier = m,
+                                            )
+                                        },
+                                        onClick = {
+                                            longPressMenuVisible = false
+                                            val wv = activeWindowId?.let { webViewMap[it] }
+                                            if (wv != null) {
+                                                try {
+                                                    val loc = IntArray(2)
+                                                    wv.getLocationOnScreen(loc)
+                                                    val localX = (lpInfo.xPx - loc[0]).toFloat()
+                                                    val localY = (lpInfo.yPx - loc[1]).toFloat()
+                                                    LongPressSkipStore.setSkip(wv)
+                                                    wv.evaluateJavascript(
+                                                        "(function(){try{var s=window.getSelection();if(s)s.removeAllRanges();}catch(e){}})()",
+                                                        null
+                                                    )
+                                                    wv.requestFocus()
+                                                    val downTime = SystemClock.uptimeMillis()
+                                                    val downEv = MotionEvent.obtain(
+                                                        downTime, downTime,
+                                                        MotionEvent.ACTION_DOWN,
+                                                        localX, localY, 0,
+                                                    )
+                                                    wv.dispatchTouchEvent(downEv)
+                                                    downEv.recycle()
+                                                    val upDelay = ViewConfiguration.getLongPressTimeout().toLong() + 150L
+                                                    wv.postDelayed({
+                                                        try {
+                                                            val upEv = MotionEvent.obtain(
+                                                                downTime, SystemClock.uptimeMillis(),
+                                                                MotionEvent.ACTION_UP,
+                                                                localX, localY, 0,
+                                                            )
+                                                            wv.dispatchTouchEvent(upEv)
+                                                            upEv.recycle()
+                                                        } catch (_: Exception) {}
+                                                    }, upDelay)
+                                                } catch (_: Exception) {}
+                                            }
+                                        },
+                                    )
+                                )
+                            }
+                            if (imageItems.isNotEmpty()) {
+                                add(DropdownEntry(items = imageItems))
+                            }
+
+                            // ===== 组4：复制 / 分享（二级菜单）=====
+                            val copyShareChildren = mutableListOf<DropdownItem>()
+                            if (lpInfo.linkUrl.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "复制跳转链接",
+                                        onClick = {
+                                            copyTextToClipboard(context, lpInfo.linkUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.imageUrl.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "复制图片链接",
+                                        onClick = {
+                                            copyTextToClipboard(context, lpInfo.imageUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.text.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "复制文本",
+                                        onClick = {
+                                            copyTextToClipboard(context, lpInfo.text)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.linkUrl.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "分享跳转链接",
+                                        onClick = {
+                                            shareTextUrl(context, lpInfo.linkUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.imageUrl.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "分享图片链接",
+                                        onClick = {
+                                            shareTextUrl(context, lpInfo.imageUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.text.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "分享文本",
+                                        onClick = {
+                                            sharePlainText(context, lpInfo.text)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (lpInfo.imageUrl.isNotBlank()) {
+                                copyShareChildren.add(
+                                    DropdownItem(
+                                        text = "分享图片",
+                                        onClick = {
+                                            shareImageUrl(context, lpInfo.imageUrl)
+                                            longPressMenuVisible = false
+                                        },
+                                    )
+                                )
+                            }
+                            if (copyShareChildren.isNotEmpty()) {
+                                add(
+                                    DropdownEntry(
+                                        items = listOf(
+                                            DropdownItem(
+                                                text = "复制 / 分享",
+                                                icon = { m ->
+                                                    Icon(
+                                                        imageVector = MiuixIcons.Copy,
+                                                        contentDescription = null,
+                                                        modifier = m,
+                                                    )
+                                                },
+                                                children = copyShareChildren,
+                                            )
+                                        )
+                                    )
+                                )
+                            }
+                        },
+                        onDismissRequest = {
+                            longPressMenuVisible = false
+                            // ★ 不立即清 longPressInfo，保留关闭动画
+                        },
+                        onDismissFinished = { longPressInfo = null },
+                        minWidth = 180.dp,
+                        enableWindowDim = false,
+                        dropdownColors = DropdownDefaults.dropdownColors(),
+                    )
+                }
+            }
+        }
+    }
+
+    val currentUrl = activeWindow?.url ?: ""
+    val isCurrentPageBookmarked = remember(currentUrl, bookmarks.toList()) {
+        bookmarks.any { !it.isFolder && it.url == currentUrl }
     }
 
     BrowserToolSheet(
         show = showToolSheet,
         pageTitle = if (showNewTabPage) "新标签页"
         else (activeWindow?.title?.ifBlank { "无标题" } ?: "新标签页"),
-        favicon = activeWindow?.favicon,
         isFullscreen = isFullscreen,
         isNightMode = activeWindow?.nightMode == true,
         isIncognito = activeWindow?.incognito == true,
         isDesktopMode = activeWindow?.desktopMode == true,
         isNoImage = activeWindow?.noImage == true,
         isTranslated = activeWindow?.translated == true,
+        isNewTabPage = showNewTabPage,
+        isBookmarked = isCurrentPageBookmarked,
+        onAddBookmark = {
+            val win = activeWindow
+            if (win != null && win.url.isNotBlank() && win.url != "about:blank") {
+                val title = win.title.ifBlank { win.url }
+                if (bookmarks.none { it.url == win.url }) {
+                    bookmarks.add(0, BookmarkItem(title = title, url = win.url, timestamp = System.currentTimeMillis()))
+                    saveBookmarks()
+                    scope.launch {
+                        snackbarHostState.showSnackbar(message = "已添加到书签", duration = SnackbarDuration.Short)
+                    }
+                }
+            }
+        },
+        onRemoveBookmark = {
+            val win = activeWindow
+            if (win != null && win.url.isNotBlank()) {
+                val existingIndex = bookmarks.indexOfFirst { !it.isFolder && it.url == win.url }
+                if (existingIndex >= 0) {
+                    bookmarks.removeAt(existingIndex)
+                    saveBookmarks()
+                    scope.launch {
+                        snackbarHostState.showSnackbar(message = "已删除书签", duration = SnackbarDuration.Short)
+                    }
+                }
+            }
+        },
         onOpenSettings = {
             showToolSheet = false
             onOpenSettings()
@@ -5339,52 +7662,31 @@ fun BrowserScreen(
                 "home" -> {
                     goToHomePage()
                 }
-                "night_mode" -> {
-                    if (id != null) {
-                        val currentSetting = prefs.getInt("web_night_mode", 0)
-                        if (currentSetting == 0) {
-                            pendingNightModeTarget = isActive
-                            showNightModeConfirmDialog = true
-                        } else {
-                            updateWindow(id) { it.nightMode = isActive }
-                            webViewMap[id]?.evaluateJavascript(
-                                if (isActive) JS_NIGHT_ON else JS_NIGHT_OFF, null
-                            )
-                            prefs.edit()
-                                .putInt("web_night_mode", if (isActive) 2 else 1)
-                                .apply()
-                        }
+                "night_mode" -> id?.let { windowId ->
+                    if (prefs.getInt("web_night_mode", 0) == 0) {
+                        pendingNightModeTarget = isActive
+                        showNightModeConfirmDialog = true
+                    } else {
+                        updateWindow(windowId) { it.nightMode = isActive }
+                        webViewMap[windowId]?.let { applyNightModeToWebView(it, isActive) }
+                        prefs.edit().putInt("web_night_mode", if (isActive) 2 else 1).apply()
                     }
                 }
-                "no_image" -> {
-                    if (id != null) {
-                        updateWindow(id) { it.noImage = isActive }
-                        webViewMap[id]?.evaluateJavascript(
-                            if (isActive) JS_NO_IMG_ON else JS_NO_IMG_OFF, null
-                        )
+                "no_image" -> id?.let { windowId ->
+                    updateWindow(windowId) { it.noImage = isActive }
+                    webViewMap[windowId]?.evaluateJavascript(if (isActive) JS_NO_IMG_ON else JS_NO_IMG_OFF, null)
+                }
+                "desktop_mode" -> id?.let { windowId ->
+                    updateWindow(windowId) { it.desktopMode = isActive }
+                    webViewMap[windowId]?.let { wv ->
+                        wv.settings.userAgentString = if (isActive) DESKTOP_UA else getMobileUserAgent(context)
+                        wv.reload()
                     }
                 }
-                "desktop_mode" -> {
-                    if (id != null) {
-                        updateWindow(id) { it.desktopMode = isActive }
-                        webViewMap[id]?.let { wv ->
-                            val ua = if (isActive) DESKTOP_UA
-                            else getMobileUserAgent(context)
-                            wv.settings.userAgentString = ua
-                            wv.reload()
-                        }
-                    }
-                }
-                "incognito" -> {
-                    if (id != null) {
-                        applyIncognitoMode(id, isActive)
-                    }
-                }
-                "translate" -> {
-                    if (id != null) {
-                        updateWindow(id) { it.translated = isActive }
-                        setPageTranslated(isActive)
-                    }
+                "incognito" -> id?.let { applyIncognitoMode(it, isActive) }
+                "translate" -> id?.let { windowId ->
+                    updateWindow(windowId) { it.translated = isActive }
+                    setPageTranslated(isActive)
                 }
                 "fullscreen" -> {
                     isFullscreen = isActive
@@ -5398,22 +7700,6 @@ fun BrowserScreen(
                         historyMultiSelect = false
                         historySelected.clear()
                         showHistorySheet = true
-                    }
-                }
-                "add_bookmark" -> {
-                    val win = activeWindow
-                    if (win == null || win.url.isBlank() || win.url == "about:blank") {
-                        Toast.makeText(
-                            context,
-                            "无法将新标签页加入书签",
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    } else {
-                        addFromBookmarkSheet = false
-                        scope.launch {
-                            delay(280)
-                            openAddBookmarkDialog(prefillCurrent = true)
-                        }
                     }
                 }
                 "bookmarks" -> {
@@ -5432,6 +7718,18 @@ fun BrowserScreen(
                             performSniff(id)
                         }
                     }
+                }
+                "view_source" -> {
+                    if (id != null) {
+                        webViewMap[id]?.evaluateJavascript("document.documentElement.outerHTML") { raw ->
+                            sourceContent = decodeJsString(raw)
+                            showSourceDialog = true
+                        }
+                    }
+                }
+                "run_script" -> {
+                    ScriptsNavArgs.editingId = null
+                    onOpenScripts()
                 }
                 "share" -> {
                     val title = activeWindow?.title?.ifBlank { "无标题" } ?: "无标题"
@@ -5528,14 +7826,56 @@ fun BrowserScreen(
                         showZoomBar = true
                     }
                 }
-                "dev_tools" -> { }
                 "exit" -> {
                     SessionSnapshotStore.userExiting = true
-                    prefs.edit().putString("session_snapshot", "").apply()
+                    prefs.edit().putString("session_snapshot", "").commit()
                     (context as? Activity)?.finish()
                 }
                 "downloads" -> onOpenDownloads()
-                "tts" -> { }
+                "tts" -> id?.let { windowId ->
+                    if (ttsInitFailed) {
+                        showTtsErrorDialog = true
+                        ttsRetryKey++
+                        return@let
+                    }
+                    if (!ttsReady) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "语音引擎正在初始化，请稍后再试",
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                        return@let
+                    }
+                    val wv = webViewMap[windowId]
+                    if (wv != null) {
+                        wv.evaluateJavascript(JS_EXTRACT_ARTICLE_TEXT) { raw ->
+                            val jsonStr = decodeJsString(raw)
+                            if (jsonStr.isBlank() || jsonStr == "[]") {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "未找到可朗读的文字",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                                return@evaluateJavascript
+                            }
+                            try {
+                                val arr = JSONArray(jsonStr)
+                                val chunks = mutableListOf<String>()
+                                for (i in 0 until arr.length()) {
+                                    val s = arr.optString(i, "").trim()
+                                    if (s.isNotBlank()) chunks.add(s)
+                                }
+                                if (chunks.isEmpty()) return@evaluateJavascript
+
+                                ttsTextChunks = chunks
+                                showTtsBar = true
+                                speakChunk(0)
+                            } catch (_: Exception) {}
+                        }
+                    }
+                }
             }
             showToolSheet = false
         },
@@ -5644,12 +7984,12 @@ fun BrowserScreen(
             historyMultiSelect = false
             historySelected.clear()
         },
-        onToggleSelectAll = {
-            if (historySelected.size == history.size && history.isNotEmpty()) {
+        onToggleSelectAllFiltered = { filteredUrls ->
+            if (historySelected.size == filteredUrls.size && filteredUrls.isNotEmpty()) {
                 historySelected.clear()
             } else {
                 historySelected.clear()
-                historySelected.addAll(history.map { it.url })
+                historySelected.addAll(filteredUrls)
             }
         },
         onDeleteSelected = {
@@ -5670,20 +8010,6 @@ fun BrowserScreen(
             if (id != null) navigateToUrl(id, url)
             showHistorySheet = false
         },
-        onDelete = { url ->
-            val idx = history.indexOfFirst { it.url == url }
-            if (idx >= 0) {
-                history.removeAt(idx)
-                saveHistory()
-            }
-        },
-        onClearAll = {
-            showHistorySheet = false
-            scope.launch {
-                delay(220)
-                showClearHistoryDialog = true
-            }
-        },
         onDismiss = {
             showHistorySheet = false
             historyMultiSelect = false
@@ -5698,6 +8024,7 @@ fun BrowserScreen(
         currentItems = currentBookmarkLevel(),
         multiSelect = bookmarkMultiSelect,
         selectedIds = bookmarkSelected,
+        isNewTabPage = showNewTabPage,
         onEnterMultiSelect = { id ->
             bookmarkMultiSelect = true
             bookmarkSelected.clear()
@@ -5711,19 +8038,19 @@ fun BrowserScreen(
             bookmarkMultiSelect = false
             bookmarkSelected.clear()
         },
-        onToggleSelectAll = {
-            val items = currentBookmarkLevel()
-            if (bookmarkSelected.size == items.size && items.isNotEmpty()) {
+        onToggleSelectAllFiltered = { filteredIds ->
+            if (bookmarkSelected.size == filteredIds.size && filteredIds.isNotEmpty()) {
                 bookmarkSelected.clear()
             } else {
                 bookmarkSelected.clear()
-                bookmarkSelected.addAll(items.map { it.id })
+                bookmarkSelected.addAll(filteredIds)
             }
         },
         onDeleteSelected = {
             val toRemove = bookmarkSelected.toSet()
-            val items = currentBookmarkLevel()
-            items.removeAll { it.id in toRemove }
+            toRemove.forEach { id ->
+                removeBookmarkById(bookmarks, id)
+            }
             saveBookmarks()
             bookmarkMultiSelect = false
             bookmarkSelected.clear()
@@ -5732,6 +8059,35 @@ fun BrowserScreen(
                     message = "已删除 ${toRemove.size} 项",
                     duration = SnackbarDuration.Short,
                 )
+            }
+        },
+        onShareSelected = { selectedIds ->
+            val items = mutableListOf<String>()
+            fun collectUrls(itemsList: List<BookmarkItem>) {
+                itemsList.forEach {
+                    if (it.id in selectedIds && !it.isFolder) {
+                        items.add("【${it.title.ifBlank { "无标题" }}】${it.url}")
+                    }
+                    if (it.isFolder) {
+                        collectUrls(it.children)
+                    }
+                }
+            }
+            collectUrls(bookmarks)
+            if (items.isNotEmpty()) {
+                val text = items.joinToString("\n")
+                try {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(
+                        Intent.createChooser(send, "分享网页").apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    )
+                } catch (_: Exception) {}
             }
         },
         onAddBookmark = {
@@ -5767,16 +8123,6 @@ fun BrowserScreen(
             val targetSize = index + 1
             while (bookmarkFolderPath.size > targetSize) {
                 bookmarkFolderPath.removeAt(bookmarkFolderPath.lastIndex)
-            }
-        },
-        onDelete = { item ->
-            openDeleteBookmarkDialog(item)
-        },
-        onClearAll = {
-            showBookmarkSheet = false
-            scope.launch {
-                delay(220)
-                showClearBookmarkDialog = true
             }
         },
         onDismiss = {
@@ -6301,66 +8647,173 @@ fun BrowserScreen(
         }
     }
 
+    var lastNightModeTarget by remember { mutableStateOf<Boolean?>(null) }
     if (pendingNightModeTarget != null) {
-        WindowDialog(
-            show = showNightModeConfirmDialog,
-            title = "夜间模式设置",
-            onDismissRequest = {
-                showNightModeConfirmDialog = false
-                pendingNightModeTarget = null
+        lastNightModeTarget = pendingNightModeTarget
+    }
+    WindowDialog(
+        show = pendingNightModeTarget != null && showNightModeConfirmDialog,
+        title = "夜间模式设置",
+        onDismissRequest = {
+            showNightModeConfirmDialog = false
+            pendingNightModeTarget = null
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = if (lastNightModeTarget == true) {
+                    "主动切换为夜间模式后，将关闭跟随软件设置的功能"
+                } else {
+                    "主动关闭夜间模式后，将关闭跟随软件设置的功能"
+                },
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MiuixTheme.textStyles.body1,
+                color = DialogDefaults.summaryColor(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = {
+                        showNightModeConfirmDialog = false
+                        pendingNightModeTarget = null
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("取消") }
+                Button(
+                    onClick = {
+                        val target = lastNightModeTarget
+                        val id = activeWindowId
+                        if (target != null && id != null) {
+                            prefs.edit()
+                                .putInt("web_night_mode", if (target) 2 else 1)
+                                .apply()
+                            updateWindow(id) { it.nightMode = target }
+                            webViewMap[id]?.let { applyNightModeToWebView(it, target) }
+                        }
+                        showNightModeConfirmDialog = false
+                        pendingNightModeTarget = null
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                    ),
+                ) { Text("确定") }
             }
+        }
+    }
+
+    if (showSourceDialog) {
+        WindowBottomSheet(
+            show = true,
+            onDismissRequest = { showSourceDialog = false },
+            title = "网页源码",
+            backgroundColor = MiuixTheme.colorScheme.surface,
+            allowDismiss = true,
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(
-                    text = if (pendingNightModeTarget == true) {
-                        "主动切换为夜间模式后，将关闭跟随软件设置的功能"
-                    } else {
-                        "主动关闭夜间模式后，将关闭跟随软件设置的功能"
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    style = MiuixTheme.textStyles.body1,
-                    color = DialogDefaults.summaryColor(),
+                SourceWebView(
+                    html = sourceContent,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(480.dp)
+                        .padding(horizontal = 12.dp)
+                        .clip(RoundedCornerShape(14.dp)),
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Button(
-                        onClick = {
-                            showNightModeConfirmDialog = false
-                            pendingNightModeTarget = null
-                        },
+                        onClick = { showSourceDialog = false },
                         modifier = Modifier.weight(1f),
-                    ) { Text("取消") }
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.secondaryContainer,
+                            contentColor = MiuixTheme.colorScheme.onSurface,
+                        ),
+                    ) { Text("关闭") }
                     Button(
                         onClick = {
-                            val target = pendingNightModeTarget
-                            val id = activeWindowId
-                            if (target != null && id != null) {
-                                prefs.edit()
-                                    .putInt("web_night_mode", if (target) 2 else 1)
-                                    .apply()
-                                updateWindow(id) { it.nightMode = target }
-                                webViewMap[id]?.evaluateJavascript(
-                                    if (target) JS_NIGHT_ON else JS_NIGHT_OFF, null
-                                )
-                            }
-                            showNightModeConfirmDialog = false
-                            pendingNightModeTarget = null
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("html", sourceContent))
+                            Toast.makeText(context, "源码已复制", Toast.LENGTH_SHORT).show()
+                            showSourceDialog = false
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
                             color = MiuixTheme.colorScheme.primary,
                             contentColor = Color.White,
                         ),
-                    ) { Text("确定") }
+                    ) { Text("复制源码") }
                 }
+            }
+        }
+    }
+
+    WindowDialog(
+        show = showScriptDialog,
+        title = "执行脚本",
+        onDismissRequest = { showScriptDialog = false }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TextField(
+                value = scriptContent,
+                onValueChange = { scriptContent = it },
+                label = "JavaScript 代码",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = { showScriptDialog = false },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                        contentColor = MiuixTheme.colorScheme.onSurface,
+                    ),
+                ) { Text("取消") }
+                Button(
+                    onClick = {
+                        if (scriptContent.isNotBlank()) {
+                            activeWindowId?.let { wid ->
+                                webViewMap[wid]?.evaluateJavascript(scriptContent, null)
+                                Toast.makeText(context, "脚本已执行", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        showScriptDialog = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                    ),
+                ) { Text("运行") }
             }
         }
     }
@@ -6417,16 +8870,87 @@ fun BrowserScreen(
             }
         }
     }
-    val sslError = PendingSslErrorStore.pending
-    if (sslError != null) {
-        WindowDialog(
-            show = true,
-            title = "安全警告",
-            onDismissRequest = {
-                sslError.cancel()
-                PendingSslErrorStore.pending = null
-            },
+
+    val extUrl = pendingExternalSchemeUrl
+    var lastExtUrl by remember { mutableStateOf("") }
+    if (extUrl != null) lastExtUrl = extUrl
+    WindowDialog(
+        show = extUrl != null,
+        title = "打开外部应用",
+        onDismissRequest = { pendingExternalSchemeUrl = null },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Text(
+                text = "该网页试图打开第三方应用",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MiuixTheme.textStyles.body1,
+                color = DialogDefaults.summaryColor(),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = { pendingExternalSchemeUrl = null },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                        contentColor = MiuixTheme.colorScheme.onSurface,
+                    ),
+                ) {
+                    Text("取消")
+                }
+                Button(
+                    onClick = {
+                        try {
+                            if (lastExtUrl.startsWith("intent://")) {
+                                val intent = Intent.parseUri(lastExtUrl, Intent.URI_INTENT_SCHEME)
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            } else {
+                                val intent = Intent(Intent.ACTION_VIEW, lastExtUrl.toUri())
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            }
+                        } catch (e: android.content.ActivityNotFoundException) {
+                            Toast.makeText(context, "未安装该应用，无法打开", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "打开失败：${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                        pendingExternalSchemeUrl = null
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text("打开")
+                }
+            }
+        }
+    }
+
+    val sslError = PendingSslErrorStore.pending
+    var lastSslError by remember { mutableStateOf<PendingSslError?>(null) }
+    if (sslError != null) lastSslError = sslError
+    WindowDialog(
+        show = sslError != null,
+        title = "安全警告",
+        onDismissRequest = {
+            lastSslError?.cancel()
+            PendingSslErrorStore.pending = null
+        },
+    ) {
+        if (lastSslError != null) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -6434,7 +8958,7 @@ fun BrowserScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "${sslError.errorText}\n\n" +
+                    text = "${lastSslError!!.errorText}\n\n" +
                             "该网站的安全证书无法验证，继续访问可能存在风险。\n\n" +
                             "你可以选择“继续访问”暂时忽略此警告。",
                     modifier = Modifier.fillMaxWidth(),
@@ -6449,7 +8973,7 @@ fun BrowserScreen(
                 ) {
                     Button(
                         onClick = {
-                            sslError.cancel()
+                            lastSslError?.cancel()
                             PendingSslErrorStore.pending = null
                         },
                         modifier = Modifier.weight(1f),
@@ -6462,7 +8986,7 @@ fun BrowserScreen(
                     }
                     Button(
                         onClick = {
-                            sslError.proceed()
+                            lastSslError?.proceed()
                             PendingSslErrorStore.pending = null
                         },
                         modifier = Modifier.weight(1f),
@@ -6476,6 +9000,137 @@ fun BrowserScreen(
                 }
             }
         }
+    }
+
+    val jsDialog = PendingJsDialogStore.pending
+    var lastJsDialog by remember { mutableStateOf<PendingJsDialog?>(null) }
+    if (jsDialog != null) lastJsDialog = jsDialog
+
+    var jsPromptInput by remember { mutableStateOf("") }
+    LaunchedEffect(jsDialog) {
+        if (jsDialog?.type == JsDialogType.PROMPT) {
+            jsPromptInput = jsDialog.defaultValue
+        }
+    }
+
+    WindowDialog(
+        show = jsDialog != null,
+        title = if (jsDialog?.type == JsDialogType.ALERT) "提示" else "网页消息",
+        onDismissRequest = {
+            lastJsDialog?.cancel()
+            PendingJsDialogStore.pending = null
+        },
+    ) {
+        if (lastJsDialog != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = lastJsDialog!!.message,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MiuixTheme.textStyles.body1,
+                    color = DialogDefaults.summaryColor(),
+                )
+
+                if (lastJsDialog!!.type == JsDialogType.PROMPT) {
+                    TextField(
+                        value = jsPromptInput,
+                        onValueChange = { jsPromptInput = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    if (lastJsDialog!!.type != JsDialogType.ALERT) {
+                        Button(
+                            onClick = {
+                                lastJsDialog?.cancel()
+                                PendingJsDialogStore.pending = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.secondaryContainer,
+                                contentColor = MiuixTheme.colorScheme.onSurface,
+                            ),
+                        ) {
+                            Text("取消")
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            lastJsDialog?.confirm(jsPromptInput)
+                            PendingJsDialogStore.pending = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                        ),
+                    ) {
+                        Text("确定")
+                    }
+                }
+            }
+        }
+    }
+
+    WindowDialog(
+        show = showTtsErrorDialog,
+        title = "语音引擎未就绪",
+        onDismissRequest = { showTtsErrorDialog = false }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "当前设备未安装系统语音引擎，或未设置默认引擎。",
+                modifier = Modifier.fillMaxWidth(),
+                style = MiuixTheme.textStyles.body1,
+                color = DialogDefaults.summaryColor(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = { showTtsErrorDialog = false },
+                    modifier = Modifier.weight(1f),
+                ) { Text("取消") }
+                Button(
+                    onClick = {
+                        showTtsErrorDialog = false
+                        openTtsSettings(context)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                    ),
+                ) { Text("去设置") }
+            }
+        }
+    }
+
+    // ★ 全局夜间模式半透明黑色蒙版
+    if (activeWindow?.nightMode == true && globalNightDim && !showNewTabPage) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.35f))
+                .zIndex(998f) // 在普通 UI 层之上，但在弹窗和 Snackbar(999f) 之下，且不拦截触摸
+        )
     }
 }
 
@@ -6517,6 +9172,7 @@ private fun WebViewLayer(
     onFaviconLoad: (String, String) -> Unit,
     onFaviconExplicit: (String, String, String) -> Unit,
     onPendingDownload: (PendingDownload) -> Unit,
+    onLongPress: (imageUrl: String, linkUrl: String, text: String, pageUrl: String, xPx: Int, yPx: Int, selectable: Boolean) -> Unit,
     onFindResult: (Int, Int) -> Unit,
     onSniffResult: (SniffedResource) -> Unit,
     onShowHtmlFullscreen: (View?, WebChromeClient.CustomViewCallback?) -> Unit,
@@ -6526,6 +9182,7 @@ private fun WebViewLayer(
     fileChooserLauncher: ActivityResultLauncher<Intent>,
     pendingPermission: MutableState<PermissionRequest?>,
     permissionLauncher: ActivityResultLauncher<Array<String>>,
+    onExternalSchemeRequest: (String) -> Unit,
 ) {
     AndroidView(
         factory = { ctx ->
@@ -6580,9 +9237,11 @@ private fun WebViewLayer(
                                 val oldHost = try { win0?.url?.toUri()?.host } catch (_: Exception) { null }
                                 val newHost = try { url.toUri().host } catch (_: Exception) { null }
                                 val hostChanged = oldHost != newHost
+                                val isBlankUrl = url.isBlank() || url == "about:blank"
                                 onUpdateWindow(id) {
-                                    if (urlChanged) { it.translated = false }
-                                    if (hostChanged && newHost != null) {
+                                    if (isBlankUrl) {
+                                        it.favicon = null
+                                    } else if (hostChanged && newHost != null) {
                                         val cached = faviconCache[newHost]
                                         it.favicon = cached
                                     }
@@ -6616,23 +9275,17 @@ private fun WebViewLayer(
                                 }
 
                                 val urlQuery = extractSearchQueryFromUrl(url)
-                                var isOnSearchResultPage = false
-                                if (engineBase != null) {
+                                val isOnSearchResultPage = if (engineBase != null) {
                                     val path = (urlObj?.path ?: "").lowercase()
-                                    isOnSearchResultPage = when {
-                                        urlQuery != null && urlQuery.isNotBlank() -> true
-                                        engineBase.first == "百度" -> path.startsWith("/s")
-                                        engineBase.first == "必应" -> path.startsWith("/search")
-                                        engineBase.first == "抖音" -> path.startsWith("/search")
-                                        engineBase.first == "神马" -> path.startsWith("/s")
-                                        engineBase.first == "搜狗" ->
-                                            path.startsWith("/web/searchList") || path.startsWith("/s")
-                                        engineBase.first == "谷歌" -> path.startsWith("/search")
-                                        engineBase.first == "自定义" ->
-                                            extractSearchQueryFromUrl(url) != null
+                                    when {
+                                        !urlQuery.isNullOrBlank() -> true
+                                        engineBase.first == "百度" || engineBase.first == "神马" -> path.startsWith("/s")
+                                        engineBase.first == "必应" || engineBase.first == "抖音" || engineBase.first == "谷歌" -> path.startsWith("/search")
+                                        engineBase.first == "搜狗" -> path.startsWith("/web/searchList") || path.startsWith("/s")
+                                        engineBase.first == "自定义" -> urlQuery != null
                                         else -> false
                                     }
-                                }
+                                } else false
 
                                 if (isOnSearchResultPage) {
                                     val urlQuery2 = extractSearchQueryFromUrl(url)
@@ -6675,6 +9328,9 @@ private fun WebViewLayer(
                             },
                             onFaviconFromDomain = { url -> onFaviconLoad(id, url) },
                             onDownloadRequest = { dl -> onPendingDownload(dl) },
+                            onLongPress = { imageUrl, linkUrl, text, pageUrl, xPx, yPx, selectable ->
+                                onLongPress(imageUrl, linkUrl, text, pageUrl, xPx, yPx, selectable)
+                            },
                             onFindResult = { total, current -> onFindResult(total, current) },
                             onPageFinishedExtra = { wv2 ->
                                 val win = windows.firstOrNull { it.id == id }
@@ -6689,7 +9345,7 @@ private fun WebViewLayer(
                                 }
 
                                 if (win?.nightMode == true) {
-                                    wv2.evaluateJavascript(JS_NIGHT_ON, null)
+                                    applyNightModeToWebView(wv2, true)
                                 }
                                 if (win?.noImage == true) {
                                     wv2.evaluateJavascript(JS_NO_IMG_ON, null)
@@ -6699,8 +9355,10 @@ private fun WebViewLayer(
                                 }
                                 try { wv2.settings.textZoom = textZoomValue } catch (_: Exception) {}
 
-                                wv2.evaluateJavascript(JS_PULL_REFRESH_GUARD, null)
-                                wv2.evaluateJavascript(JS_HORIZONTAL_SCROLL_GUARD, null)
+                                wv2.evaluateJavascript(JS_GESTURE_GUARD, null)
+
+                                // ★ 注入已启用的用户脚本
+                                UserScriptStore.injectInto(wv2)
 
                                 if (prefs.getBoolean("web_smart_preload_enabled", true)) {
                                     val maxHosts = prefs.getInt("web_smart_preload_max_hosts", 5)
@@ -6727,12 +9385,28 @@ private fun WebViewLayer(
                                     val result = decodeJsString(raw)
                                     onEnglishPageDetected(result == "en")
                                 }
+
+                                val cert = try { wv2.certificate } catch (_: Exception) { null }
+                                if (cert != null) {
+                                    val issuedTo = cert.issuedTo?.cName ?: ""
+                                    val issuedBy = cert.issuedBy?.cName ?: ""
+                                    val validFromDate = cert.validNotBeforeDate
+                                    val validToDate = cert.validNotAfterDate
+                                    val now = java.util.Date()
+                                    val isExpired = validToDate != null && validToDate.before(now)
+                                    val dateFormat = java.text.SimpleDateFormat(
+                                        "yyyy-MM-dd HH:mm", java.util.Locale.US,
+                                    )
+                                    SecurityStateHolder.updateCertInfo(
+                                        issuer = issuedBy,
+                                        subject = issuedTo,
+                                        validFrom = validFromDate?.let { dateFormat.format(it) } ?: "未知",
+                                        validTo = validToDate?.let { dateFormat.format(it) } ?: "未知",
+                                        isExpired = isExpired,
+                                    )
+                                }
                             },
                             onResourceSniffed = { resource -> onSniffResult(resource) },
-                            onPageStartedExtra = {
-                                sniffedResources.clear()
-                                networkSniffedResources.clear()
-                            },
                             onShowCustomView = { v, cb -> onShowHtmlFullscreen(v, cb) },
                             onHideCustomView = { onHideHtmlFullscreen() },
                             onEnglishPageDetected = { isEn -> onEnglishPageDetected(isEn) },
@@ -6745,12 +9419,17 @@ private fun WebViewLayer(
                                     webViewMap.remove(it.key)
                                 }
                             },
+                            onExternalSchemeRequest = onExternalSchemeRequest,
                         )
                         webViewMap[id] = created
 
                         val win = windows.firstOrNull { it.id == id }
                         if (win?.incognito == true) {
                             try { created.settings.cacheMode = WebSettings.LOAD_NO_CACHE } catch (_: Exception) {}
+                        }
+
+                        if (win?.nightMode == true) {
+                            applyNightModeToWebView(created, true)
                         }
 
                         val initialUrl = win?.url.orEmpty().ifBlank { "about:blank" }
@@ -6766,6 +9445,1184 @@ private fun WebViewLayer(
         },
         modifier = Modifier.fillMaxSize()
     )
+}
+
+// ============================================================
+// WebView 工厂
+// ============================================================
+
+@SuppressLint("SetJavaScriptEnabled")
+private fun applyDesktopViewportSettings(wv: WebView, desktopMode: Boolean) {
+    val s = wv.settings
+    if (desktopMode) {
+        s.useWideViewPort = false
+        s.loadWithOverviewMode = false
+        s.setSupportZoom(true)
+        s.builtInZoomControls = true
+        s.displayZoomControls = false
+    } else {
+        s.useWideViewPort = true
+        s.loadWithOverviewMode = true
+        s.setSupportZoom(true)
+        s.builtInZoomControls = true
+        s.displayZoomControls = false
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+private fun createWebView(
+    context: Context,
+    windowId: String,
+    initialDesktopMode: Boolean,
+    initialTextZoom: Int,
+    initialForceZoom: Boolean,
+    initialDefaultZoom: Int,
+    initialUrlProvider: () -> String,
+    isZoomRestoreEnabled: () -> Boolean,
+    getSavedZoom: (String) -> Float?,
+    onZoomChanged: (host: String, scale: Float) -> Unit,
+    onScaleChanged: (scale: Float) -> Unit,
+    onWebViewCreated: (WebView) -> Unit,
+    isNativePlayerEnabled: () -> Boolean,
+    onProgressChanged: (Int) -> Unit,
+    onPageStateChanged: (url: String, title: String, canGoBack: Boolean, canGoForward: Boolean) -> Unit,
+    onFaviconReceived: (host: String, bmp: Bitmap) -> Unit,
+    onFaviconFromDomain: (url: String) -> Unit,
+    onDownloadRequest: (PendingDownload) -> Unit,
+    onLongPress: (imageUrl: String, linkUrl: String, text: String, pageUrl: String, xPx: Int, yPx: Int, selectable: Boolean) -> Unit,
+    onFindResult: (total: Int, current: Int) -> Unit,
+    onPageFinishedExtra: (WebView) -> Unit,
+    onResourceSniffed: (SniffedResource) -> Unit,
+    onShowCustomView: (View?, WebChromeClient.CustomViewCallback?) -> Unit,
+    onHideCustomView: () -> Unit,
+    onEnglishPageDetected: (Boolean) -> Unit,
+    fileChooserCallback: MutableState<ValueCallback<Array<Uri>>?>,
+    fileChooserLauncher: ActivityResultLauncher<Intent>,
+    pendingPermission: MutableState<PermissionRequest?>,
+    permissionLauncher: ActivityResultLauncher<Array<String>>,
+    onRenderProcessGoneCallback: (WebView) -> Unit,
+    onExternalSchemeRequest: (String) -> Unit,
+): WebView {
+    return WebView(context).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
+
+        val mobileUa = getMobileUserAgent(context)
+
+        val pmPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+        val rememberFormEnabled = try {
+            pmPrefs.getBoolean("web_remember_form", true)
+        } catch (_: Exception) { true }
+        val acceptCookieEnabled = try {
+            pmPrefs.getBoolean("web_accept_cookie", true)
+        } catch (_: Exception) { true }
+
+        settings.apply {
+            userAgentString = if (initialDesktopMode) DESKTOP_UA else mobileUa
+            textZoom = initialTextZoom
+            loadsImagesAutomatically = true
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            setSupportMultipleWindows(true)
+            javaScriptCanOpenWindowsAutomatically = true
+            allowFileAccess = true
+            allowContentAccess = true
+            defaultTextEncodingName = "UTF-8"
+            cacheMode = WebSettings.LOAD_DEFAULT
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            mediaPlaybackRequiresUserGesture = false
+            saveFormData = rememberFormEnabled
+        }
+        applyDesktopViewportSettings(this, initialDesktopMode)
+
+        CookieManager.getInstance().setAcceptCookie(acceptCookieEnabled)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, acceptCookieEnabled)
+        setLayerType(View.LAYER_TYPE_HARDWARE, null)
+        isHapticFeedbackEnabled = false
+
+        addJavascriptInterface(object {
+            @JavascriptInterface
+            fun setPullRefreshAllowed(allowed: Boolean) {
+                PullRefreshStateHolder.set(windowId, allowed)
+            }
+
+            @JavascriptInterface
+            fun setSwipeNavAllowed(allowed: Boolean) {
+                SwipeNavStateHolder.set(windowId, allowed)
+            }
+
+            @JavascriptInterface
+            fun onPasswordSubmit(url: String, username: String, password: String) {
+                if (url.isBlank() || password.isBlank()) return
+                post {
+                    PasswordCaptureStore.pending = PendingPassword(url, username, password)
+                }
+            }
+        }, "moteBridge")
+
+        addJavascriptInterface(object {
+            @Suppress("unused")
+            @JavascriptInterface
+            fun onUrlChanged(newUrl: String) {
+                post {
+                    onPageStateChanged(
+                        newUrl,
+                        title ?: "无标题",
+                        canGoBack(),
+                        canGoForward(),
+                    )
+                    onFaviconFromDomain(newUrl)
+                }
+            }
+        }, "androidBridge")
+
+        var lastTouchRawX = 0
+        var lastTouchRawY = 0
+        var lastTouchViewX = 0f
+        var lastTouchViewY = 0f
+        setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                lastTouchRawX = event.rawX.toInt()
+                lastTouchRawY = event.rawY.toInt()
+                lastTouchViewX = event.x
+                lastTouchViewY = event.y
+            }
+            false
+        }
+        setOnLongClickListener { v ->
+            val wv = v as? WebView ?: return@setOnLongClickListener false
+            if (LongPressSkipStore.consumeSkip(wv)) {
+                return@setOnLongClickListener false
+            }
+            val result = wv.hitTestResult ?: return@setOnLongClickListener false
+            val type = result.type
+            val hitExtra = result.extra.orEmpty()
+
+            performHapticFeedback(
+                HapticFeedbackConstants.LONG_PRESS,
+                HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
+            )
+
+            val density = resources.displayMetrics.density
+            val scale = try { wv.scale } catch (_: Exception) { 1f }
+            val safeScale = if (scale > 0.05f) scale else 1f
+            val cssX = (lastTouchViewX / (density * safeScale)).toDouble()
+            val cssY = (lastTouchViewY / (density * safeScale)).toDouble()
+
+            val js = "(function(fx,fy){" +
+                    "try{" +
+                    "var x=(window.__mote_lp_x>=0)?window.__mote_lp_x:fx;" +
+                    "var y=(window.__mote_lp_y>=0)?window.__mote_lp_y:fy;" +
+                    "window.__mote_lp_x=-1;" +
+                    "window.__mote_lp_y=-1;" +
+                    "var els = document.elementsFromPoint ? document.elementsFromPoint(x,y) : [document.elementFromPoint(x,y)];" +
+                    "if(!els || els.length===0)return '{}';" +
+                    "var el = els[0];" +
+
+                    // 图片查找
+                    "var img=null;" +
+                    "for(var k=0;k<els.length;k++){" +
+                    "  var e=els[k];" +
+                    "  if(!e)continue;" +
+                    "  if(e.tagName==='IMG'){img=e;break;}" +
+                    "  if(e.tagName==='PICTURE'&&e.querySelector){img=e.querySelector('img');if(img)break;}" +
+                    "}" +
+                    "if(!img){" +
+                    "  var _best=null,_bestD=1e18;" +
+                    "  for(var k=0;k<els.length;k++){" +
+                    "    var _p=els[k];" +
+                    "    if(!_p||!_p.querySelectorAll)continue;" +
+                    "    var _list=_p.querySelectorAll('img');" +
+                    "    for(var _i=0;_i<_list.length;_i++){" +
+                    "      var _im=_list[_i];" +
+                    "      var _r=_im.getBoundingClientRect();" +
+                    "      if(_r.width>0&&_r.height>0&&x>=_r.left-16&&x<=_r.right+16&&y>=_r.top-16&&y<=_r.bottom+16){" +
+                    "        var _cx=_r.left+_r.width/2,_cy=_r.top+_r.height/2;" +
+                    "        var _dist=(_cx-x)*(_cx-x)+(_cy-y)*(_cy-y);" +
+                    "        if(_dist<_bestD){_bestD=_dist;_best=_im;}" +
+                    "      }" +
+                    "    }" +
+                    "    if(_best)break;" +
+                    "  }" +
+                    "  if(_best)img=_best;" +
+                    "}" +
+                    "if(!img && el){" +
+                    "  var _p2=el,_depth=0;" +
+                    "  while(_p2&&_depth<10){" +
+                    "    if(_p2.tagName==='IMG'){img=_p2;break;}" +
+                    "    _p2=_p2.parentElement;_depth++;" +
+                    "  }" +
+                    "}" +
+
+                    // 链接查找
+                    "var anchor=null;" +
+                    // ★ 改动 1：不再只看最上层节点 el，而是遍历所有重叠的 els 查找 a[href]
+                    "for(var k=0;k<els.length;k++){" +
+                    "  var cur=els[k];" +
+                    "  if(!cur)continue;" +
+                    "  try{var a=cur.closest?cur.closest('a[href]'):null;if(a){anchor=a;break;}}catch(e){}" +
+                    "  if(!anchor){" +
+                    "    var p=cur,d2=0;" +
+                    "    while(p&&d2<15){" +
+                    "      if(p.tagName==='A'&&p.getAttribute&&p.getAttribute('href')){anchor=p;break;}" +
+                    "      p=p.parentElement;d2++;" +
+                    "    }" +
+                    "  }" +
+                    "}" +
+                    // 假链接兜底
+                    "if(!anchor){" +
+                    "  var cur=el,dd=0;" +
+                    "  while(cur&&dd<15){" +
+                    "    try{" +
+                    "      var oc=cur.getAttribute&&cur.getAttribute('onclick');" +
+                    "      var rl=cur.getAttribute&&cur.getAttribute('role');" +
+                    "      var dh=cur.getAttribute&&cur.getAttribute('data-href');" +
+                    "      var du=cur.getAttribute&&cur.getAttribute('data-url');" +
+                    "      var dl=cur.getAttribute&&cur.getAttribute('data-link');" +
+                    "      if(oc||rl==='link'||dh||du||dl){anchor=cur;break;}" +
+                    "    }catch(e){}" +
+                    "    cur=cur.parentElement;dd++;" +
+                    "  }" +
+                    "}" +
+                    // 图片 URL
+                    "function getImgUrl(im){" +
+                    "  if(!im)return '';" +
+                    "  var u=im.currentSrc||im.src||'';" +
+                    "  if(!u||u.indexOf('data:')===0){" +
+                    "    var attrs=['data-src','data-original','data-lazy-src','data-echo','data-url','data-image','data-img','data-lazyload','data-original-src','data-origin'];" +
+                    "    for(var i=0;i<attrs.length;i++){" +
+                    "      var v=im.getAttribute&&im.getAttribute(attrs[i]);" +
+                    "      if(v&&v.indexOf('data:')!==0){u=v;break;}" +
+                    "    }" +
+                    "  }" +
+                    "  if(!u){" +
+                    "    var s=im.querySelector&&im.querySelector('source');" +
+                    "    if(s)u=s.src||'';" +
+                    "  }" +
+                    "  if(u&&u.indexOf('//')===0)u=location.protocol+u;" +
+                    "  else if(u&&u.indexOf('http')!==0){" +
+                    "    try{u=new URL(u,location.href).href;}catch(e){}" +
+                    "  }" +
+                    "  return u;" +
+                    "}" +
+                    // 链接 URL
+                    "function getLinkUrl(a){" +
+                    "  if(!a)return '';" +
+                    "  var u='';" +
+                    "  try{u=a.href||'';}catch(e){}" +
+                    "  if(!u){" +
+                    "    var attrs=['data-href','data-url','data-link','data-target','data-src'];" +
+                    "    for(var i=0;i<attrs.length;i++){" +
+                    "      var v=a.getAttribute&&a.getAttribute(attrs[i]);" +
+                    "      if(v){u=v;break;}" +
+                    "    }" +
+                    "  }" +
+                    "  if(!u){" +
+                    "    try{" +
+                    "      var oc=a.getAttribute&&a.getAttribute('onclick');" +
+                    "      if(oc){" +
+                    "        var m1=oc.match(/location\\.href\\s*=\\s*['\"]([^'\"]+)['\"]/);" +
+                    "        if(m1&&m1[1])u=m1[1];" +
+                    "        if(!u){" +
+                    "          var m2=oc.match(/window\\.open\\s*\\(\\s*['\"]([^'\"]+)['\"]/);" +
+                    "          if(m2&&m2[1])u=m2[1];" +
+                    "        }" +
+                    "      }" +
+                    "    }catch(e){}" +
+                    "  }" +
+                    "  if(u){" +
+                    "    if(u==='#'||u.indexOf('javascript:')===0||u.indexOf('void(')===0){u='';}" +
+                    "  }" +
+                    "  if(u&&u.indexOf('http')!==0&&u.indexOf('//')!==0){" +
+                    "    try{u=new URL(u,location.href).href;}catch(e){}" +
+                    "  }" +
+                    "  return u;" +
+                    "}" +
+                    // 文字提取
+                    "var text='';" +
+                    "try{" +
+                    "  var textNode=null;" +
+                    "  var anchorEl=null;" +
+                    "  if(document.caretRangeFromPoint){" +
+                    "    var range=document.caretRangeFromPoint(x,y);" +
+                    "    if(range&&range.startContainer){" +
+                    // ★ 改动 2：如果翻译插件把文本包裹在子节点中，这里也能剥开取到文字
+                    "      if(range.startContainer.nodeType===3){" +
+                    "        textNode=range.startContainer;" +
+                    "        anchorEl=textNode.parentElement;" +
+                    "      } else if(range.startContainer.firstChild&&range.startContainer.firstChild.nodeType===3){" +
+                    "        textNode=range.startContainer.firstChild;" +
+                    "        anchorEl=range.startContainer;" +
+                    "      }" +
+                    "    }" +
+                    "  }" +
+                    "  if(!anchorEl)anchorEl=el;" +
+                    "  if(anchorEl){" +
+                    "    var block=anchorEl.closest?anchorEl.closest('a,button,h1,h2,h3,h4,h5,h6,p,li,td,th,dt,dd,blockquote,pre'):null;" +
+                    "    if(!block){" +
+                    "      var cur=anchorEl,d=0;" +
+                    "      while(cur&&d<8){" +
+                    "        var txt=(cur.innerText||'').trim();" +
+                    "        if(txt.length>=2){" +
+                    "          var ptxt=(cur.parentElement?(cur.parentElement.innerText||''):'').trim();" +
+                    "          if(ptxt.length===0||txt.length<=ptxt.length*0.8){" +
+                    "            block=cur;break;" +
+                    "          }" +
+                    "        }" +
+                    "        cur=cur.parentElement;d++;" +
+                    "      }" +
+                    "    }" +
+                    "    if(block){" +
+                    "      text=(block.innerText||block.textContent||'').trim();" +
+                    "    }" +
+                    "  }" +
+                    "  if(!text&&textNode){" +
+                    "    text=(textNode.nodeValue||'').trim();" +
+                    "  }" +
+                    "}catch(e){}" +
+                    "text=text.replace(/[\\s\\n\\r]+/g,' ').trim();" +
+                    "if(text.length>1000)text=text.substring(0,1000);" +
+                    // user-select 检测
+                    "var selectable=true;" +
+                    "var cur2=el,d4=0;" +
+                    "while(cur2&&d4<15){" +
+                    "  try{" +
+                    "    var st=window.getComputedStyle(cur2);" +
+                    "    var us=st.userSelect||st.webkitUserSelect||'';" +
+                    "    if(us==='none'){selectable=false;break;}" +
+                    "  }catch(e){}" +
+                    "  cur2=cur2.parentElement;" +
+                    "  d4++;" +
+                    "}" +
+                    "return JSON.stringify({" +
+                    "  imgSrc:getImgUrl(img)," +
+                    "  anchorHref:getLinkUrl(anchor)," +
+                    "  text:text," +
+                    "  selectable:selectable" +
+                    "});" +
+                    "}catch(e){return '{}';}" +
+                    "})($cssX,$cssY)"
+
+            wv.evaluateJavascript(js) { raw ->
+                val decoded = decodeJsString(raw)
+                var jsImgSrc = ""
+                var jsAnchorHref = ""
+                var jsText = ""
+                var jsSelectable = true
+                try {
+                    val obj = JSONObject(decoded)
+                    jsImgSrc = obj.optString("imgSrc", "")
+                    jsAnchorHref = obj.optString("anchorHref", "")
+                    jsText = obj.optString("text", "")
+                    jsSelectable = obj.optBoolean("selectable", true)
+                } catch (_: Exception) {}
+
+                val imageUrl: String
+                val linkUrl: String
+                val text: String
+                when (type) {
+                    WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE -> {
+                        linkUrl = jsAnchorHref
+                        imageUrl = hitExtra.ifBlank { jsImgSrc }
+                        text = ""
+                    }
+                    WebView.HitTestResult.IMAGE_TYPE -> {
+                        imageUrl = hitExtra.ifBlank { jsImgSrc }
+                        linkUrl = ""
+                        text = ""
+                    }
+                    WebView.HitTestResult.ANCHOR_TYPE -> {
+                        linkUrl = hitExtra.ifBlank { jsAnchorHref }
+                        imageUrl = jsImgSrc
+                        text = jsText
+                    }
+                    else -> {
+                        if (jsAnchorHref.isNotBlank()) {
+                            linkUrl = jsAnchorHref
+                            imageUrl = jsImgSrc
+                            text = jsText
+                        } else {
+                            if (jsText.isBlank() && jsImgSrc.isBlank()) {
+                                return@evaluateJavascript
+                            }
+                            linkUrl = ""
+                            imageUrl = jsImgSrc
+                            text = jsText
+                        }
+                    }
+                }
+
+                if (imageUrl.isBlank() && linkUrl.isBlank() && text.isBlank()) {
+                    return@evaluateJavascript
+                }
+
+                val pageUrl = wv.url ?: ""
+                onLongPress(imageUrl, linkUrl, text, pageUrl, lastTouchRawX, lastTouchRawY, jsSelectable)
+            }
+
+            true
+        }
+
+        setFindListener { activeOrdinal, totalMatches, _ ->
+            post { onFindResult(totalMatches, activeOrdinal) }
+        }
+
+        webViewClient = object : WebViewClient() {
+
+            override fun onScaleChanged(view: WebView?, oldScale: Float, newScale: Float) {
+                super.onScaleChanged(view, oldScale, newScale)
+                onScaleChanged(newScale)
+            }
+
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): WebResourceResponse? {
+                try {
+                    if (request != null) {
+                        val url = request.url?.toString()
+                        if (!url.isNullOrBlank() &&
+                            !url.startsWith("data:") &&
+                            !url.startsWith("blob:") &&
+                            !url.startsWith("about:")
+                        ) {
+                            val trackerCategory = TrackerBlockList.classifyWithLevel(
+                                url,
+                                SecurityStateHolder.trackingLevel,
+                            )
+                            if (trackerCategory != null) {
+                                val secInfo = SecurityStateHolder.info
+                                val shouldBlock = when (trackerCategory) {
+                                    "ad" -> secInfo.effectiveBlockAdsEnabled
+                                    else -> secInfo.effectiveTrackingProtectionEnabled
+                                }
+                                if (shouldBlock) {
+                                    post {
+                                        SecurityStateHolder.onTrackerBlocked(url, trackerCategory)
+                                    }
+                                    return WebResourceResponse(
+                                        "text/plain", "utf-8",
+                                        java.io.ByteArrayInputStream(ByteArray(0)),
+                                    )
+                                }
+                            }
+
+                            var cat = sniffCategoryFromNetwork(url)
+                            if (cat == null && looksLikeMediaByHeaders(request)) {
+                                cat = SniffCategory.VIDEO
+                            }
+                            if (cat != null) {
+                                val res = SniffedResource(
+                                    url = url,
+                                    category = cat,
+                                    filename = extractFilename(url),
+                                    fromNetwork = true,
+                                )
+                                post { onResourceSniffed(res) }
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+                return super.shouldInterceptRequest(view, request)
+            }
+
+            override fun shouldOverrideUrlLoading(
+                view: WebView?,
+                request: WebResourceRequest?
+            ): Boolean {
+                val url = request?.url?.toString() ?: return false
+                val lower = url.lowercase()
+                if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
+                    val ignoredSchemes = listOf("about:", "data:", "file:", "content:", "javascript:", "blob:")
+                    if (ignoredSchemes.any { lower.startsWith(it) }) {
+                        return false
+                    }
+
+                    // ★ 需求：遇到系统快应用链接就拦截
+                    val isQuickApp = lower.startsWith("hap://") ||
+                            lower.startsWith("hwfastapp://") ||
+                            lower.startsWith("mfastapp://") ||
+                            lower.startsWith("opfastapp://") ||
+                            lower.startsWith("fastapp://") ||
+                            lower.contains("fastapp")
+
+                    if (isQuickApp) {
+                        onExternalSchemeRequest(url)
+                        return true
+                    }
+
+                    // 2. 针对 intent:// 协议处理（常见于知乎等应用）
+                    if (lower.startsWith("intent://")) {
+                        try {
+                            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // 唤起失败，尝试网页自带的 fallback 链接
+                            try {
+                                val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                                val fallbackUrl = intent.getStringExtra("browser_fallback_url")
+                                if (!fallbackUrl.isNullOrBlank() && view != null) {
+                                    view.loadUrl(fallbackUrl)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        // 无论如何返回 true，防止 WebView 崩溃变成错误页，但不弹任何提示
+                        return true
+                    }
+
+                    // 3. 其他自定义 Scheme (如 zhihu://, bilibili://)
+                    return try {
+                        val intent = Intent(Intent.ACTION_VIEW, request?.url)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        true
+                    } catch (e: Exception) {
+                        // ★ 静默处理，绝不弹 Toast 阻拦用户的后续操作
+                        true
+                    }
+                }
+                return false
+            }
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                onEnglishPageDetected(false)
+                if (url != null) {
+                    SecurityStateHolder.reset(url)
+                }
+                try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
+                if (url != null) onFaviconFromDomain(url)
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                url?.let { u ->
+                    onPageStateChanged(
+                        u,
+                        view?.title ?: "无标题",
+                        view?.canGoBack() == true,
+                        view?.canGoForward() == true
+                    )
+                    onFaviconFromDomain(u)
+
+                    if (initialForceZoom) {
+                        view?.evaluateJavascript(JS_FORCE_ZOOM_ON, null)
+                    }
+
+                    val jsHook = buildString {
+                        append("(function(){")
+                        append("if (window.__mote_history_hooked) return;")
+                        append("window.__mote_history_hooked = true;")
+                        append("const _pushState = history.pushState;")
+                        append("history.pushState = function(state, title, url){")
+                        append("_pushState.call(this, state, title, url);")
+                        append("window.androidBridge.onUrlChanged(location.href);")
+                        append("};")
+                        append("const _replaceState = history.replaceState;")
+                        append("history.replaceState = function(state, title, url){")
+                        append("_replaceState.call(this, state, title, url);")
+                        append("window.androidBridge.onUrlChanged(location.href);")
+                        append("};")
+                        append("window.addEventListener('popstate', function(){")
+                        append("window.androidBridge.onUrlChanged(location.href);")
+                        append("});")
+                        append("})();")
+                    }
+
+                    view?.evaluateJavascript(JS_CONTEXTMENU_TRACKER, null)
+
+                    view?.evaluateJavascript(JS_INTERCEPT_VIDEO, null)
+
+                    view?.evaluateJavascript(JS_GESTURE_GUARD, null)
+                    view?.evaluateJavascript(jsHook, null)
+                    view?.evaluateJavascript(JS_PASSWORD_DETECT, null)
+
+                    view?.let { onPageFinishedExtra(it) }
+                }
+                try {
+                    CookieManager.getInstance().flush()
+                } catch (_: Exception) {
+                }
+            }
+
+            @SuppressLint("WebViewClientOnReceivedSslError")
+            override fun onReceivedSslError(
+                view: WebView,
+                handler: SslErrorHandler,
+                error: SslError
+            ) {
+                val primaryError = when (error.primaryError) {
+                    SslError.SSL_DATE_INVALID -> "证书日期无效"
+                    SslError.SSL_EXPIRED -> "证书已过期"
+                    SslError.SSL_IDMISMATCH -> "证书域名不匹配"
+                    SslError.SSL_NOTYETVALID -> "证书尚未生效"
+                    SslError.SSL_UNTRUSTED -> "证书来自未知授权中心"
+                    SslError.SSL_INVALID -> "证书无效"
+                    else -> "证书验证失败"
+                }
+                SecurityStateHolder.markSslError(primaryError)
+                PendingSslErrorStore.pending = PendingSslError(
+                    errorText = primaryError,
+                    proceed = {
+                        try { handler.proceed() } catch (_: Exception) {}
+                    },
+                    cancel = {
+                        try { handler.cancel() } catch (_: Exception) {}
+                        try {
+                            if (view.canGoBack()) view.goBack()
+                        } catch (_: Exception) {}
+                    },
+                )
+            }
+
+            override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?
+            ): Boolean {
+                try {
+                    (view?.parent as? ViewGroup)?.removeView(view)
+                    view?.destroy()
+                    view?.let { onRenderProcessGoneCallback(it) }
+                } catch (_: Exception) {}
+                return true
+            }
+        }
+
+        val externalOnShowCustomView = onShowCustomView
+
+        webChromeClient = object : WebChromeClient() {
+
+            override fun onShowCustomView(
+                view: View?,
+                callback: CustomViewCallback?
+            ) {
+                val webViewRef = this@apply
+
+                if (!isNativePlayerEnabled()) {
+                    externalOnShowCustomView(view, callback)
+                    (context as? Activity)?.let { act ->
+                        act.requestedOrientation =
+                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    }
+                    return
+                }
+
+                webViewRef.evaluateJavascript(
+                    "(function(){try{var v=document.querySelector('video');" +
+                            "if(!v)return '{}';" +
+                            "var t=(v.currentTime||0)*1000;" +
+                            "var u=v.currentSrc||v.src;" +
+                            "if(!u){var s=v.querySelector('source');if(s)u=s.src;}" +
+                            "return JSON.stringify({time:Math.round(t),url:u||''});" +
+                            "}catch(e){return '{}';}})()"
+                ) { progressRaw ->
+                    val payload = try {
+                        JSONObject(decodeJsString(progressRaw))
+                    } catch (_: Exception) { JSONObject() }
+
+                    val startPositionMs = payload.optLong("time", 0L)
+                    var videoUrl = payload.optString("url", "")
+
+                    if (videoUrl.isBlank() || !videoUrl.startsWith("http")) {
+                        val sniffed = RecentVideoUrlStore.get(windowId)
+                        if (!sniffed.isNullOrBlank()) {
+                            videoUrl = sniffed
+                        }
+                    }
+
+                    val currentPlaying = PlaybackSessionHolder.currentUrl
+                    val isFromRecentStore = videoUrl == RecentVideoUrlStore.get(windowId)
+
+                    val urlIsFresh = videoUrl.isNotBlank() &&
+                            videoUrl.startsWith("http") &&
+                            videoUrl != currentPlaying
+
+                    val urlBelongsToPage = if (isFromRecentStore) {
+                        try {
+                            val pageHost = webViewRef.url?.toUri()?.host ?: ""
+                            val videoHost = videoUrl.toUri().host ?: ""
+                            pageHost.isNotBlank() && videoHost.isNotBlank() &&
+                                    (videoHost == pageHost ||
+                                            videoHost.endsWith("." + pageHost.substringAfter(".")))
+                        } catch (_: Exception) { false }
+                    } else true
+
+                    val canHandoff = urlIsFresh && urlBelongsToPage
+
+                    if (canHandoff) {
+                        webViewRef.evaluateJavascript(
+                            "(function(){try{var v=document.querySelector('video');" +
+                                    "if(v)v.pause();}catch(e){}})()",
+                            null
+                        )
+
+                        MainActivity.suppressOrientationRestore = true
+                        externalOnShowCustomView(view, callback)
+                        webViewRef.post {
+                            try { onHideCustomView() } catch (_: Exception) {}
+                            MainActivity.suppressOrientationRestore = false
+                            try {
+                                NativePlayerActivity.start(
+                                    context = context,
+                                    url = videoUrl,
+                                    title = webViewRef.title?.ifBlank { "视频播放" } ?: "视频播放",
+                                    fromWeb = true,
+                                    startPositionMs = startPositionMs,
+                                    referer = webViewRef.url ?: "",
+                                )
+                            } catch (_: Exception) {}
+                        }
+                    } else {
+                        externalOnShowCustomView(view, callback)
+                        (context as? Activity)?.let { act ->
+                            act.requestedOrientation =
+                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        }
+                    }
+                }
+            }
+
+            override fun onHideCustomView() {
+                if (!MainActivity.suppressOrientationRestore) {
+                    (context as? Activity)?.let { act ->
+                        act.requestedOrientation =
+                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        WindowCompat.getInsetsController(act.window, act.window.decorView)
+                            .show(WindowInsetsCompat.Type.systemBars())
+                    }
+                }
+                MainActivity.suppressOrientationRestore = false
+                onHideCustomView()
+            }
+
+            override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
+                super.onReceivedIcon(view, icon)
+                icon ?: return
+                val url = view?.url ?: return
+                val host = url.toUri().host ?: return
+                if (icon.width <= 2 && icon.height <= 2) return
+                onFaviconReceived(host, icon)
+            }
+
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                super.onProgressChanged(view, newProgress)
+                onProgressChanged(newProgress)
+            }
+
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message?
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                val parent = view.parent as? ViewGroup ?: return false
+                val popup = WebView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(1, 1)
+                    alpha = 0f
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                }
+                var handled = false
+                fun consume(url: String?) {
+                    if (handled || url.isNullOrEmpty() || url == "about:blank") return
+                    handled = true
+                    view.loadUrl(url)
+                    (popup.parent as? ViewGroup)?.removeView(popup)
+                    popup.destroy()
+                }
+                popup.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        v: WebView?, req: WebResourceRequest?
+                    ): Boolean {
+                        consume(req?.url?.toString()); return true
+                    }
+                    override fun onPageStarted(v: WebView?, url: String?, f: Bitmap?) {
+                        super.onPageStarted(v, url, f); consume(url)
+                    }
+                    @SuppressLint("WebViewClientOnReceivedSslError")
+                    override fun onReceivedSslError(
+                        v: WebView, h: SslErrorHandler, e: SslError
+                    ) { try { h.proceed() } catch (_: Exception) {} }
+                }
+                parent.addView(popup)
+                transport.webView = popup
+                resultMsg.sendToTarget()
+                return true
+            }
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>?,
+                fileChooserParams: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback.value?.onReceiveValue(null)
+                fileChooserCallback.value = filePathCallback
+                val intent = try { fileChooserParams?.createIntent() } catch (_: Exception) { null }
+                    ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE)
+                    }
+                return try {
+                    fileChooserLauncher.launch(intent); true
+                } catch (_: Exception) {
+                    fileChooserCallback.value = null
+                    filePathCallback?.onReceiveValue(null); false
+                }
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                if (request == null) return
+                val resources = request.resources
+                val needed = mutableListOf<String>()
+                for (r in resources) {
+                    when (r) {
+                        PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
+                            needed.add(Manifest.permission.CAMERA)
+                        PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
+                            needed.add(Manifest.permission.RECORD_AUDIO)
+                    }
+                }
+                val granted = needed.all {
+                    ContextCompat.checkSelfPermission(context, it) ==
+                            PackageManager.PERMISSION_GRANTED
+                }
+                when {
+                    granted -> request.grant(resources)
+                    needed.isNotEmpty() -> {
+                        pendingPermission.value = request
+                        permissionLauncher.launch(needed.toTypedArray())
+                    }
+                    else -> request.grant(resources)
+                }
+            }
+
+            override fun onJsAlert(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                result: JsResult?
+            ): Boolean {
+                if (result == null) return false
+                post {
+                    PendingJsDialogStore.pending = PendingJsDialog(
+                        message = message ?: "",
+                        type = JsDialogType.ALERT,
+                        confirm = { result.confirm() },
+                        cancel = { result.cancel() }
+                    )
+                }
+                return true
+            }
+
+            override fun onJsConfirm(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                result: JsResult?
+            ): Boolean {
+                if (result == null) return false
+                post {
+                    PendingJsDialogStore.pending = PendingJsDialog(
+                        message = message ?: "",
+                        type = JsDialogType.CONFIRM,
+                        confirm = { result.confirm() },
+                        cancel = { result.cancel() }
+                    )
+                }
+                return true
+            }
+
+            override fun onJsPrompt(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                defaultValue: String?,
+                result: JsPromptResult?
+            ): Boolean {
+                if (result == null) return false
+                post {
+                    PendingJsDialogStore.pending = PendingJsDialog(
+                        message = message ?: "",
+                        type = JsDialogType.PROMPT,
+                        defaultValue = defaultValue ?: "",
+                        confirm = { input -> result.confirm(input) },
+                        cancel = { result.cancel() }
+                    )
+                }
+                return true
+            }
+        }
+
+        setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
+            onDownloadRequest(
+                PendingDownload(
+                    url = url,
+                    userAgent = userAgent,
+                    contentDisposition = contentDisposition,
+                    mimetype = mimetype,
+                    fileName = fileName
+                )
+            )
+        }
+
+        onWebViewCreated(this)
+        MainActivity.webViewRef = WeakReference(this)
+    }
+}
+
+// ============================================================
+// 网页安全中心 - 菜单内容
+// ============================================================
+
+@Composable
+private fun SecurityMenuContent(
+    info: SecurityInfo,
+    onOpenCertDetail: () -> Unit,
+    onOpenCookies: () -> Unit,
+    onToggleBlockAds: (Boolean) -> Unit,
+    onToggleTrackingProtection: (Boolean) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+    ) {
+        ArrowPreference(
+            title = when {
+                info.hasSslError -> "连接危险"
+                info.isHttps && info.isCertExpired -> "连接有风险"
+                info.isHttps -> "连接安全"
+                else -> "连接未加密"
+            },
+            summary = when {
+                info.hasSslError -> "${info.host} | ${info.sslErrorText ?: "证书验证失败"}"
+                info.isHttps && info.isCertExpired -> "${info.host} | 证书已过期"
+                info.isHttps -> "${info.host} | 已建立加密连接"
+                else -> "${info.host} | 此网站未使用 HTTPS 加密"
+            },
+            onClick = onOpenCertDetail,
+        )
+
+        ArrowPreference(
+            title = "Cookie 和网站数据",
+            onClick = onOpenCookies,
+        )
+
+        SwitchPreference(
+            title = "拦截广告",
+            summary = if (info.blockedAds > 0) {
+                "已拦截 ${info.blockedAds} 个广告"
+            } else {
+                "阻止网页中的广告请求"
+            },
+            checked = info.effectiveBlockAdsEnabled,
+            onCheckedChange = onToggleBlockAds,
+        )
+
+        SwitchPreference(
+            title = "此网站的跟踪防护",
+            summary = if (info.blockedTrackers > 0) {
+                "已拦截 ${info.blockedTrackers} 个跟踪器"
+            } else {
+                "限制跟踪器跨站收集浏览数据"
+            },
+            checked = info.effectiveTrackingProtectionEnabled,
+            onCheckedChange = onToggleTrackingProtection,
+        )
+    }
+}
+
+@Composable
+private fun CertDetailContent(
+    info: SecurityInfo,
+    onBack: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onBack)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = MiuixIcons.ChevronBackward,
+                contentDescription = "返回",
+                tint = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = "证书详情",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CertInfoRow(label = "颁发给", value = info.certSubject.ifBlank { "未知" })
+            CertInfoRow(label = "颁发者", value = info.certIssuer.ifBlank { "未知" })
+            CertInfoRow(label = "生效时间", value = info.certValidFrom.ifBlank { "未知" })
+            CertInfoRow(
+                label = "过期时间",
+                value = info.certValidTo.ifBlank { "未知" },
+                valueColor = if (info.isCertExpired) Color(0xFFFF3B30)
+                else MiuixTheme.colorScheme.onSurface,
+            )
+            CertInfoRow(
+                label = "证书状态",
+                value = if (info.isCertExpired) "已过期" else "有效",
+                valueColor = if (info.isCertExpired) Color(0xFFFF3B30)
+                else Color(0xFF34C759),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CookieDetailContent(
+    info: SecurityInfo,
+    onBack: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val host = info.host
+
+    val cookieCount = remember(host, info.isHttps) {
+        if (host.isBlank()) return@remember 0
+        try {
+            val scheme = if (info.isHttps) "https" else "http"
+            val raw = CookieManager.getInstance().getCookie("$scheme://$host")
+            if (raw.isNullOrBlank()) 0
+            else raw.split(";").count { it.isNotBlank() }
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onBack)
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = MiuixIcons.ChevronBackward,
+                contentDescription = "返回",
+                tint = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = "Cookie 和网站数据",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        ) {
+            Column {
+                Text(
+                    text = "Cookie 和其他站点数据用于记住你，例如帮助你登录或设置个性化广告。若要管理所有站点的 Cookie，请参阅设置。",
+                    fontSize = 13.sp,
+                    lineHeight = 20.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "设置",
+                    fontSize = 13.sp,
+                    color = Color(0xFF3B82F6),
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    modifier = Modifier
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { onOpenSettings() })
+                        },
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        ) {
+            Text(
+                text = if (cookieCount > 0) "正在使用 $cookieCount 个 Cookie"
+                else "暂未使用 Cookie",
+                fontSize = 14.sp,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BlockedStatItem(
+    label: String,
+    count: Int,
+    color: Color,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = "$label $count",
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+    }
+}
+
+@Composable
+private fun CertInfoRow(
+    label: String,
+    value: String,
+    valueColor: Color = MiuixTheme.colorScheme.onSurface,
+) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = DialogDefaults.summaryColor(),
+            modifier = Modifier.width(76.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = value,
+            fontSize = 14.sp,
+            color = valueColor,
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 // ============================================================
@@ -6867,6 +10724,137 @@ private fun guessExtFromUrl(url: String): String {
     }
 }
 
+// ============================================================
+// ★ 新增：MIME ↔ 扩展名映射（修复 bin 扩展名问题）
+// ============================================================
+
+private val MIME_TO_EXT: Map<String, String> = mapOf(
+    "image/jpeg" to ".jpg",
+    "image/jpg" to ".jpg",
+    "image/pjpeg" to ".jpg",
+    "image/png" to ".png",
+    "image/gif" to ".gif",
+    "image/webp" to ".webp",
+    "image/bmp" to ".bmp",
+    "image/x-ms-bmp" to ".bmp",
+    "image/svg+xml" to ".svg",
+    "image/x-icon" to ".ico",
+    "image/vnd.microsoft.icon" to ".ico",
+    "image/tiff" to ".tiff",
+    "image/avif" to ".avif",
+    "image/heic" to ".heic",
+    "image/heif" to ".heif",
+    "image/apng" to ".apng",
+    "video/mp4" to ".mp4",
+    "video/webm" to ".webm",
+    "video/x-matroska" to ".mkv",
+    "video/quicktime" to ".mov",
+    "video/x-msvideo" to ".avi",
+    "video/x-flv" to ".flv",
+    "video/mpeg" to ".mpeg",
+    "audio/mpeg" to ".mp3",
+    "audio/mp4" to ".m4a",
+    "audio/wav" to ".wav",
+    "audio/x-wav" to ".wav",
+    "audio/ogg" to ".ogg",
+    "audio/flac" to ".flac",
+    "audio/aac" to ".aac",
+    "audio/opus" to ".opus",
+    "application/pdf" to ".pdf",
+    "application/zip" to ".zip",
+    "application/x-rar-compressed" to ".rar",
+    "application/x-7z-compressed" to ".7z",
+    "application/vnd.android.package-archive" to ".apk",
+)
+
+private fun extFromMime(mime: String?): String {
+    if (mime.isNullOrBlank()) return ""
+    return MIME_TO_EXT[mime.substringBefore(';').trim().lowercase()] ?: ""
+}
+
+/**
+ * 探测远程 URL 的 MIME 类型（HEAD 优先，失败走 GET 只读响应头）。
+ */
+private fun probeMimeType(
+    url: String,
+    userAgent: String = FALLBACK_MOBILE_UA,
+    referer: String = "",
+): String? {
+    fun tryMethod(method: String): String? {
+        return try {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            conn.instanceFollowRedirects = true
+            conn.requestMethod = method
+            conn.setRequestProperty("User-Agent", userAgent)
+            if (referer.isNotBlank()) {
+                conn.setRequestProperty("Referer", referer)
+            }
+            try {
+                val cookies = CookieManager.getInstance().getCookie(url)
+                if (!cookies.isNullOrBlank()) {
+                    conn.setRequestProperty("Cookie", cookies)
+                }
+            } catch (_: Exception) {}
+            conn.connect()
+            if (conn.responseCode in 200..299) {
+                val ct = conn.contentType
+                conn.disconnect()
+                if (!ct.isNullOrBlank() && !ct.startsWith("text/")) {
+                    ct.substringBefore(';').trim().lowercase()
+                } else null
+            } else {
+                conn.disconnect()
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+    return tryMethod("HEAD") ?: tryMethod("GET")
+}
+
+/**
+ * 下载远程字节 + 返回 Content-Type。
+ */
+private fun downloadImageWithMime(
+    imageUrl: String,
+    referer: String,
+): Pair<ByteArray, String?>? {
+    return try {
+        val conn = URL(imageUrl).openConnection() as HttpURLConnection
+        conn.connectTimeout = 8000
+        conn.readTimeout = 12000
+        conn.instanceFollowRedirects = true
+        conn.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+        )
+        if (referer.isNotBlank()) {
+            conn.setRequestProperty("Referer", referer)
+        }
+        try {
+            val cookies = CookieManager.getInstance().getCookie(imageUrl)
+            if (!cookies.isNullOrBlank()) {
+                conn.setRequestProperty("Cookie", cookies)
+            }
+        } catch (_: Exception) {}
+        conn.connect()
+        if (conn.responseCode !in 200..299) {
+            conn.disconnect()
+            return null
+        }
+        val ct = conn.contentType?.substringBefore(';')?.trim()?.lowercase()
+        val bytes = conn.inputStream.use { it.readBytes() }
+        conn.disconnect()
+        if (bytes.isEmpty()) null else bytes to ct
+    } catch (_: Exception) {
+        null
+    }
+}
+
 private fun guessMimeFromUrl(url: String): String? {
     val lower = url.lowercase()
     return when {
@@ -6922,7 +10910,6 @@ private fun SniffSheet(
         }
     }
 
-    // ★ 需求 3：过滤不重要资源
     val importantResources = remember(resources, showAllResources) {
         if (showAllResources) resources
         else resources.filter { isImportantResource(it) }
@@ -6960,7 +10947,6 @@ private fun SniffSheet(
                     }
                 },
             ),
-            // ★ 需求 3：显示所有资源开关
             DropdownEntry(
                 items = listOf(
                     DropdownItem(
@@ -6979,9 +10965,6 @@ private fun SniffSheet(
         title = "资源嗅探",
         backgroundColor = MiuixTheme.colorScheme.surface,
         allowDismiss = true,
-
-        // ★ 需求 3：删除刷新按钮
-
         endAction = {
             WindowIconCascadingDropdownMenu(entries = filterEntries) {
                 Icon(
@@ -7092,15 +11075,26 @@ private fun SniffSheet(
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Box(
-                                            modifier = Modifier.size(32.dp),
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(MiuixTheme.colorScheme.secondaryContainer),
                                             contentAlignment = Alignment.Center,
                                         ) {
-                                            Icon(
-                                                imageVector = sniffIconFor(cat),
-                                                contentDescription = null,
-                                                tint = MiuixTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(22.dp),
-                                            )
+                                            if (cat == SniffCategory.IMAGE || (cat == SniffCategory.VIDEO && (res.url.contains(".mp4") || res.url.contains(".webm")))) {
+                                                SniffThumbnail(
+                                                    url = res.url,
+                                                    fallbackIcon = sniffIconFor(cat),
+                                                    category = cat
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = sniffIconFor(cat),
+                                                    contentDescription = null,
+                                                    tint = MiuixTheme.colorScheme.onSurface,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
                                         }
 
                                         Spacer(Modifier.width(12.dp))
@@ -7146,7 +11140,6 @@ private fun SniffSheet(
     }
 }
 
-// ★ 需求 3：判断资源是否"重要"
 private fun isImportantResource(res: SniffedResource): Boolean {
     val url = res.url.lowercase()
     val clean = url.substringBefore('#').substringBefore('?')
@@ -7159,20 +11152,19 @@ private fun isImportantResource(res: SniffedResource): Boolean {
                 "sprite", "button_", "button-", "/btn", "/bg_", "/bg-",
                 "loading", "/ad_", "/ad-", "/ads/", "/advert",
                 "avatar_default", "default_avatar", "placeholder",
-                "transparent", "blank.gif", "spacer", "pixel.gif",
-                "tracking", "/stat", "/count", "/analytics", "beacon"
+                "transparent", "blank.gif", "spacer", "pixel.gif", "pixel.png",
+                "tracking", "/stat", "/count", "/analytics", "beacon", "/ping", "/log",
+                "1x1", "0x0", "base64"
             )
             if (blacklist.any { clean.contains(it) }) return false
-            if (clean.contains("1x1") || clean.contains("0x0")) return false
             true
         }
         SniffCategory.FILE -> {
-            if (clean.endsWith(".js") || clean.endsWith(".css") ||
-                clean.endsWith(".map") || clean.endsWith(".json") ||
-                clean.endsWith(".woff") || clean.endsWith(".woff2") ||
-                clean.endsWith(".ttf") || clean.endsWith(".otf") ||
-                clean.endsWith(".eot")
-            ) return false
+            val blacklist = listOf(
+                ".js", ".css", ".map", ".json", ".woff", ".woff2", ".ttf", ".otf", ".eot",
+                ".php", ".asp", ".aspx", ".jsp", ".cgi", ".do", ".action"
+            )
+            if (blacklist.any { clean.endsWith(it) }) return false
             true
         }
         SniffCategory.OTHER -> false
@@ -7187,6 +11179,103 @@ private fun sniffIconFor(category: SniffCategory): ImageVector = when (category)
     SniffCategory.OTHER -> MiuixIcons.File
 }
 
+@Composable
+private fun TtsBar(
+    show: Boolean,
+    isPlaying: Boolean,
+    currentIndex: Int,
+    totalCount: Int,
+    currentText: String,
+    onPlayPause: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+) {
+    AnimatedVisibility(
+        visible = show,
+        enter = expandVertically(
+            animationSpec = tween(220),
+            expandFrom = Alignment.Bottom,
+        ) + fadeIn(tween(160)),
+        exit = shrinkVertically(
+            animationSpec = tween(200),
+            shrinkTowards = Alignment.Bottom,
+        ) + fadeOut(tween(120)),
+    ) {
+        Surface(
+            color = MiuixTheme.colorScheme.surface,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                if (currentText.isNotBlank()) {
+                    Text(
+                        text = currentText,
+                        fontSize = 14.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MiuixCircleIconButton(onClick = onPrev, size = 32.dp) {
+                        Icon(
+                            imageVector = MiuixIcons.ChevronBackward,
+                            contentDescription = "上一段",
+                            tint = if (currentIndex > 0) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    MiuixCircleIconButton(onClick = onPlayPause, size = 36.dp) {
+                        Icon(
+                            imageVector = if (isPlaying) MiuixIcons.Pause else MiuixIcons.Play,
+                            contentDescription = if (isPlaying) "暂停" else "继续",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    MiuixCircleIconButton(onClick = onNext, size = 32.dp) {
+                        Icon(
+                            imageVector = MiuixIcons.ChevronForward,
+                            contentDescription = "下一段",
+                            tint = if (currentIndex < totalCount - 1) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    Text(
+                        text = "${currentIndex + 1} / $totalCount",
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+
+                    Spacer(Modifier.weight(1f))
+
+                    MiuixCircleIconButton(onClick = onClose, size = 32.dp) {
+                        Icon(
+                            imageVector = MiuixIcons.Close,
+                            contentDescription = "关闭朗读",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable
 private fun FindInPageBar(
     show: Boolean,
@@ -7665,6 +11754,9 @@ private fun MultiSelectBottomBar(
     }
 }
 
+private enum class HistoryFilter { ALL, LAST_7_DAYS, LAST_30_DAYS }
+private enum class HistorySort { OLDEST_FIRST, NEWEST_FIRST }
+
 @Composable
 private fun HistorySheet(
     show: Boolean,
@@ -7674,19 +11766,124 @@ private fun HistorySheet(
     onEnterMultiSelect: (String) -> Unit,
     onToggleSelect: (String) -> Unit,
     onCancelMultiSelect: () -> Unit,
-    onToggleSelectAll: () -> Unit,
+    onToggleSelectAllFiltered: (List<String>) -> Unit,
     onDeleteSelected: () -> Unit,
     onOpenUrl: (String) -> Unit,
-    onDelete: (String) -> Unit,
-    onClearAll: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+
+
+
+    var filter by remember { mutableStateOf(HistoryFilter.ALL) }
+    var sort by remember { mutableStateOf(HistorySort.NEWEST_FIRST) }
+
+    LaunchedEffect(show) {
+        if (show) {
+            filter = HistoryFilter.ALL
+            sort = HistorySort.NEWEST_FIRST
+        }
+    }
+
+    val filteredSorted = remember(history.toList(), filter, sort) {
+        val now = System.currentTimeMillis()
+        val filtered = when (filter) {
+            HistoryFilter.ALL -> history.toList()
+            HistoryFilter.LAST_7_DAYS -> history.filter {
+                now - it.timestamp <= 7L * 24 * 3600 * 1000
+            }
+            HistoryFilter.LAST_30_DAYS -> history.filter {
+                now - it.timestamp <= 30L * 24 * 3600 * 1000
+            }
+        }
+        when (sort) {
+            HistorySort.NEWEST_FIRST -> filtered.sortedByDescending { it.timestamp }
+            HistorySort.OLDEST_FIRST -> filtered.sortedBy { it.timestamp }
+        }
+    }
+
+    val grouped = remember(filteredSorted) {
+        val map = LinkedHashMap<String, MutableList<HistoryEntry>>()
+        filteredSorted.forEach { entry ->
+            val key = getHistoryDayLabel(entry.timestamp)
+            map.getOrPut(key) { mutableListOf() }.add(entry)
+        }
+        map
+    }
+
+    val filteredUrls = remember(filteredSorted) {
+        filteredSorted.map { it.url }
+    }
+
+    val filterEntries = remember(filter, sort) {
+        listOf(
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(
+                        text = "全部",
+                        selected = filter == HistoryFilter.ALL,
+                        onClick = { filter = HistoryFilter.ALL },
+                    ),
+                    DropdownItem(
+                        text = "近7日",
+                        selected = filter == HistoryFilter.LAST_7_DAYS,
+                        onClick = { filter = HistoryFilter.LAST_7_DAYS },
+                    ),
+                    DropdownItem(
+                        text = "近30日",
+                        selected = filter == HistoryFilter.LAST_30_DAYS,
+                        onClick = { filter = HistoryFilter.LAST_30_DAYS },
+                    ),
+                ),
+            ),
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(
+                        text = "从晚到早",
+                        selected = sort == HistorySort.NEWEST_FIRST,
+                        onClick = { sort = HistorySort.NEWEST_FIRST },
+                    ),
+                    DropdownItem(
+                        text = "从早到晚",
+                        selected = sort == HistorySort.OLDEST_FIRST,
+                        onClick = { sort = HistorySort.OLDEST_FIRST },
+                    ),
+                ),
+            ),
+        )
+    }
+
+    val allSelected = filteredUrls.isNotEmpty() && selectedUrls.size == filteredUrls.size
+
     WindowBottomSheet(
         show = show,
         onDismissRequest = onDismiss,
-        title = "历史记录",
+        title = if (multiSelect) {
+            if (selectedUrls.isEmpty()) "请选择项目" else "已选择 ${selectedUrls.size} 项"
+        } else {
+            "历史记录"
+        },
         backgroundColor = MiuixTheme.colorScheme.surface,
         allowDismiss = !multiSelect,
+
+        startAction = {
+            if (multiSelect) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 54.dp, height = 36.dp)
+                        .clip(CircleShape)
+                        .clickable { onCancelMultiSelect() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Close,
+                        contentDescription = "退出多选",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+        },
 
         endAction = {
             Crossfade(
@@ -7699,29 +11896,27 @@ private fun HistorySheet(
                         modifier = Modifier
                             .size(width = 54.dp, height = 36.dp)
                             .clip(CircleShape)
-                            .clickable { onCancelMultiSelect() },
+                            .clickable { onToggleSelectAllFiltered(filteredUrls) },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = MiuixIcons.Close,
-                            contentDescription = "退出多选",
-                            tint = MiuixTheme.colorScheme.onSurface,
+                            imageVector = MiuixIcons.SelectAll,
+                            contentDescription = if (allSelected) "取消全选" else "全选",
+                            tint = if (allSelected) MiuixTheme.colorScheme.primary
+                            else MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp),
                         )
                     }
                 } else {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 54.dp, height = 36.dp)
-                            .clip(CircleShape)
-                            .clickable { if (history.isNotEmpty()) onClearAll() },
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    WindowIconCascadingDropdownMenu(entries = filterEntries) {
                         Icon(
-                            imageVector = MiuixIcons.Delete,
-                            contentDescription = "清空历史记录",
-                            tint = if (history.isNotEmpty()) MiuixTheme.colorScheme.onSurface
-                            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            imageVector = MiuixIcons.Filter,
+                            contentDescription = "筛选",
+                            tint = if (filter != HistoryFilter.ALL || sort != HistorySort.NEWEST_FIRST) {
+                                MiuixTheme.colorScheme.primary
+                            } else {
+                                MiuixTheme.colorScheme.onSurface
+                            },
                             modifier = Modifier.size(24.dp),
                         )
                     }
@@ -7729,178 +11924,102 @@ private fun HistorySheet(
             }
         },
     ) {
-        val bottomPadding by animateDpAsState(
-            targetValue = if (multiSelect) 0.dp else TOOL_SHEET_NON_EDIT_BOTTOM,
-            animationSpec = tween(durationMillis = 260),
-            label = "historyBottomPadding",
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(durationMillis = 260))
-                .padding(bottom = bottomPadding),
-        ) {
-            Card(
+        PredictiveBackHandler(enabled = true) { progress ->
+            try {
+                progress.collect { }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                return@PredictiveBackHandler
+            }
+            if (multiSelect) {
+                onCancelMultiSelect()
+            } else {
+                onDismiss()
+            }
+        }
+        val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val normalBottomPadding = if (navBarBottom > 12.dp) navBarBottom else 12.dp
+
+        Box(modifier = Modifier.fillMaxWidth()) {
+            val bottomPadding by animateDpAsState(
+                targetValue = if (multiSelect) 80.dp + navBarBottom else normalBottomPadding,
+                animationSpec = tween(durationMillis = 260),
+                label = "historyBottomPadding",
+            )
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp),
+                    .animateContentSize(animationSpec = tween(durationMillis = 260))
+                    .padding(bottom = bottomPadding),
             ) {
-                if (history.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 40.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "暂无历史记录",
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                    }
-                } else {
-                    val grouped = remember(history.toList()) {
-                        val map = LinkedHashMap<String, MutableList<HistoryEntry>>()
-                        history.forEach { entry ->
-                            val key = getHistoryDayLabel(entry.timestamp)
-                            map.getOrPut(key) { mutableListOf() }.add(entry)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                ) {
+                    if (filteredSorted.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "暂无历史记录",
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
                         }
-                        map
-                    }
-
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 480.dp),
-                    ) {
-                        grouped.forEach { (dayLabel, entries) ->
-                            item(key = "h_day_$dayLabel") {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            start = 16.dp,
-                                            end = 16.dp,
-                                            top = 12.dp,
-                                            bottom = 4.dp,
-                                        ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = dayLabel,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = "(${entries.size})",
-                                        fontSize = 12.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
-                                }
-                            }
-
-                            items(
-                                count = entries.size,
-                                key = { idx -> "h_${entries[idx].url}_${entries[idx].timestamp}" },
-                            ) { idx ->
-                                val entry = entries[idx]
-                                val isSelected = entry.url in selectedUrls
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .animateItem()
-                                        .combinedClickable(
-                                            onClick = {
-                                                if (multiSelect) {
-                                                    onToggleSelect(entry.url)
-                                                } else {
-                                                    onOpenUrl(entry.url)
-                                                }
-                                            },
-                                            onLongClick = {
-                                                if (!multiSelect) {
-                                                    onEnterMultiSelect(entry.url)
-                                                }
-                                            },
-                                        )
-                                        .background(
-                                            if (isSelected)
-                                                MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
-                                            else Color.Transparent
-                                        )
-                                        .padding(
-                                            start = 16.dp,
-                                            end = 16.dp,
-                                            top = 10.dp,
-                                            bottom = 10.dp,
-                                        ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    if (multiSelect) {
-                                        Checkbox(
-                                            state = if (isSelected) ToggleableState.On
-                                            else ToggleableState.Off,
-                                            onClick = { onToggleSelect(entry.url) },
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                    } else {
-                                        Box(
-                                            modifier = Modifier.size(32.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Recent,
-                                                contentDescription = null,
-                                                tint = MiuixTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(22.dp),
-                                            )
-                                        }
-                                        Spacer(Modifier.width(12.dp))
-                                    }
-
-                                    Column(modifier = Modifier.weight(1f)) {
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            grouped.forEach { (dayLabel, entries) ->
+                                item(key = "h_day_$dayLabel") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                start = 16.dp,
+                                                end = 16.dp,
+                                                top = 12.dp,
+                                                bottom = 4.dp,
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
                                         Text(
-                                            text = entry.title.ifBlank { "无标题" },
-                                            fontSize = 15.sp,
-                                            color = MiuixTheme.colorScheme.onSurface,
-                                            maxLines = 1,
+                                            text = dayLabel,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
-                                        Spacer(Modifier.height(2.dp))
+                                        Spacer(Modifier.width(6.dp))
                                         Text(
-                                            text = entry.url,
+                                            text = "(${entries.size})",
                                             fontSize = 12.sp,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                            maxLines = 1,
                                         )
                                     }
+                                }
 
-                                    Spacer(Modifier.width(8.dp))
-
-                                    Text(
-                                        text = formatHistoryTime(entry.timestamp),
-                                        fontSize = 12.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                items(
+                                    count = entries.size,
+                                    key = { idx -> "h_${entries[idx].url}_${entries[idx].timestamp}" },
+                                ) { idx ->
+                                    val entry = entries[idx]
+                                    val isSelected = entry.url in selectedUrls
+                                    HistoryRow(
+                                        modifier = Modifier.animateItem(),
+                                        entry = entry,
+                                        multiSelect = multiSelect,
+                                        isSelected = isSelected,
+                                        onClick = {
+                                            if (multiSelect) onToggleSelect(entry.url)
+                                            else onOpenUrl(entry.url)
+                                        },
+                                        onLongClick = {
+                                            if (!multiSelect) onEnterMultiSelect(entry.url)
+                                        },
                                     )
-
-                                    if (!multiSelect) {
-                                        Spacer(Modifier.width(8.dp))
-                                        Box(
-                                            modifier = Modifier
-                                                .size(32.dp)
-                                                .clip(CircleShape)
-                                                .clickable { onDelete(entry.url) },
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Close,
-                                                contentDescription = "删除该条",
-                                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -7910,28 +12029,200 @@ private fun HistorySheet(
 
             AnimatedVisibility(
                 visible = multiSelect,
-                enter = expandVertically(
-                    animationSpec = tween(260),
-                    expandFrom = Alignment.Top,
-                ) + fadeIn(animationSpec = tween(200)),
-                exit = shrinkVertically(
-                    animationSpec = tween(260),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(animationSpec = tween(140)),
+                enter = slideInVertically(
+                    animationSpec = tween(220),
+                    initialOffsetY = { it + 40 },
+                ) + fadeIn(tween(180)),
+                exit = slideOutVertically(
+                    animationSpec = tween(200),
+                    targetOffsetY = { it + 40 },
+                ) + fadeOut(tween(150)),
+                modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                MultiSelectBottomBar(
-                    selectedCount = selectedUrls.size,
-                    totalCount = history.size,
-                    onToggleAll = onToggleSelectAll,
-                    onDelete = {
-                        if (selectedUrls.isNotEmpty()) onDeleteSelected()
-                    },
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = navBarBottom + 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .height(56.dp)
+                            .graphicsLayer {
+                                shape = RoundedCornerShape(28.dp)
+                                shadowElevation = 24.dp.toPx()
+                                ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                                spotShadowColor = Color.Transparent
+                            }
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(
+                                color = MiuixTheme.colorScheme.surfaceContainer,
+                                shape = RoundedCornerShape(28.dp),
+                            )
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = {
+                            val selectedEntries = history.filter { it.url in selectedUrls }
+                            if (selectedEntries.isNotEmpty()) {
+                                val text = selectedEntries.joinToString("\n") {
+                                    "【${it.title.ifBlank { "无标题" }}】${it.url}"
+                                }
+                                try {
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, text)
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(
+                                        Intent.createChooser(send, "分享网页").apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }) {
+                            Icon(
+                                imageVector = MiuixIcons.Share,
+                                contentDescription = "分享",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        IconButton(onClick = {
+                            if (selectedUrls.isNotEmpty()) onDeleteSelected()
+                        }) {
+                            Icon(
+                                imageVector = MiuixIcons.Delete,
+                                contentDescription = "删除",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+@Composable
+private fun HistoryRow(
+    modifier: Modifier = Modifier,
+    entry: HistoryEntry,
+    multiSelect: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    val host = remember(entry.url) {
+        try {
+            Uri.parse(entry.url).host ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    var favicon by remember(host) {
+        mutableStateOf(if (host.isNotBlank()) FaviconStore.get(context, host) else null)
+    }
+    LaunchedEffect(host) {
+        if (host.isNotBlank() && favicon == null) {
+            favicon = FaviconStore.fetchFromHost(context, host)
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .background(
+                if (isSelected) MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
+                else Color.Transparent
+            )
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 10.dp,
+                bottom = 10.dp,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (favicon != null) {
+                Image(
+                    bitmap = favicon!!.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    imageVector = MiuixIcons.Recent,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = entry.title.ifBlank { "无标题" },
+                fontSize = 15.sp,
+                color = MiuixTheme.colorScheme.onSurface,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = entry.url,
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        Text(
+            text = formatHistoryTime(entry.timestamp),
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+
+        AnimatedVisibility(
+            visible = multiSelect,
+            enter = fadeIn(tween(160)) + expandHorizontally(
+                animationSpec = tween(220),
+                expandFrom = Alignment.End,
+            ),
+            exit = fadeOut(tween(140)) + shrinkHorizontally(
+                animationSpec = tween(200),
+                shrinkTowards = Alignment.End,
+            ),
+        ) {
+            Box(modifier = Modifier.padding(start = 8.dp)) {
+                Checkbox(
+                    state = if (isSelected) ToggleableState.On else ToggleableState.Off,
+                    onClick = { onClick() },
+                )
+            }
+        }
+    }
+}
 // ============================================================
 // 书签列表
 // ============================================================
@@ -8015,20 +12306,21 @@ private fun BookmarkSheet(
     currentItems: List<BookmarkItem>,
     multiSelect: Boolean,
     selectedIds: List<String>,
+    isNewTabPage: Boolean,
     onEnterMultiSelect: (String) -> Unit,
     onToggleSelect: (String) -> Unit,
     onCancelMultiSelect: () -> Unit,
-    onToggleSelectAll: () -> Unit,
+    onToggleSelectAllFiltered: (List<String>) -> Unit,
     onDeleteSelected: () -> Unit,
+    onShareSelected: (List<String>) -> Unit,
     onAddBookmark: () -> Unit,
     onAddFolder: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onEnterFolder: (BookmarkItem) -> Unit,
     onNavigateToBreadcrumb: (Int) -> Unit,
-    onDelete: (BookmarkItem) -> Unit,
-    onClearAll: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     val breadcrumbItems = remember(bookmarks.toList(), folderPath.size) {
         buildList {
             add(BreadcrumbItem(path = "root", text = "根目录"))
@@ -8044,32 +12336,74 @@ private fun BookmarkSheet(
         folderId = folderPath.lastOrNull()?.id,
     )
 
+    val selectableItems = currentItems.filter { !it.isFolder }
+    val selectableIds = selectableItems.map { it.id }
+    val allSelected = selectableIds.isNotEmpty() && selectedIds.containsAll(selectableIds)
+
     WindowBottomSheet(
         show = show,
         onDismissRequest = onDismiss,
-        title = "书签列表",
+        title = if (multiSelect) {
+            if (selectedIds.isEmpty()) "请选择项目" else "已选择 ${selectedIds.size} 项"
+        } else {
+            "书签列表"
+        },
         backgroundColor = MiuixTheme.colorScheme.surface,
-        allowDismiss = !multiSelect,
+        allowDismiss = !multiSelect && folderPath.isEmpty(),
 
         startAction = {
+            if (multiSelect) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 54.dp, height = 36.dp)
+                        .clip(CircleShape)
+                        .clickable { onCancelMultiSelect() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Close,
+                        contentDescription = "退出多选",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+        },
+
+        endAction = {
             Crossfade(
                 targetState = multiSelect,
                 animationSpec = tween(220),
-                label = "bookmarkStartAction",
+                label = "bookmarkEndAction",
             ) { isMulti ->
-                if (!isMulti) {
+                if (isMulti) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 54.dp, height = 36.dp)
+                            .clip(CircleShape)
+                            .clickable { onToggleSelectAllFiltered(selectableIds) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.SelectAll,
+                            contentDescription = if (allSelected) "取消全选" else "全选",
+                            tint = if (allSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(width = 44.dp, height = 36.dp)
                                 .clip(CircleShape)
-                                .clickable { onAddBookmark() },
+                                .clickable(enabled = !isNewTabPage) { onAddBookmark() },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = MiuixIcons.Favorites,
                                 contentDescription = "添加书签",
-                                tint = MiuixTheme.colorScheme.onSurface,
+                                tint = if (!isNewTabPage) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                 modifier = Modifier.size(22.dp),
                             )
                         }
@@ -8090,256 +12424,260 @@ private fun BookmarkSheet(
                             }
                         }
                     }
-                } else {
-                    Box(modifier = Modifier.size(width = 54.dp, height = 36.dp))
-                }
-            }
-        },
-
-        endAction = {
-            Crossfade(
-                targetState = multiSelect,
-                animationSpec = tween(220),
-                label = "bookmarkEndAction",
-            ) { isMulti ->
-                if (isMulti) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 54.dp, height = 36.dp)
-                            .clip(CircleShape)
-                            .clickable { onCancelMultiSelect() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Close,
-                            contentDescription = "退出多选",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 54.dp, height = 36.dp)
-                            .clip(CircleShape)
-                            .clickable { if (bookmarks.isNotEmpty()) onClearAll() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.Delete,
-                            contentDescription = "清空书签",
-                            tint = if (bookmarks.isNotEmpty()) MiuixTheme.colorScheme.onSurface
-                            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
                 }
             }
         },
     ) {
-        val bottomPadding by animateDpAsState(
-            targetValue = if (multiSelect) 0.dp else TOOL_SHEET_NON_EDIT_BOTTOM,
-            animationSpec = tween(durationMillis = 260),
-            label = "bookmarkBottomPadding",
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .animateContentSize(animationSpec = tween(durationMillis = 260))
-                .padding(bottom = bottomPadding),
-        ) {
-            if (breadcrumbItems.isNotEmpty()) {
-                BreadcrumbBar(
-                    items = breadcrumbItems,
-                    highlightIndex = highlightIndex,
-                    onItemClick = { index ->
-                        onNavigateToBreadcrumb(index - 1)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                )
+        PredictiveBackHandler(enabled = true) { progress ->
+            try {
+                progress.collect { }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                return@PredictiveBackHandler
             }
+            if (folderPath.isNotEmpty()) {
+                onNavigateToBreadcrumb(folderPath.size - 2)
+            } else if (multiSelect) {
+                onCancelMultiSelect()
+            } else {
+                onDismiss()
+            }
+        }
 
-            AnimatedContent(
-                targetState = currentLevelKey,
-                transitionSpec = {
-                    val isForward = targetState.depth > initialState.depth
-                    val slideSpec = tween<IntOffset>(
-                        durationMillis = 340,
-                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
+        val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val normalBottomPadding = if (navBarBottom > 12.dp) navBarBottom else 12.dp
+
+        Box(modifier = Modifier.fillMaxWidth()) {
+            val bottomPadding by animateDpAsState(
+                targetValue = if (multiSelect) 80.dp + navBarBottom else normalBottomPadding,
+                animationSpec = tween(durationMillis = 260),
+                label = "bookmarkBottomPadding",
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(durationMillis = 260))
+                    .padding(bottom = bottomPadding),
+            ) {
+                if (breadcrumbItems.isNotEmpty()) {
+                    BreadcrumbBar(
+                        items = breadcrumbItems,
+                        highlightIndex = highlightIndex,
+                        onItemClick = { index ->
+                            onNavigateToBreadcrumb(index - 1)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                     )
-                    val fadeSpec = tween<Float>(durationMillis = 220)
-                    if (isForward) {
-                        (
-                                slideInHorizontally(
-                                    animationSpec = slideSpec,
-                                    initialOffsetX = { fullWidth -> fullWidth },
-                                ) + fadeIn(animationSpec = fadeSpec)
-                                ) togetherWith (
-                                slideOutHorizontally(
-                                    animationSpec = slideSpec,
-                                    targetOffsetX = { fullWidth -> -fullWidth / 3 },
-                                ) + fadeOut(animationSpec = fadeSpec)
-                                )
-                    } else {
-                        (
-                                slideInHorizontally(
-                                    animationSpec = slideSpec,
-                                    initialOffsetX = { fullWidth -> -fullWidth / 3 },
-                                ) + fadeIn(animationSpec = fadeSpec)
-                                ) togetherWith (
-                                slideOutHorizontally(
-                                    animationSpec = slideSpec,
-                                    targetOffsetX = { fullWidth -> fullWidth },
-                                ) + fadeOut(animationSpec = fadeSpec)
-                                )
-                    }
-                },
-                label = "bookmarkLevel",
-            ) { levelKey ->
-                val levelItems: List<BookmarkItem> =
-                    if (levelKey.depth == 0 || levelKey.folderId == null) {
-                        bookmarks.toList()
-                    } else {
-                        findBookmarkByIdInList(bookmarks, levelKey.folderId)?.children?.toList()
-                            ?: emptyList()
-                    }
+                }
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                ) {
-                    if (levelItems.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 40.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "暂无书签",
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            )
+                AnimatedContent(
+                    targetState = currentLevelKey,
+                    transitionSpec = {
+                        val isForward = targetState.depth > initialState.depth
+                        val slideSpec = tween<IntOffset>(
+                            durationMillis = 340,
+                            easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
+                        )
+                        val fadeSpec = tween<Float>(durationMillis = 220)
+                        if (isForward) {
+                            (
+                                    slideInHorizontally(
+                                        animationSpec = slideSpec,
+                                        initialOffsetX = { fullWidth -> fullWidth },
+                                    ) + fadeIn(animationSpec = fadeSpec)
+                                    ) togetherWith (
+                                    slideOutHorizontally(
+                                        animationSpec = slideSpec,
+                                        targetOffsetX = { fullWidth -> -fullWidth / 3 },
+                                    ) + fadeOut(animationSpec = fadeSpec)
+                                    )
+                        } else {
+                            (
+                                    slideInHorizontally(
+                                        animationSpec = slideSpec,
+                                        initialOffsetX = { fullWidth -> -fullWidth / 3 },
+                                    ) + fadeIn(animationSpec = fadeSpec)
+                                    ) togetherWith (
+                                    slideOutHorizontally(
+                                        animationSpec = slideSpec,
+                                        targetOffsetX = { fullWidth -> fullWidth },
+                                    ) + fadeOut(animationSpec = fadeSpec)
+                                    )
                         }
-                    } else {
-                        val sortedItems = remember(levelItems) {
-                            val folders = levelItems.filter { it.isFolder }
-                            val files = levelItems.filter { !it.isFolder }
-                            folders + files
+                    },
+                    label = "bookmarkLevel",
+                ) { levelKey ->
+                    val levelItems: List<BookmarkItem> =
+                        if (levelKey.depth == 0 || levelKey.folderId == null) {
+                            bookmarks.toList()
+                        } else {
+                            findBookmarkByIdInList(bookmarks, levelKey.folderId)?.children?.toList()
+                                ?: emptyList()
                         }
 
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 480.dp),
-                        ) {
-                            items(
-                                count = sortedItems.size,
-                                key = { index -> sortedItems[index].id },
-                            ) { index ->
-                                val entry = sortedItems[index]
-                                val isSelected = entry.id in selectedIds
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .animateItem()
-                                        .combinedClickable(
-                                            onClick = {
-                                                if (multiSelect) {
-                                                    onToggleSelect(entry.id)
-                                                } else if (entry.isFolder) {
-                                                    onEnterFolder(entry)
-                                                } else {
-                                                    entry.url?.let { onOpenUrl(it) }
-                                                }
-                                            },
-                                            onLongClick = {
-                                                if (!multiSelect) {
-                                                    onEnterMultiSelect(entry.id)
-                                                }
-                                            },
-                                        )
-                                        .background(
-                                            if (isSelected)
-                                                MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
-                                            else Color.Transparent
-                                        )
-                                        .padding(
-                                            start = 16.dp,
-                                            end = 16.dp,
-                                            top = 10.dp,
-                                            bottom = 10.dp,
-                                        ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    if (multiSelect) {
-                                        Checkbox(
-                                            state = if (isSelected) ToggleableState.On
-                                            else ToggleableState.Off,
-                                            onClick = { onToggleSelect(entry.id) },
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                    } else {
-                                        Box(
-                                            modifier = Modifier.size(32.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Icon(
-                                                imageVector = if (entry.isFolder) {
-                                                    MiuixIcons.Folder
-                                                } else {
-                                                    MiuixIcons.Favorites
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                    ) {
+                        if (levelItems.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 40.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = "暂无书签",
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                )
+                            }
+                        } else {
+                            val sortedItems = remember(levelItems) {
+                                val folders = levelItems.filter { it.isFolder }
+                                val files = levelItems.filter { !it.isFolder }
+                                folders + files
+                            }
+
+                            LazyColumn(
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                items(
+                                    count = sortedItems.size,
+                                    key = { index -> sortedItems[index].id },
+                                ) { index ->
+                                    val entry = sortedItems[index]
+                                    val isSelected = entry.id in selectedIds
+                                    val host = remember(entry.url) {
+                                        try {
+                                            if (entry.url.isNullOrBlank()) "" else Uri.parse(entry.url).host ?: ""
+                                        } catch (_: Exception) {
+                                            ""
+                                        }
+                                    }
+                                    var favicon by remember(host) {
+                                        mutableStateOf(if (host.isNotBlank()) FaviconStore.get(context, host) else null)
+                                    }
+                                    LaunchedEffect(host) {
+                                        if (host.isNotBlank() && favicon == null) {
+                                            favicon = FaviconStore.fetchFromHost(context, host)
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateItem()
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (entry.isFolder) {
+                                                        onEnterFolder(entry)
+                                                    } else {
+                                                        if (multiSelect) {
+                                                            onToggleSelect(entry.id)
+                                                        } else {
+                                                            entry.url?.let { onOpenUrl(it) }
+                                                        }
+                                                    }
                                                 },
-                                                contentDescription = null,
-                                                tint = MiuixTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(22.dp),
+                                                onLongClick = {
+                                                    if (!multiSelect && !entry.isFolder) {
+                                                        onEnterMultiSelect(entry.id)
+                                                    }
+                                                },
                                             )
-                                        }
-                                        Spacer(Modifier.width(12.dp))
-                                    }
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = entry.title.ifBlank { "无标题" },
-                                            fontSize = 15.sp,
-                                            color = MiuixTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                        )
-                                        if (!entry.isFolder) {
-                                            Spacer(Modifier.height(2.dp))
-                                            Text(
-                                                text = entry.url.orEmpty(),
-                                                fontSize = 12.sp,
-                                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                                maxLines = 1,
+                                            .background(
+                                                if (isSelected)
+                                                    MiuixTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                                else Color.Transparent
                                             )
-                                        } else {
-                                            Spacer(Modifier.height(2.dp))
-                                            Text(
-                                                text = "${entry.children.size} 项",
-                                                fontSize = 12.sp,
-                                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                                maxLines = 1,
-                                            )
-                                        }
-                                    }
-
-                                    if (!multiSelect) {
+                                            .padding(
+                                                start = 16.dp,
+                                                end = 16.dp,
+                                                top = 10.dp,
+                                                bottom = 10.dp,
+                                            ),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
                                         Box(
                                             modifier = Modifier
                                                 .size(32.dp)
-                                                .clip(CircleShape)
-                                                .clickable { onDelete(entry) },
+                                                .clip(RoundedCornerShape(8.dp)),
                                             contentAlignment = Alignment.Center,
                                         ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Close,
-                                                contentDescription = "删除该条",
-                                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                                modifier = Modifier.size(18.dp),
+                                            if (entry.isFolder) {
+                                                Icon(
+                                                    imageVector = MiuixIcons.Folder,
+                                                    contentDescription = null,
+                                                    tint = MiuixTheme.colorScheme.onSurface,
+                                                    modifier = Modifier.size(22.dp),
+                                                )
+                                            } else {
+                                                if (favicon != null) {
+                                                    Image(
+                                                        bitmap = favicon!!.asImageBitmap(),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop,
+                                                    )
+                                                } else {
+                                                    Icon(
+                                                        imageVector = MiuixIcons.Favorites,
+                                                        contentDescription = null,
+                                                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                        modifier = Modifier.size(18.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = entry.title.ifBlank { "无标题" },
+                                                fontSize = 15.sp,
+                                                color = MiuixTheme.colorScheme.onSurface,
+                                                maxLines = 1,
                                             )
+                                            Spacer(Modifier.height(2.dp))
+                                            if (!entry.isFolder) {
+                                                Text(
+                                                    text = entry.url.orEmpty(),
+                                                    fontSize = 12.sp,
+                                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                    maxLines = 1,
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "${entry.children.size} 项",
+                                                    fontSize = 12.sp,
+                                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                    maxLines = 1,
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(8.dp))
+
+                                        AnimatedVisibility(
+                                            visible = multiSelect && !entry.isFolder,
+                                            enter = fadeIn(tween(160)) + expandHorizontally(
+                                                animationSpec = tween(220),
+                                                expandFrom = Alignment.End,
+                                            ),
+                                            exit = fadeOut(tween(140)) + shrinkHorizontally(
+                                                animationSpec = tween(200),
+                                                shrinkTowards = Alignment.End,
+                                            ),
+                                        ) {
+                                            Box(modifier = Modifier.padding(start = 8.dp)) {
+                                                Checkbox(
+                                                    state = if (isSelected) ToggleableState.On else ToggleableState.Off,
+                                                    onClick = { onToggleSelect(entry.id) },
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -8351,23 +12689,60 @@ private fun BookmarkSheet(
 
             AnimatedVisibility(
                 visible = multiSelect,
-                enter = expandVertically(
-                    animationSpec = tween(260),
-                    expandFrom = Alignment.Top,
-                ) + fadeIn(animationSpec = tween(200)),
-                exit = shrinkVertically(
-                    animationSpec = tween(260),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(animationSpec = tween(140)),
+                enter = slideInVertically(
+                    animationSpec = tween(220),
+                    initialOffsetY = { it + 40 },
+                ) + fadeIn(tween(180)),
+                exit = slideOutVertically(
+                    animationSpec = tween(200),
+                    targetOffsetY = { it + 40 },
+                ) + fadeOut(tween(150)),
+                modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                MultiSelectBottomBar(
-                    selectedCount = selectedIds.size,
-                    totalCount = currentItems.size,
-                    onToggleAll = onToggleSelectAll,
-                    onDelete = {
-                        if (selectedIds.isNotEmpty()) onDeleteSelected()
-                    },
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = navBarBottom + 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .height(56.dp)
+                            .graphicsLayer {
+                                shape = RoundedCornerShape(28.dp)
+                                shadowElevation = 24.dp.toPx()
+                                ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                                spotShadowColor = Color.Transparent
+                            }
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(
+                                color = MiuixTheme.colorScheme.surfaceContainer,
+                                shape = RoundedCornerShape(28.dp),
+                            )
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { onShareSelected(selectedIds) }) {
+                            Icon(
+                                imageVector = MiuixIcons.Share,
+                                contentDescription = "分享",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        IconButton(onClick = {
+                            if (selectedIds.isNotEmpty()) onDeleteSelected()
+                        }) {
+                            Icon(
+                                imageVector = MiuixIcons.Delete,
+                                contentDescription = "删除",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -8377,14 +12752,16 @@ private val TOOL_SHEET_CELL_HEIGHT = 68.dp
 private val TOOL_SHEET_EDITBAR_BOTTOM = 24.dp
 private val TOOL_SHEET_NON_EDIT_BOTTOM = 24.dp
 
+// ============================================================
+// 标题截断辅助函数
+// ============================================================
 
 @Composable
 private fun rememberEllipsizedSheetTitle(
     title: String,
-    // 两侧保留宽度：startAction 54dp + endAction 54dp + 内边距
     reservedWidth: Dp = 176.dp,
 ): String {
-    val textMeasurer = rememberTextMeasurer()
+    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
 
@@ -8396,34 +12773,30 @@ private fun rememberEllipsizedSheetTitle(
         }.coerceAtLeast(1)
     }
 
-    // 使用 MIUIX 标题样式（如果编译报错，改成 title1 / title3 / 或自定义 TextStyle）
     val titleStyle = MiuixTheme.textStyles.title2
 
     return remember(title, availableWidthPx, titleStyle) {
         if (title.isEmpty()) return@remember title
 
-        // 完整文本宽度
         val fullWidth = textMeasurer.measure(
-            text = AnnotatedString(title),
+            text = androidx.compose.ui.text.AnnotatedString(title),
             style = titleStyle,
         ).size.width
 
         if (fullWidth <= availableWidthPx) return@remember title
 
-        // 省略号宽度
         val ellipsisWidth = textMeasurer.measure(
-            text = AnnotatedString("…"),
+            text = androidx.compose.ui.text.AnnotatedString("…"),
             style = titleStyle,
         ).size.width
         val maxContentWidth = (availableWidthPx - ellipsisWidth).coerceAtLeast(0)
 
-        // 二分查找最长可放下的前缀
         var lo = 0
         var hi = title.length
         while (lo < hi) {
             val mid = (lo + hi + 1) / 2
             val w = textMeasurer.measure(
-                text = AnnotatedString(title.substring(0, mid)),
+                text = androidx.compose.ui.text.AnnotatedString(title.substring(0, mid)),
                 style = titleStyle,
             ).size.width
             if (w <= maxContentWidth) lo = mid else hi = mid - 1
@@ -8433,18 +12806,25 @@ private fun rememberEllipsizedSheetTitle(
     }
 }
 
+// ============================================================
+// 浏览器工具弹窗
+// ============================================================
+
 @Composable
 private fun BrowserToolSheet(
     show: Boolean,
     pageTitle: String,
-    favicon: Bitmap?,
     isFullscreen: Boolean,
     isNightMode: Boolean,
     isIncognito: Boolean,
     isDesktopMode: Boolean,
     isNoImage: Boolean,
     isTranslated: Boolean,
+    isNewTabPage: Boolean,
+    isBookmarked: Boolean,
     onOpenSettings: () -> Unit,
+    onAddBookmark: () -> Unit,
+    onRemoveBookmark: () -> Unit,
     onDismiss: () -> Unit,
     onToolAction: (String, Boolean) -> Unit,
 ) {
@@ -8471,6 +12851,8 @@ private fun BrowserToolSheet(
         )
     }
 
+    var showDeleteBookmarkDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(show) {
         if (show) {
             state.setActive("fullscreen", isFullscreen)
@@ -8493,33 +12875,8 @@ private fun BrowserToolSheet(
         onDismissFinished = {
             state.cancelEdit()
         },
-        title = rememberEllipsizedSheetTitle(pageTitle.ifBlank { "新标签页" }),
         backgroundColor = MiuixTheme.colorScheme.surface,
         allowDismiss = true,
-        startAction = {
-            Box(
-                modifier = Modifier.size(width = 54.dp, height = 36.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                FaviconOrFallback(favicon = favicon, size = 24.dp)
-            }
-        },
-        endAction = {
-            Box(
-                modifier = Modifier
-                    .size(width = 54.dp, height = 36.dp)
-                    .clip(CircleShape)
-                    .clickable { onOpenSettings() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = MiuixIcons.Settings,
-                    contentDescription = "设置",
-                    tint = MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-        },
     ) {
         Column(
             modifier = Modifier
@@ -8527,27 +12884,6 @@ private fun BrowserToolSheet(
                 .verticalScroll(scrollState, enabled = !isDragging)
                 .animateContentSize(animationSpec = tween(durationMillis = 260)),
         ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp),
-            ) {
-                Box(modifier = Modifier.padding(vertical = 4.dp)) {
-                    ToolGrid(
-                        state = state,
-                        onToolClick = { toolId ->
-                            val tool = allTools.find { it.id == toolId }
-                            val active = if (tool?.isToggle == true) {
-                                state.toggleActive(toolId)
-                            } else {
-                                false
-                            }
-                            onToolAction(toolId, active)
-                        },
-                    )
-                }
-            }
-
             AnimatedVisibility(
                 visible = state.isEditMode,
                 enter = expandVertically(
@@ -8562,7 +12898,7 @@ private fun BrowserToolSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp, bottom = TOOL_SHEET_EDITBAR_BOTTOM),
+                        .padding(top = 0.dp, bottom = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(
@@ -8609,12 +12945,179 @@ private fun BrowserToolSheet(
                 }
             }
 
-            val bottomSpacer by animateDpAsState(
-                targetValue = if (state.isEditMode) 0.dp else TOOL_SHEET_NON_EDIT_BOTTOM,
-                animationSpec = tween(durationMillis = 260),
-                label = "bottomSpacer",
-            )
-            Spacer(Modifier.height(bottomSpacer))
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 0.dp, bottom = 6.dp)
+                    .clip(RoundedCornerShape(24.dp)),
+            ) {
+                Box(modifier = Modifier.padding(vertical = 4.dp)) {
+                    ToolGrid(
+                        state = state,
+                        isNewTabPage = isNewTabPage,
+                        onToolClick = { toolId ->
+                            val tool = allTools.find { it.id == toolId }
+                            val active = if (tool?.isToggle == true) {
+                                state.toggleActive(toolId)
+                            } else {
+                                false
+                            }
+                            onToolAction(toolId, active)
+                        },
+                    )
+                }
+            }
+
+            val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val bottomPadding = if (navBarHeight > 12.dp) navBarHeight else 12.dp
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = bottomPadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val bookmarkButtonEnabled = !isNewTabPage || isBookmarked
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MiuixTheme.colorScheme.surfaceContainer)
+                        .clickable(enabled = bookmarkButtonEnabled) {
+                            if (isBookmarked) {
+                                showDeleteBookmarkDialog = true
+                            } else {
+                                onAddBookmark()
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isBookmarked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites,
+                        contentDescription = "书签",
+                        tint = if (bookmarkButtonEnabled) MiuixTheme.colorScheme.onSurface
+                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = pageTitle.ifBlank { "新标签页" },
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(MiuixTheme.colorScheme.surfaceContainer)
+                        .padding(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // ★ 改动点：新增左侧退出按钮
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                onDismiss()
+                                onToolAction("exit", false)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Close2,
+                            contentDescription = "退出",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { onOpenSettings() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Settings,
+                            contentDescription = "设置",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Close,
+                            contentDescription = "关闭",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ★ 改动点：内置的删除书签弹窗
+    if (showDeleteBookmarkDialog) {
+        WindowDialog(
+            show = showDeleteBookmarkDialog,
+            title = "删除书签",
+            onDismissRequest = { showDeleteBookmarkDialog = false }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "确认删除该书签？",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MiuixTheme.textStyles.body1,
+                    color = DialogDefaults.summaryColor(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Button(
+                        onClick = { showDeleteBookmarkDialog = false },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("取消") }
+                    Button(
+                        onClick = {
+                            onRemoveBookmark()
+                            showDeleteBookmarkDialog = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                        ),
+                    ) { Text("删除") }
+                }
+            }
         }
     }
 }
@@ -8622,9 +13125,11 @@ private fun BrowserToolSheet(
 @Composable
 private fun ToolGrid(
     state: ToolSheetState,
+    isNewTabPage: Boolean = false,
     onToolClick: (String) -> Unit,
 ) {
     val density = LocalDensity.current
+    val disabledTools = remember { setOf("translate", "zoom", "find_in_page", "tts", "sniff", "save_page", "print", "share", "play_in_player") }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth(),
@@ -8703,7 +13208,10 @@ private fun ToolGrid(
                             .pointerInput(tool.id) {
                                 detectTapGestures(
                                     onTap = {
-                                        if (!state.isEditMode) onToolClick(tool.id)
+                                        if (!state.isEditMode) {
+                                            if (isNewTabPage && tool.id in disabledTools) return@detectTapGestures
+                                            onToolClick(tool.id)
+                                        }
                                     },
                                 )
                             }
@@ -8755,6 +13263,7 @@ private fun ToolGrid(
                         ToolGridItem(
                             tool = tool,
                             isActive = tool.id in state.activeTools,
+                            isEnabled = !(isNewTabPage && tool.id in disabledTools)
                         )
                     }
                 }
@@ -8764,13 +13273,15 @@ private fun ToolGrid(
 }
 
 @Composable
-private fun ToolGridItem(tool: ToolDef, isActive: Boolean) {
+private fun ToolGridItem(tool: ToolDef, isActive: Boolean, isEnabled: Boolean = true) {
     if (tool.customItem != null) {
         tool.customItem(isActive)
         return
     }
 
-    val iconColorTarget = if (tool.isToggle && isActive) {
+    val iconColorTarget = if (!isEnabled) {
+        MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+    } else if (tool.isToggle && isActive) {
         MiuixTheme.colorScheme.primary
     } else {
         MiuixTheme.colorScheme.onSurface
@@ -8802,527 +13313,379 @@ private fun ToolGridItem(tool: ToolDef, isActive: Boolean) {
         Text(
             text = tool.title,
             fontSize = 10.sp,
-            color = MiuixTheme.colorScheme.onSurface,
+            color = if (isEnabled) MiuixTheme.colorScheme.onSurface else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
         )
+    }
+}
+
+// ============================================================
+// ★ 替换：enqueueDownload（探测 MIME 修正扩展名，写入公共目录）
+// ============================================================
+@android.annotation.SuppressLint("NewApi")
+private fun mediaStoreFileNameExists(context: Context, name: String): Boolean {
+    return try {
+        val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val projection = arrayOf(MediaStore.Downloads._ID)
+        val selection = "${MediaStore.Downloads.DISPLAY_NAME} = ? AND ${MediaStore.Downloads.RELATIVE_PATH} = ?"
+        val args = arrayOf(name, "Download/Mote/")
+        context.contentResolver.query(collection, projection, selection, args, null)
+            ?.use { it.count > 0 } ?: false
+    } catch (_: Exception) {
+        false
     }
 }
 
 private fun enqueueDownload(context: Context, dl: PendingDownload) {
-    try {
-        val request = DownloadManager.Request(dl.url.toUri()).apply {
-            setMimeType(dl.mimetype)
-            addRequestHeader("User-Agent", dl.userAgent)
-            addRequestHeader("Cookie", CookieManager.getInstance().getCookie(dl.url) ?: "")
-            setTitle(dl.fileName)
-            setDescription("正在下载…")
-            setNotificationVisibility(
-                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+    Thread {
+        val mainHandler = Handler(Looper.getMainLooper())
+        try {
+            val probedMime = probeMimeType(dl.url, dl.userAgent)
+
+            val finalMime: String = when {
+                !probedMime.isNullOrBlank() && !probedMime.startsWith("text/") -> probedMime
+                !dl.mimetype.isNullOrBlank() && dl.mimetype != "application/octet-stream" -> dl.mimetype
+                else -> "application/octet-stream"
+            }
+
+            val ext = extFromMime(finalMime)
+            val originalExt = dl.fileName.substringAfterLast('.', "")
+            val originalNameNoExt = dl.fileName.substringBeforeLast('.', dl.fileName)
+            var finalFileName: String = when {
+                dl.fileName.isBlank() -> "download_${System.currentTimeMillis()}$ext"
+                originalExt.isBlank() -> "$originalNameNoExt$ext"
+                originalExt.equals("bin", ignoreCase = true) -> "$originalNameNoExt$ext"
+                ext.isNotBlank() && originalExt.length !in 2..5 -> "$originalNameNoExt$ext"
+                else -> dl.fileName
+            }
+
+            val useMediaStore = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+
+            var mediaUriStr: String? = null
+            var filePath: String = ""
+
+            if (useMediaStore) {
+                // 重名处理：手动查 MediaStore，避免文件名与 task 不一致
+                val baseName = finalFileName.substringBeforeLast('.', finalFileName)
+                val targetExt = finalFileName.substringAfterLast('.', "")
+                var index = 1
+                while (mediaStoreFileNameExists(context, finalFileName)) {
+                    finalFileName = if (targetExt.isBlank()) {
+                        "${baseName}($index)"
+                    } else {
+                        "${baseName}($index).$targetExt"
+                    }
+                    index++
+                }
+
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, finalFileName)
+                    put(MediaStore.Downloads.MIME_TYPE, finalMime)
+                    put(MediaStore.Downloads.RELATIVE_PATH, "Download/Mote/")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val uri = context.contentResolver.insert(collection, values)
+                    ?: throw RuntimeException("无法在系统下载目录创建文件")
+                mediaUriStr = uri.toString()
+                filePath = ""
+            } else {
+                // Android 9 及以下：老逻辑写入公共 Download/Mote
+                val dir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+                    "Mote",
+                )
+                if (!dir.exists()) dir.mkdirs()
+
+                val baseName = finalFileName.substringBeforeLast('.', finalFileName)
+                val targetExt = finalFileName.substringAfterLast('.', "")
+                var index = 1
+                while (File(dir, finalFileName).exists()) {
+                    finalFileName = if (targetExt.isBlank()) {
+                        "${baseName}($index)"
+                    } else {
+                        "${baseName}($index).$targetExt"
+                    }
+                    index++
+                }
+
+                filePath = File(dir, finalFileName).absolutePath
+            }
+
+            val task = MoteDownloadTask(
+                url = dl.url,
+                fileName = finalFileName,
+                mimeType = finalMime,
+                filePath = filePath,
+                uri = mediaUriStr,
             )
-            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, dl.fileName)
-            setAllowedOverMetered(true)
-            setAllowedOverRoaming(true)
+
+            MoteDownloader.start(context, task)
+
+            mainHandler.post {
+                Toast.makeText(context, "开始下载：$finalFileName", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            mainHandler.post {
+                Toast.makeText(context, "下载失败：${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
-        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        dm.enqueue(request)
-        Toast.makeText(context, "开始下载：${dl.fileName}", Toast.LENGTH_SHORT).show()
-    } catch (e: Exception) {
-        Toast.makeText(context, "下载失败：${e.message}", Toast.LENGTH_LONG).show()
+    }.start()
+}
+// ============================================================
+// ★ 替换：shareImageUrl（后台下载 + FileProvider + 正确扩展名）
+// ============================================================
+
+private fun shareImageUrl(context: Context, imageUrl: String) {
+    Thread {
+        val mainHandler = Handler(Looper.getMainLooper())
+        try {
+            // 1. 下载字节 + 拿服务端 Content-Type
+            val result = downloadImageWithMime(imageUrl, "")
+            if (result == null || result.first.isEmpty()) {
+                mainHandler.post {
+                    Toast.makeText(context, "无法下载图片", Toast.LENGTH_SHORT).show()
+                }
+                return@Thread
+            }
+            val (bytes, serverMime) = result
+
+            // 2. 决定 MIME
+            val mime: String = when {
+                !serverMime.isNullOrBlank() && serverMime.startsWith("image/") -> serverMime
+                else -> guessMimeFromUrl(imageUrl) ?: "image/jpeg"
+            }
+
+            // 3. 决定扩展名（★ 修复 bin 扩展名的关键）
+            val ext: String = extFromMime(mime)
+                .ifBlank { guessExtFromUrl(imageUrl) }
+                .ifBlank { ".jpg" }
+
+            // 4. 写入 cacheDir/images/
+            val dir = File(context.cacheDir, "images").apply { if (!exists()) mkdirs() }
+            val fileName = "share_${System.currentTimeMillis()}$ext"
+            val file = File(dir, fileName)
+            file.writeBytes(bytes)
+
+            // 5. FileProvider → content:// URI
+            val authority = "${context.packageName}.fileprovider"
+            val uri = try {
+                FileProvider.getUriForFile(context, authority, file)
+            } catch (e: Exception) {
+                mainHandler.post {
+                    Toast.makeText(
+                        context,
+                        "无法生成分享 URI：${e.message}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+                return@Thread
+            }
+
+            // 6. 回主线程分享
+            mainHandler.post {
+                try {
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = mime
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(
+                        Intent.createChooser(send, "分享图片").apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    )
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        context,
+                        "分享失败：${e.message}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            }
+        } catch (e: Exception) {
+            mainHandler.post {
+                Toast.makeText(context, "分享失败：${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }.start()
+}
+
+private fun openTtsSettings(context: Context) {
+    try {
+        val intent = Intent("com.android.settings.TTS_SETTINGS")
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } catch (_: Exception) {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (_: Exception) {}
     }
 }
 
-// ============================================================
-// WebView 工厂
-// ============================================================
-
-@SuppressLint("SetJavaScriptEnabled")
-private fun createWebView(
-    context: Context,
-    windowId: String,
-    initialDesktopMode: Boolean,
-    initialTextZoom: Int,
-    initialForceZoom: Boolean,
-    initialDefaultZoom: Int,
-    initialUrlProvider: () -> String,
-    isZoomRestoreEnabled: () -> Boolean,
-    getSavedZoom: (String) -> Float?,
-    onZoomChanged: (host: String, scale: Float) -> Unit,
-    onScaleChanged: (scale: Float) -> Unit,
-    onWebViewCreated: (WebView) -> Unit,
-    isNativePlayerEnabled: () -> Boolean,
-    onProgressChanged: (Int) -> Unit,
-    onPageStateChanged: (url: String, title: String, canGoBack: Boolean, canGoForward: Boolean) -> Unit,
-    onFaviconReceived: (host: String, bmp: Bitmap) -> Unit,
-    onFaviconFromDomain: (url: String) -> Unit,
-    onDownloadRequest: (PendingDownload) -> Unit,
-    onFindResult: (total: Int, current: Int) -> Unit,
-    onPageFinishedExtra: (WebView) -> Unit,
-    onResourceSniffed: (SniffedResource) -> Unit,
-    onPageStartedExtra: () -> Unit,
-    onShowCustomView: (View?, WebChromeClient.CustomViewCallback?) -> Unit,
-    onHideCustomView: () -> Unit,
-    onEnglishPageDetected: (Boolean) -> Unit,
-    fileChooserCallback: MutableState<ValueCallback<Array<Uri>>?>,
-    fileChooserLauncher: ActivityResultLauncher<Intent>,
-    pendingPermission: MutableState<PermissionRequest?>,
-    permissionLauncher: ActivityResultLauncher<Array<String>>,
-    onRenderProcessGoneCallback: (WebView) -> Unit,
-): WebView {
-    return WebView(context).apply {
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
+private fun copyTextToClipboard(context: Context, text: String) {
+    try {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager ?: return
+        cm.setPrimaryClip(android.content.ClipData.newPlainText("url", text))
+        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+    } catch (_: Exception) {}
+}
+private fun shareTextUrl(context: Context, url: String) {
+    try {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, url)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(
+            Intent.createChooser(send, "分享链接").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
         )
-
-        val mobileUa = getMobileUserAgent(context)
-
-        // ★ 需求 2：读取权限开关
-        val pmPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-        val rememberFormEnabled = try {
-            pmPrefs.getBoolean("web_remember_form", true)
-        } catch (_: Exception) { true }
-        val acceptCookieEnabled = try {
-            pmPrefs.getBoolean("web_accept_cookie", true)
-        } catch (_: Exception) { true }
-
-        settings.apply {
-            userAgentString = if (initialDesktopMode) DESKTOP_UA else mobileUa
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            setSupportZoom(true)
-            builtInZoomControls = true
-            displayZoomControls = false
-            textZoom = initialTextZoom
-            loadsImagesAutomatically = true
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            setSupportMultipleWindows(true)
-            javaScriptCanOpenWindowsAutomatically = true
-            allowFileAccess = true
-            allowContentAccess = true
-            defaultTextEncodingName = "UTF-8"
-            cacheMode = WebSettings.LOAD_DEFAULT
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            mediaPlaybackRequiresUserGesture = false
-            // ★ 需求 2：记住表单数据
-            saveFormData = rememberFormEnabled
-        }
-
-        // ★ 需求 2：接受 Cookie
-        CookieManager.getInstance().setAcceptCookie(acceptCookieEnabled)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(this, acceptCookieEnabled)
-        setLayerType(View.LAYER_TYPE_HARDWARE, null)
-
-        addJavascriptInterface(object {
-            @JavascriptInterface
-            fun setPullRefreshAllowed(allowed: Boolean) {
-                PullRefreshStateHolder.set(windowId, allowed)
-            }
-
-            @JavascriptInterface
-            fun setSwipeNavAllowed(allowed: Boolean) {
-                SwipeNavStateHolder.set(windowId, allowed)
-            }
-        }, "moteBridge")
-
-        addJavascriptInterface(object {
-            @Suppress("unused")
-            @JavascriptInterface
-            fun onUrlChanged(newUrl: String) {
-                post {
-                    onPageStateChanged(
-                        newUrl,
-                        title ?: "无标题",
-                        canGoBack(),
-                        canGoForward(),
-                    )
-                    onFaviconFromDomain(newUrl)
-                }
-            }
-        }, "androidBridge")
-
-        setFindListener { activeOrdinal, totalMatches, _ ->
-            post { onFindResult(totalMatches, activeOrdinal) }
-        }
-
-        webViewClient = object : WebViewClient() {
-
-            override fun onScaleChanged(view: WebView?, oldScale: Float, newScale: Float) {
-                super.onScaleChanged(view, oldScale, newScale)
-                onScaleChanged(newScale)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-                try {
-                    if (request != null) {
-                        val url = request.url?.toString()
-                        if (!url.isNullOrBlank() &&
-                            !url.startsWith("data:") &&
-                            !url.startsWith("blob:") &&
-                            !url.startsWith("about:")
-                        ) {
-                            var cat = sniffCategoryFromNetwork(url)
-                            if (cat == null && looksLikeMediaByHeaders(request)) {
-                                cat = SniffCategory.VIDEO
-                            }
-                            if (cat != null) {
-                                val res = SniffedResource(
-                                    url = url,
-                                    category = cat,
-                                    filename = extractFilename(url),
-                                    fromNetwork = true,
-                                )
-                                post { onResourceSniffed(res) }
-                            }
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-                return super.shouldInterceptRequest(view, request)
-            }
-
-            override fun shouldOverrideUrlLoading(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): Boolean {
-                val url = request?.url?.toString() ?: return false
-                if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                    try { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) } catch (_: Exception) {}
-                    return true
-                }
-                return false
-            }
-
-            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                super.onPageStarted(view, url, favicon)
-                onEnglishPageDetected(false)
-                onPageStartedExtra()
-                try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
-                if (url != null) onFaviconFromDomain(url)
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                url?.let { u ->
-                    onPageStateChanged(
-                        u,
-                        view?.title ?: "无标题",
-                        view?.canGoBack() == true,
-                        view?.canGoForward() == true
-                    )
-                    onFaviconFromDomain(u)
-
-                    if (initialForceZoom) {
-                        view?.evaluateJavascript(JS_FORCE_ZOOM_ON, null)
-                    }
-
-                    val jsHook = buildString {
-                        append("(function(){")
-                        append("if (window.__mote_history_hooked) return;")
-                        append("window.__mote_history_hooked = true;")
-                        append("const _pushState = history.pushState;")
-                        append("history.pushState = function(state, title, url){")
-                        append("_pushState.call(this, state, title, url);")
-                        append("window.androidBridge.onUrlChanged(location.href);")
-                        append("};")
-                        append("const _replaceState = history.replaceState;")
-                        append("history.replaceState = function(state, title, url){")
-                        append("_replaceState.call(this, state, title, url);")
-                        append("window.androidBridge.onUrlChanged(location.href);")
-                        append("};")
-                        append("window.addEventListener('popstate', function(){")
-                        append("window.androidBridge.onUrlChanged(location.href);")
-                        append("});")
-                        append("})();")
-                    }
-
-                    view?.evaluateJavascript(JS_INTERCEPT_VIDEO, null)
-
-                    view?.evaluateJavascript(JS_PULL_REFRESH_GUARD, null)
-                    view?.evaluateJavascript(JS_HORIZONTAL_SCROLL_GUARD, null)
-
-                    view?.evaluateJavascript(jsHook, null)
-
-                    view?.let { onPageFinishedExtra(it) }
-                }
-                try {
-                    CookieManager.getInstance().flush()
-                    android.util.Log.d("MoteCookie", "Cookie flushed for URL: $url")
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-
-            @SuppressLint("WebViewClientOnReceivedSslError")
-            override fun onReceivedSslError(
-                view: WebView,
-                handler: SslErrorHandler,
-                error: SslError
-            ) {
-                val primaryError = when (error.primaryError) {
-                    SslError.SSL_DATE_INVALID -> "证书日期无效"
-                    SslError.SSL_EXPIRED -> "证书已过期"
-                    SslError.SSL_IDMISMATCH -> "证书域名不匹配"
-                    SslError.SSL_NOTYETVALID -> "证书尚未生效"
-                    SslError.SSL_UNTRUSTED -> "证书来自未知授权中心"
-                    SslError.SSL_INVALID -> "证书无效"
-                    else -> "证书验证失败"
-                }
-                // ★ 需求 2：改用 MIUIX WindowDialog（由 BrowserScreen 统一渲染）
-                PendingSslErrorStore.pending = PendingSslError(
-                    errorText = primaryError,
-                    proceed = {
-                        try { handler.proceed() } catch (_: Exception) {}
-                    },
-                    cancel = {
-                        try { handler.cancel() } catch (_: Exception) {}
-                        try {
-                            if (view.canGoBack()) view.goBack()
-                        } catch (_: Exception) {}
-                    },
-                )
-            }
-
-            override fun onRenderProcessGone(
-                view: WebView?,
-                detail: RenderProcessGoneDetail?
-            ): Boolean {
-                try {
-                    (view?.parent as? ViewGroup)?.removeView(view)
-                    view?.destroy()
-                    view?.let { onRenderProcessGoneCallback(it) }
-                } catch (_: Exception) {}
-                return true
-            }
-        }
-
-        val externalOnShowCustomView = onShowCustomView
-
-        webChromeClient = object : WebChromeClient() {
-
-            override fun onShowCustomView(
-                view: View?,
-                callback: CustomViewCallback?
-            ) {
-                val webViewRef = this@apply
-
-                if (!isNativePlayerEnabled()) {
-                    externalOnShowCustomView(view, callback)
-                    (context as? Activity)?.let { act ->
-                        act.requestedOrientation =
-                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                    }
-                    return
-                }
-
-                webViewRef.evaluateJavascript(
-                    "(function(){try{var v=document.querySelector('video');" +
-                            "if(!v)return '{}';" +
-                            "var t=(v.currentTime||0)*1000;" +
-                            "var u=v.currentSrc||v.src;" +
-                            "if(!u){var s=v.querySelector('source');if(s)u=s.src;}" +
-                            "return JSON.stringify({time:Math.round(t),url:u||''});" +
-                            "}catch(e){return '{}';}})()"
-                ) { progressRaw ->
-                    val payload = try {
-                        JSONObject(decodeJsString(progressRaw))
-                    } catch (_: Exception) { JSONObject() }
-
-                    val startPositionMs = payload.optLong("time", 0L)
-                    var videoUrl = payload.optString("url", "")
-
-                    if (videoUrl.isBlank() || !videoUrl.startsWith("http")) {
-                        val sniffed = RecentVideoUrlStore.get(windowId)
-                        if (!sniffed.isNullOrBlank()) {
-                            videoUrl = sniffed
-                        }
-                    }
-
-                    val currentPlaying = PlaybackSessionHolder.currentUrl
-                    val isFromRecentStore = videoUrl == RecentVideoUrlStore.get(windowId)
-
-                    val urlIsFresh = videoUrl.isNotBlank() &&
-                            videoUrl.startsWith("http") &&
-                            videoUrl != currentPlaying
-
-                    val urlBelongsToPage = if (isFromRecentStore) {
-                        try {
-                            val pageHost = webViewRef.url?.toUri()?.host ?: ""
-                            val videoHost = videoUrl.toUri().host ?: ""
-                            pageHost.isNotBlank() && videoHost.isNotBlank() &&
-                                    (videoHost == pageHost ||
-                                            videoHost.endsWith("." + pageHost.substringAfter(".")))
-                        } catch (_: Exception) { false }
-                    } else true
-
-                    val canHandoff = urlIsFresh && urlBelongsToPage
-
-                    if (canHandoff) {
-                        webViewRef.evaluateJavascript(
-                            "(function(){try{var v=document.querySelector('video');" +
-                                    "if(v)v.pause();}catch(e){}})()",
-                            null
-                        )
-
-                        MainActivity.suppressOrientationRestore = true
-                        externalOnShowCustomView(view, callback)
-                        webViewRef.post {
-                            try { onHideCustomView() } catch (_: Exception) {}
-                            MainActivity.suppressOrientationRestore = false
-                            try {
-                                NativePlayerActivity.start(
-                                    context = context,
-                                    url = videoUrl,
-                                    title = webViewRef.title?.ifBlank { "视频播放" } ?: "视频播放",
-                                    fromWeb = true,
-                                    startPositionMs = startPositionMs,
-                                    referer = webViewRef.url ?: "",
-                                )
-                            } catch (_: Exception) {}
-                        }
-                    } else {
-                        externalOnShowCustomView(view, callback)
-                        (context as? Activity)?.let { act ->
-                            act.requestedOrientation =
-                                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                        }
-                    }
-                }
-            }
-
-            override fun onHideCustomView() {
-                if (!MainActivity.suppressOrientationRestore) {
-                    (context as? Activity)?.let { act ->
-                        act.requestedOrientation =
-                            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                        WindowCompat.getInsetsController(act.window, act.window.decorView)
-                            .show(WindowInsetsCompat.Type.systemBars())
-                    }
-                }
-                MainActivity.suppressOrientationRestore = false
-                onHideCustomView()
-            }
-
-            override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
-                super.onReceivedIcon(view, icon)
-                icon ?: return
-                val url = view?.url ?: return
-                val host = url.toUri().host ?: return
-                if (icon.width <= 2 && icon.height <= 2) return
-                onFaviconReceived(host, icon)
-            }
-
-            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                super.onProgressChanged(view, newProgress)
-                onProgressChanged(newProgress)
-            }
-
-            override fun onCreateWindow(
-                view: WebView,
-                isDialog: Boolean,
-                isUserGesture: Boolean,
-                resultMsg: Message?
-            ): Boolean {
-                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
-                val parent = view.parent as? ViewGroup ?: return false
-                val popup = WebView(context).apply {
-                    layoutParams = ViewGroup.LayoutParams(1, 1)
-                    alpha = 0f
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                }
-                var handled = false
-                fun consume(url: String?) {
-                    if (handled || url.isNullOrEmpty() || url == "about:blank") return
-                    handled = true
-                    view.loadUrl(url)
-                    (popup.parent as? ViewGroup)?.removeView(popup)
-                    popup.destroy()
-                }
-                popup.webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(
-                        v: WebView?, req: WebResourceRequest?
-                    ): Boolean {
-                        consume(req?.url?.toString()); return true
-                    }
-                    override fun onPageStarted(v: WebView?, url: String?, f: Bitmap?) {
-                        super.onPageStarted(v, url, f); consume(url)
-                    }
-                    @SuppressLint("WebViewClientOnReceivedSslError")
-                    override fun onReceivedSslError(
-                        v: WebView, h: SslErrorHandler, e: SslError
-                    ) { try { h.proceed() } catch (_: Exception) {} }
-                }
-                parent.addView(popup)
-                transport.webView = popup
-                resultMsg.sendToTarget()
-                return true
-            }
-
-            override fun onShowFileChooser(
-                webView: WebView?,
-                filePathCallback: ValueCallback<Array<Uri>>?,
-                fileChooserParams: FileChooserParams?
-            ): Boolean {
-                fileChooserCallback.value?.onReceiveValue(null)
-                fileChooserCallback.value = filePathCallback
-                val intent = try { fileChooserParams?.createIntent() } catch (_: Exception) { null }
-                    ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE)
-                    }
-                return try {
-                    fileChooserLauncher.launch(intent); true
-                } catch (_: Exception) {
-                    fileChooserCallback.value = null
-                    filePathCallback?.onReceiveValue(null); false
-                }
-            }
-
-            override fun onPermissionRequest(request: PermissionRequest?) {
-                if (request == null) return
-                val resources = request.resources
-                val needed = mutableListOf<String>()
-                for (r in resources) {
-                    when (r) {
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
-                            needed.add(Manifest.permission.CAMERA)
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
-                            needed.add(Manifest.permission.RECORD_AUDIO)
-                    }
-                }
-                val granted = needed.all {
-                    ContextCompat.checkSelfPermission(context, it) ==
-                            PackageManager.PERMISSION_GRANTED
-                }
-                when {
-                    granted -> request.grant(resources)
-                    needed.isNotEmpty() -> {
-                        pendingPermission.value = request
-                        permissionLauncher.launch(needed.toTypedArray())
-                    }
-                    else -> request.grant(resources)
-                }
-            }
-        }
-
-        setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
-            val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
-            onDownloadRequest(
-                PendingDownload(
-                    url = url,
-                    userAgent = userAgent,
-                    contentDisposition = contentDisposition,
-                    mimetype = mimetype,
-                    fileName = fileName
-                )
-            )
-        }
-
-        onWebViewCreated(this)
-        MainActivity.webViewRef = WeakReference(this)
+    } catch (e: Exception) {
+        Toast.makeText(context, "分享失败：${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
+
+private fun sharePlainText(context: Context, text: String) {
+    try {
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(
+            Intent.createChooser(send, "分享文本").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
+    } catch (e: Exception) {
+        Toast.makeText(context, "分享失败：${e.message}", Toast.LENGTH_SHORT).show()
+    }
+}
+private fun downloadImageBytes(
+    context: Context,
+    imageUrl: String,
+    referer: String,
+): ByteArray? {
+    return try {
+        val conn = URL(imageUrl).openConnection() as HttpURLConnection
+        conn.connectTimeout = 8000
+        conn.readTimeout = 12000
+        conn.instanceFollowRedirects = true
+        conn.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+        )
+        if (referer.isNotBlank()) {
+            conn.setRequestProperty("Referer", referer)
+        }
+        try {
+            val cookies = CookieManager.getInstance().getCookie(imageUrl)
+            if (!cookies.isNullOrBlank()) {
+                conn.setRequestProperty("Cookie", cookies)
+            }
+        } catch (_: Exception) {}
+        conn.connect()
+        if (conn.responseCode !in 200..299) {
+            conn.disconnect()
+            return null
+        }
+        val bytes = conn.inputStream.use { it.readBytes() }
+        conn.disconnect()
+        if (bytes.isEmpty()) null else bytes
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun baiduImageSearchUpload(
+    context: Context,
+    imageUrl: String,
+    referer: String,
+): String? {
+    val imgBytes = downloadImageBytes(context, imageUrl, referer) ?: return null
+    return try {
+        val boundary = "----MoteBoundary${System.currentTimeMillis()}"
+        val conn = URL("https://graph.baidu.com/upload").openConnection() as HttpURLConnection
+        conn.connectTimeout = 10000
+        conn.readTimeout = 15000
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty(
+            "Content-Type",
+            "multipart/form-data; boundary=$boundary"
+        )
+        conn.setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+        )
+        conn.setRequestProperty("Origin", "https://graph.baidu.com")
+        conn.setRequestProperty("Referer", "https://graph.baidu.com/")
+
+        conn.outputStream.use { out ->
+            out.write("--$boundary\r\n".toByteArray(Charsets.UTF_8))
+            out.write(
+                "Content-Disposition: form-data; name=\"image\"; filename=\"image.jpg\"\r\n"
+                    .toByteArray(Charsets.UTF_8)
+            )
+            out.write("Content-Type: image/jpeg\r\n\r\n".toByteArray(Charsets.UTF_8))
+            out.write(imgBytes)
+            out.write("\r\n".toByteArray(Charsets.UTF_8))
+            out.write("--$boundary--\r\n".toByteArray(Charsets.UTF_8))
+        }
+
+        if (conn.responseCode !in 200..299) {
+            conn.disconnect()
+            return null
+        }
+        val body = conn.inputStream.bufferedReader().readText()
+        conn.disconnect()
+        val json = JSONObject(body)
+        val data = json.optJSONObject("data")
+        val resultUrl = data?.optString("url", "") ?: ""
+        if (resultUrl.isBlank()) null else resultUrl
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun reverseImageSearchUrl(engineIndex: Int, imageUrl: String): String {
+    val encoded = try {
+        URLEncoder.encode(imageUrl, "UTF-8")
+    } catch (_: Exception) {
+        imageUrl
+    }
+    return when (engineIndex) {
+        0 -> "https://www.bing.com/images/search?view=detailv2&iss=sbi&FORM=SBIIDP" +
+                "&sbisrc=UrlPaste&q=imgurl:$encoded&idpbck=1"
+        2 -> "https://graph.baidu.com/s?tn=pc&image=$encoded"
+        4 -> "https://pic.sogou.com/ris?query=$encoded"
+        5 -> "https://lens.google.com/uploadbyurl?url=$encoded"
+        else -> "https://www.bing.com/images/search?view=detailv2&iss=sbi&FORM=SBIIDP" +
+                "&sbisrc=UrlPaste&q=imgurl:$encoded&idpbck=1"
+    }
+}
+
+private suspend fun performReverseImageSearch(
+    context: Context,
+    imageUrl: String,
+    referer: String,
+    engineIndex: Int,
+): String? = withContext(Dispatchers.IO) {
+    if (imageUrl.isBlank()) return@withContext null
+
+    if (engineIndex == 2) {
+        val uploadResult = baiduImageSearchUpload(context, imageUrl, referer)
+        if (!uploadResult.isNullOrBlank()) return@withContext uploadResult
+    }
+
+    reverseImageSearchUrl(engineIndex, imageUrl)
 }
 
 // ============================================================
@@ -9333,15 +13696,12 @@ private fun isWebsite(input: String): Boolean {
     val trimmed = input.trim()
     if (trimmed.isEmpty()) return false
 
-    // 含中文或空格 → 当搜索词
     if (trimmed.any { it.code in 0x4E00..0x9FFF || it == ' ' }) return false
 
-    // ★ 需求 1：邮箱格式 → 当搜索词（避免用户输入邮箱时误打开邮箱域名）
     if (Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$").matches(trimmed)) return false
 
     val lower = trimmed.lowercase()
 
-    // 显式协议 → 直接当 URL
     if (lower.startsWith("http://") ||
         lower.startsWith("https://") ||
         lower.startsWith("ftp://") ||
@@ -9351,7 +13711,6 @@ private fun isWebsite(input: String): Boolean {
         lower.startsWith("data:")
     ) return true
 
-    // 去掉路径 / 查询 / fragment / userinfo，只看 host:port
     val authorityPart = lower
         .substringBefore('/')
         .substringBefore('?')
@@ -9362,13 +13721,10 @@ private fun isWebsite(input: String): Boolean {
 
     if (host.isEmpty()) return false
 
-    // 端口必须是数字
     if (port.isNotEmpty() && port.any { !it.isDigit() }) return false
 
-    // 本地地址
     if (host == "localhost" || host == "127.0.0.1" || host == "::1") return true
 
-    // IPv4
     val seg = host.split('.')
     if (seg.size == 4 && seg.all { s ->
             s.isNotEmpty() && s.all { it.isDigit() } &&
@@ -9376,22 +13732,17 @@ private fun isWebsite(input: String): Boolean {
         }
     ) return true
 
-    // 必须有至少一个点（顶级域名）
     val dotIdx = host.lastIndexOf('.')
     if (dotIdx <= 0 || dotIdx == host.length - 1) return false
 
     val tld = host.substring(dotIdx + 1)
 
-    // 顶级域名：2~24 位，纯字母 / 字母+数字+连字符
     if (tld.length < 2 || tld.length > 24) return false
     if (!tld.all { it.isLetterOrDigit() || it == '-' }) return false
-    // TLD 不能纯数字（排除 1.2.3.4.5 这种）
     if (tld.all { it.isDigit() }) return false
 
-    // host 每一段不能为空
     if (host.split('.').any { it.isEmpty() }) return false
 
-    // host 长度限制
     if (host.length > 253) return false
 
     return true
@@ -9407,72 +13758,151 @@ private fun isSolidColor(bmp: Bitmap): Boolean {
             p0 == bmp.getPixel(w - 1, h - 1)
 }
 
-private const val TRANSLATE_TARGET_LANG = "zh-CN"
+private fun tencentTranslateOne(text: String, targetLang: String): String {
+    val encoded = URLEncoder.encode(text, "UTF-8")
+    val url = "https://api.jaxing.cc/v2/Translate/Tencent" +
+            "?sourceText=$encoded&target=$targetLang"
+    val conn = URL(url).openConnection() as HttpURLConnection
+    conn.connectTimeout = 5000
+    conn.readTimeout = 8000
+    conn.requestMethod = "GET"
+    conn.setRequestProperty("User-Agent", FALLBACK_MOBILE_UA)
+    try {
+        if (conn.responseCode != 200) throw RuntimeException("HTTP ${conn.responseCode}")
+        val body = conn.inputStream.bufferedReader().readText()
+        val obj = JSONObject(body)
+        val data = obj.optJSONObject("data") ?: obj
+        val translated = data.optString("targetText", "")
+            .ifBlank { data.optString("translation", "") }
+            .ifBlank { data.optString("result", "") }
+        if (translated.isBlank()) throw RuntimeException("empty translation")
+        return translated
+    } finally {
+        conn.disconnect()
+    }
+}
 
-private val JS_EXTRACT_TEXT_NODES = """
-(function(){
-  if (window.__mote_translate_nodes && window.__mote_translate_original) {
-    return JSON.stringify({
-      already: true,
-      texts: window.__mote_translate_original
-    });
-  }
-  var nodes = [];
-  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-    acceptNode: function(node) {
-      var parent = node.parentElement;
-      if (!parent) return NodeFilter.FILTER_REJECT;
-      var tag = parent.tagName;
-      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' ||
-          tag === 'TEXTAREA' || tag === 'CODE' || tag === 'PRE') {
-        return NodeFilter.FILTER_REJECT;
-      }
-      var text = node.nodeValue;
-      if (!text || !text.trim()) return NodeFilter.FILTER_REJECT;
-      try {
-        var style = window.getComputedStyle(parent);
-        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-          return NodeFilter.FILTER_REJECT;
+private fun bilibiliTranslateOne(text: String, targetLang: String): String {
+    val url = "https://index-translate.bilibili.com/v1/chat/completions"
+    val conn = URL(url).openConnection() as HttpURLConnection
+    conn.connectTimeout = 6000
+    conn.readTimeout = 10000
+    conn.requestMethod = "POST"
+    conn.doOutput = true
+    conn.setRequestProperty("Content-Type", "application/json")
+    conn.setRequestProperty("User-Agent", FALLBACK_MOBILE_UA)
+
+    val langMap = mapOf(
+        "zh-CN" to "Chinese", "zh" to "Chinese",
+        "en" to "English", "ja" to "Japanese",
+        "ko" to "Korean", "fr" to "French",
+        "de" to "German", "es" to "Spanish",
+    )
+    val targetName = langMap[targetLang] ?: targetLang
+
+    val prompt = "Translate the following text to $targetName. " +
+            "Only output the translation, no explanation.\n\n$text"
+
+    val payload = JSONObject().apply {
+        put("model", "index-translate-35b-a3b")
+        put("messages", JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "user")
+                put("content", prompt)
+            })
+        })
+        put("temperature", 0.3)
+        put("max_tokens", 2048)
+    }
+
+    try {
+        conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+        if (conn.responseCode != 200) throw RuntimeException("HTTP ${conn.responseCode}")
+        val body = conn.inputStream.bufferedReader().readText()
+        val obj = JSONObject(body)
+        val choices = obj.optJSONArray("choices") ?: throw RuntimeException("no choices")
+        val first = choices.optJSONObject(0) ?: throw RuntimeException("no choice")
+        val message = first.optJSONObject("message") ?: throw RuntimeException("no message")
+        val translated = message.optString("content", "").trim()
+        if (translated.isBlank()) throw RuntimeException("empty translation")
+        return translated
+    } finally {
+        conn.disconnect()
+    }
+}
+
+private fun bilibiliTranslateBatch(texts: List<String>): List<String>? {
+    if (texts.isEmpty()) return emptyList()
+    return try {
+        val conn = URL("https://index-translate.bilibili.com/v1/chat/completions")
+            .openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("User-Agent", FALLBACK_MOBILE_UA)
+        conn.connectTimeout = 10000
+        conn.readTimeout = 15000
+
+        val separator = "\n<<<MOTE_SPLIT>>>\n"
+        val combined = texts.joinToString(separator)
+        val prompt = "Translate each segment below into zh-CN. " +
+                "Keep the separator '<<<MOTE_SPLIT>>>' exactly as is between segments. " +
+                "Output only the translated segments with the same separator, no extra text.\n\n" +
+                combined
+
+        val payload = JSONObject().apply {
+            put("model", "Index-Translate-35B-A3B")
+            put("messages", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("role", "user")
+                    put("content", prompt)
+                })
+            })
+            put("temperature", 0.2)
+            put("max_tokens", 4096)
         }
-      } catch(e) {}
-      return NodeFilter.FILTER_ACCEPT;
-    }
-  });
-  while (walker.nextNode()) { nodes.push(walker.currentNode); }
-  window.__mote_translate_nodes = nodes;
-  window.__mote_translate_original = nodes.map(function(n){ return n.nodeValue; });
-  return JSON.stringify({
-    already: false,
-    texts: nodes.map(function(n){ return n.nodeValue; })
-  });
-})();
-""".trimIndent()
+        conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
 
-private fun buildJsApplyTranslation(translationsJson: String): String = """
-(function(payload){
-  var nodes = window.__mote_translate_nodes;
-  if (!nodes) return;
-  var translations = payload;
-  for (var i = 0; i < nodes.length && i < translations.length; i++) {
-    if (translations[i] != null && translations[i] !== '') {
-      nodes[i].nodeValue = translations[i];
-    }
-  }
-})($translationsJson);
-""".trimIndent()
+        if (conn.responseCode != 200) {
+            conn.disconnect()
+            return null
+        }
+        val respBody = conn.inputStream.bufferedReader().readText()
+        conn.disconnect()
 
-private val JS_RESTORE_ORIGINAL = """
-(function(){
-  if (!window.__mote_translate_nodes || !window.__mote_translate_original) return;
-  var nodes = window.__mote_translate_nodes;
-  var originals = window.__mote_translate_original;
-  for (var i = 0; i < nodes.length && i < originals.length; i++) {
-    nodes[i].nodeValue = originals[i];
-  }
-  delete window.__mote_translate_nodes;
-  delete window.__mote_translate_original;
-})();
-""".trimIndent()
+        val obj = JSONObject(respBody)
+        val choices = obj.optJSONArray("choices") ?: return null
+        val content = choices.optJSONObject(0)
+            ?.optJSONObject("message")
+            ?.optString("content", "")
+            ?.trim() ?: return null
+
+        val translated = content.split(separator.trim()).map { it.trim() }
+        if (translated.size != texts.size) return null
+        translated
+    } catch (_: Exception) {
+        null
+    }
+}
+private fun translateOneWithFallback(text: String, targetLang: String): String {
+    try {
+        return tencentTranslateOne(text, targetLang)
+    } catch (_: Exception) {}
+
+    try {
+        return bilibiliTranslateOne(text, targetLang)
+    } catch (_: Exception) {}
+
+    try {
+        return myMemoryTranslateOne(text, targetLang)
+    } catch (_: Exception) {}
+
+    try {
+        return googleTranslateOne(text, targetLang)
+    } catch (_: Exception) {}
+
+    throw RuntimeException("all translation sources failed")
+}
 
 private fun googleTranslateOne(text: String, targetLang: String): String {
     val encoded = URLEncoder.encode(text, "UTF-8")
@@ -9522,42 +13952,136 @@ private fun myMemoryTranslateOne(text: String, targetLang: String): String {
     }
 }
 
-private fun translateTextBatch(
+// ============================================================
+// ★ 全新翻译引擎：微软 Edge 批量翻译（免授权直连版）
+// ============================================================
+
+private fun edgeTranslateTexts(texts: List<String>): List<String>? {
+    if (texts.isEmpty()) return emptyList()
+    return try {
+        val conn = URL(
+            "https://edge.microsoft.com/translate/translatetext" +
+                    "?from=&to=zh-Hans&isEnterpriseClient=false"
+        ).openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("User-Agent", FALLBACK_MOBILE_UA)
+        conn.connectTimeout = 8000
+        conn.readTimeout = 12000
+
+        val body = JSONArray().apply { texts.forEach { put(it) } }
+        conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+
+        if (conn.responseCode == 200) {
+            val respText = conn.inputStream.bufferedReader().readText()
+            val resArr = JSONArray(respText)
+            val result = mutableListOf<String>()
+            for (i in 0 until resArr.length()) {
+                val obj = resArr.getJSONObject(i)
+                val transArr = obj.optJSONArray("translations")
+                if (transArr != null && transArr.length() > 0) {
+                    result.add(transArr.getJSONObject(0).optString("text", texts[i]))
+                } else {
+                    result.add(texts[i])
+                }
+            }
+            conn.disconnect()
+            result
+        } else {
+            conn.disconnect()
+            null
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+internal fun translateTextBatch(
     texts: List<String>,
     targetLang: String,
-    maxRequests: Int = 60
+    maxRequests: Int = 600
 ): List<String> {
-    val result = ArrayList<String>(texts.size)
-    var requestCount = 0
+    val indicesToTranslate = mutableListOf<Int>()
+    val textsToTranslate = mutableListOf<String>()
 
-    for (raw in texts) {
-        val text = raw.trim()
-        if (text.isEmpty() || text.length <= 1) {
-            result.add(raw)
-            continue
+    texts.forEachIndexed { index, s ->
+        val t = s.trim()
+        // 过滤掉空白、纯数字、单字符和明显的符号，减少无用请求
+        if (t.length > 1 && t.any { it.isLetter() }) {
+            indicesToTranslate.add(index)
+            textsToTranslate.add(t)
         }
-        if (requestCount >= maxRequests) {
-            result.add(raw)
-            continue
+    }
+
+    if (textsToTranslate.isEmpty()) return texts
+
+    val result = texts.toMutableList()
+
+    // 1. 首选：Edge 批量翻译
+    var successCount = 0
+    for (i in textsToTranslate.indices step 40) {
+        val end = minOf(i + 40, textsToTranslate.size)
+        val batch = textsToTranslate.subList(i, end)
+        val translatedBatch = edgeTranslateTexts(batch)
+        if (translatedBatch != null && translatedBatch.size == batch.size) {
+            for (j in batch.indices) {
+                val originalRaw = texts[indicesToTranslate[i + j]]
+                val leading = originalRaw.takeWhile { it.isWhitespace() }
+                val trailing = originalRaw.takeLastWhile { it.isWhitespace() }
+                result[indicesToTranslate[i + j]] = "$leading${translatedBatch[j]}$trailing"
+            }
+            successCount += batch.size
+        } else {
+            break
         }
+    }
+    if (successCount == textsToTranslate.size) {
+        return result
+    }
+
+    // 2. 第一兜底：Bilibili 批量翻译（OpenAI 兼容，免费无 Key）
+    var bilibiliSuccess = 0
+    for (i in textsToTranslate.indices step 20) {
+        val end = minOf(i + 20, textsToTranslate.size)
+        val batch = textsToTranslate.subList(i, end)
+        try {
+            val translatedBatch = bilibiliTranslateBatch(batch)
+            if (translatedBatch != null && translatedBatch.size == batch.size) {
+                for (j in batch.indices) {
+                    val originalRaw = texts[indicesToTranslate[i + j]]
+                    val leading = originalRaw.takeWhile { it.isWhitespace() }
+                    val trailing = originalRaw.takeLastWhile { it.isWhitespace() }
+                    result[indicesToTranslate[i + j]] = "$leading${translatedBatch[j]}$trailing"
+                }
+                bilibiliSuccess += batch.size
+            } else {
+                break
+            }
+        } catch (_: Exception) {
+            break
+        }
+    }
+    if (bilibiliSuccess == textsToTranslate.size) {
+        return result
+    }
+
+    // 3. 最终兜底：逐个请求（限制 20 条）
+    var requestCount = 0
+    for (index in indicesToTranslate) {
+        if (requestCount >= 20) break
         requestCount++
 
-        var translated: String? = null
+        val raw = texts[index]
+        val text = textsToTranslate[indicesToTranslate.indexOf(index)]
         try {
-            translated = googleTranslateOne(text, targetLang)
-        } catch (_: Exception) {
-            try {
-                translated = myMemoryTranslateOne(text, targetLang)
-            } catch (_: Exception) {
-                translated = null
-            }
-        }
-        val leading = raw.takeWhile { it.isWhitespace() }
-        val trailing = raw.takeLastWhile { it.isWhitespace() }
-        result.add(
-            if (translated != null) "$leading$translated$trailing" else raw
-        )
+            val translated = translateOneWithFallback(text, targetLang)
+            val leading = raw.takeWhile { it.isWhitespace() }
+            val trailing = raw.takeLastWhile { it.isWhitespace() }
+            result[index] = "$leading$translated$trailing"
+        } catch (_: Exception) {}
     }
+
     return result
 }
 
@@ -9572,77 +14096,137 @@ private fun decodeJsString(raw: String?): String {
 }
 
 // ============================================================
-// 主题包装器（响应颜色设置）
+// 资源嗅探缩略图加载组件
 // ============================================================
 
 @Composable
-private fun MoteThemeWrapper(content: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val prefs = remember {
-        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-    }
+private fun SniffThumbnail(
+    url: String,
+    fallbackIcon: ImageVector,
+    category: SniffCategory,
+) {
+    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
+    var isLoading by remember(url) { mutableStateOf(true) }
 
-    var colorMode by remember {
-        mutableIntStateOf(prefs.getInt("ui_color_mode", 0).coerceIn(0, 2))
-    }
-    var monetEnabled by remember {
-        mutableStateOf(prefs.getBoolean("ui_color_monet_enabled", false))
-    }
-    var keyColor by remember {
-        mutableIntStateOf(prefs.getInt("ui_color_key_color", 0))
-    }
-    var paletteStyleName by remember {
-        mutableStateOf(prefs.getString("ui_color_palette_style", "TonalSpot") ?: "TonalSpot")
-    }
-    var colorSpecName by remember {
-        mutableStateOf(prefs.getString("ui_color_spec", "Spec2021") ?: "Spec2021")
-    }
-
-    DisposableEffect(Unit) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            when (key) {
-                "ui_color_mode" -> colorMode = prefs.getInt(key, 0).coerceIn(0, 2)
-                "ui_color_monet_enabled" -> monetEnabled = prefs.getBoolean(key, false)
-                "ui_color_key_color" -> keyColor = prefs.getInt(key, 0)
-                "ui_color_palette_style" -> paletteStyleName =
-                    prefs.getString(key, "TonalSpot") ?: "TonalSpot"
-                "ui_color_spec" -> colorSpecName =
-                    prefs.getString(key, "Spec2021") ?: "Spec2021"
+    LaunchedEffect(url) {
+        isLoading = true
+        bitmap = withContext(Dispatchers.IO) {
+            try {
+                if (!url.startsWith("http")) return@withContext null
+                val lower = url.lowercase()
+                if (category == SniffCategory.VIDEO) {
+                    if (lower.contains(".mp4") || lower.contains(".webm")) {
+                        val retriever = MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(url, emptyMap())
+                            val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                            if (frame != null) {
+                                val targetWidth = 72
+                                val ratio = targetWidth.toFloat() / frame.width
+                                val targetHeight = (frame.height * ratio).toInt().coerceAtLeast(1)
+                                Bitmap.createScaledBitmap(frame, targetWidth, targetHeight, true)
+                            } else null
+                        } finally {
+                            try { retriever.release() } catch (_: Exception) {}
+                        }
+                    } else null
+                } else if (category == SniffCategory.IMAGE) {
+                    val conn = URL(url).openConnection() as HttpURLConnection
+                    conn.connectTimeout = 4000
+                    conn.readTimeout = 4000
+                    conn.instanceFollowRedirects = true
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+                    conn.connect()
+                    if (conn.responseCode in 200..299) {
+                        val options = BitmapFactory.Options().apply { inSampleSize = 4 }
+                        val bmp = BitmapFactory.decodeStream(conn.inputStream, null, options)
+                        conn.disconnect()
+                        if (bmp != null) {
+                            val targetWidth = 72
+                            val ratio = targetWidth.toFloat() / bmp.width
+                            val targetHeight = (bmp.height * ratio).toInt().coerceAtLeast(1)
+                            Bitmap.createScaledBitmap(bmp, targetWidth, targetHeight, true)
+                        } else null
+                    } else {
+                        conn.disconnect()
+                        null
+                    }
+                } else null
+            } catch (e: Exception) {
+                null
             }
         }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+        isLoading = false
     }
 
-    // ★ 深色模式 + 壁纸取色 → ColorSchemeMode
-    val schemeMode = when (colorMode) {
-        0 -> if (monetEnabled) ColorSchemeMode.MonetSystem else ColorSchemeMode.System
-        1 -> if (monetEnabled) ColorSchemeMode.MonetLight else ColorSchemeMode.Light
-        2 -> if (monetEnabled) ColorSchemeMode.MonetDark else ColorSchemeMode.Dark
-        else -> ColorSchemeMode.System
-    }
-
-    val paletteStyle = try {
-        ThemePaletteStyle.valueOf(paletteStyleName)
-    } catch (_: Exception) {
-        ThemePaletteStyle.TonalSpot
-    }
-    val colorSpec = try {
-        ThemeColorSpec.valueOf(colorSpecName)
-    } catch (_: Exception) {
-        ThemeColorSpec.Spec2021
-    }
-
-    val themeController = remember(schemeMode, keyColor, paletteStyle, colorSpec) {
-        ThemeController(
-            colorSchemeMode = schemeMode,
-            keyColor = if (keyColor == 0) null else Color(keyColor),
-            paletteStyle = paletteStyle,
-            colorSpec = colorSpec,
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+    } else if (isLoading && (category == SniffCategory.IMAGE || category == SniffCategory.VIDEO)) {
+        Icon(
+            imageVector = fallbackIcon,
+            contentDescription = null,
+            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            modifier = Modifier.size(22.dp),
+        )
+    } else {
+        Icon(
+            imageVector = fallbackIcon,
+            contentDescription = null,
+            tint = MiuixTheme.colorScheme.onSurface,
+            modifier = Modifier.size(22.dp),
         )
     }
+}
+// ============================================================
+// 网页源码查看（BottomSheet 内嵌 WebView 渲染源码）
+// ============================================================
 
-    MiuixTheme(controller = themeController) {
-        content()
-    }
+@Composable
+private fun SourceWebView(html: String, modifier: Modifier = Modifier) {
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            WebView(ctx).apply {
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                settings.javaScriptEnabled = false
+                settings.builtInZoomControls = true
+                settings.displayZoomControls = false
+                settings.loadWithOverviewMode = true
+                settings.useWideViewPort = true
+                tag = html
+                loadDataWithBaseURL(null, buildSourceHtml(html), "text/html", "utf-8", null)
+            }
+        },
+        update = { wv ->
+            if (wv.tag != html) {
+                wv.tag = html
+                wv.loadDataWithBaseURL(null, buildSourceHtml(html), "text/html", "utf-8", null)
+            }
+        },
+        onRelease = { wv ->
+            try {
+                wv.stopLoading()
+                wv.destroy()
+            } catch (_: Exception) {
+            }
+        },
+    )
+}
+
+private fun buildSourceHtml(source: String): String {
+    val escaped = source
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    return "<!DOCTYPE html><html><head>" +
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+            "<style>html,body{margin:0;padding:10px;background:#f7f7f9;color:#1c1c1e;}" +
+            "pre{margin:0;font:12px/1.55 ui-monospace,Menlo,Consolas,monospace;" +
+            "white-space:pre-wrap;word-break:break-word;}</style></head>" +
+            "<body><pre>" + escaped + "</pre></body></html>"
 }

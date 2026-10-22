@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- ★ 保持你原有的功能：允许分享 cache/images 目录下的图片 -->
+    <cache-path name="images" path="images/" />
+
+    <!-- ★ 新增：允许分享和打开“外部私有目录”下所有的文件（包含你的下载目录 Download/Mote/） -->
+    <external-files-path name="external_files" path="." />
+
+    <!-- ★ 新增：允许打开“内部私有目录”下的所有文件（兜底） -->
+    <files-path name="files" path="." />
+</paths>

@@ -2,14 +2,26 @@
 
 package com.torachen.mote.service
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Build
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -18,6 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.coroutines.resume
 
 // ============================================================
 // 天气数据模型
@@ -58,10 +71,38 @@ internal object WeatherStateHolder {
     var error by mutableStateOf<String?>(null)
     var lastFetchAt by mutableLongStateOf(0L)
 
+    /** 是否使用设备精确定位（精确到区/县）；默认关闭，沿用 IP 定位。 */
+    var precise by mutableStateOf(false)
+
     const val CACHE_TTL_MS = 10 * 60 * 1000L
 
     fun isFresh(): Boolean =
         info != null && (System.currentTimeMillis() - lastFetchAt) < CACHE_TTL_MS
+}
+
+internal const val KEY_WEATHER_PRECISE_LOCATION = "weather_precise_location"
+
+internal fun hasFineLocationPermission(context: Context): Boolean {
+    return ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.ACCESS_FINE_LOCATION,
+    ) == PackageManager.PERMISSION_GRANTED
+}
+
+/** 从 prefs 恢复精确定位开关（冷启动时调用一次即可）。 */
+internal fun initWeatherPreciseFromPrefs(context: Context) {
+    val prefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    WeatherStateHolder.precise =
+        prefs.getBoolean(KEY_WEATHER_PRECISE_LOCATION, false) && hasFineLocationPermission(context)
+}
+
+/** 切换精确定位开关并持久化；关闭时立即回到 IP 定位。 */
+internal fun setWeatherPrecise(context: Context, enabled: Boolean) {
+    WeatherStateHolder.precise = enabled
+    context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+        .edit()
+        .putBoolean(KEY_WEATHER_PRECISE_LOCATION, enabled)
+        .apply()
 }
 
 // ============================================================
@@ -134,6 +175,7 @@ private data class LocationInfo(
     val city: String,
     val latitude: Double,
     val longitude: Double,
+    val precise: Boolean = false,
 )
 
 private fun locateByIp(): LocationInfo? {
@@ -168,6 +210,110 @@ private fun locateByIp(): LocationInfo? {
     } catch (_: Exception) {}
 
     return null
+}
+
+// ============================================================
+// 定位（设备定位：精确到区 / 县）
+// ============================================================
+
+@SuppressLint("MissingPermission")
+private suspend fun locateByDevice(context: Context): LocationInfo? = withContext(Dispatchers.IO) {
+    if (!hasFineLocationPermission(context)) return@withContext null
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        ?: return@withContext null
+
+    var best: Location? = null
+    listOf(
+        LocationManager.GPS_PROVIDER,
+        LocationManager.NETWORK_PROVIDER,
+        LocationManager.PASSIVE_PROVIDER,
+    ).forEach { provider ->
+        val loc = try {
+            if (lm.isProviderEnabled(provider)) lm.getLastKnownLocation(provider) else null
+        } catch (_: Exception) {
+            null
+        }
+        if (loc != null && (best == null || loc.time > best!!.time)) best = loc
+    }
+
+    // 最近 10 分钟内没有可用定位，就主动请求一次
+    val stale = best == null || System.currentTimeMillis() - best!!.time > 10 * 60 * 1000L
+    if (stale) {
+        requestSingleLocation(lm)?.let { best = it }
+    }
+
+    val location = best ?: return@withContext null
+    val label = reverseGeocode(context, location.latitude, location.longitude) ?: "当前位置"
+    LocationInfo(
+        city = label,
+        latitude = location.latitude,
+        longitude = location.longitude,
+        precise = true,
+    )
+}
+
+@SuppressLint("MissingPermission")
+private suspend fun requestSingleLocation(lm: LocationManager): Location? {
+    listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER).forEach { provider ->
+        val enabled = try {
+            lm.isProviderEnabled(provider)
+        } catch (_: Exception) {
+            false
+        }
+        if (!enabled) return@forEach
+
+        val result = withTimeoutOrNull(6000L) {
+            suspendCancellableCoroutine<Location?> { cont ->
+                val listener = object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        if (cont.isActive) cont.resume(location)
+                    }
+
+                    override fun onProviderEnabled(provider: String) {}
+
+                    override fun onProviderDisabled(provider: String) {}
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onStatusChanged(provider: String?, status: Int, extras: android.os.Bundle?) {}
+                }
+                try {
+                    @Suppress("DEPRECATION")
+                    lm.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+                } catch (_: Exception) {
+                    if (cont.isActive) cont.resume(null)
+                    return@suspendCancellableCoroutine
+                }
+                cont.invokeOnCancellation {
+                    try {
+                        @Suppress("DEPRECATION")
+                        lm.removeUpdates(listener)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+        if (result != null) return result
+    }
+    return null
+}
+
+/** 反向地理编码：省 + 市 + 区/县，失败返回 null。 */
+private fun reverseGeocode(context: Context, lat: Double, lng: Double): String? {
+    return try {
+        if (!Geocoder.isPresent()) return null
+        val geocoder = Geocoder(context, Locale.CHINA)
+        val address = geocoder.getFromLocation(lat, lng, 1)?.firstOrNull() ?: return null
+        val province = address.adminArea.orEmpty()
+        val city = address.locality ?: address.subAdminArea.orEmpty()
+        val district = address.subLocality ?: address.subAdminArea.orEmpty()
+        listOf(province, city, district)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString("")
+            .ifBlank { null }
+    } catch (_: Exception) {
+        null
+    }
 }
 
 // ============================================================
@@ -276,6 +422,7 @@ private fun saveWeatherCache(context: Context, info: WeatherInfo, lastFetchAt: L
 
 internal suspend fun fetchWeather(context: Context, forceRefresh: Boolean = false) {
     initWeatherCacheFromDisk(context)
+    initWeatherPreciseFromPrefs(context)
 
     if (!forceRefresh && WeatherStateHolder.isFresh()) return
     if (WeatherStateHolder.loading) return
@@ -285,7 +432,9 @@ internal suspend fun fetchWeather(context: Context, forceRefresh: Boolean = fals
 
     try {
         val result = withContext(Dispatchers.IO) {
-            val loc = locateByIp() ?: throw RuntimeException("无法获取位置")
+            // 开启精确定位且已授权时优先用设备定位，失败自动回落到 IP 定位
+            val deviceLocation = if (WeatherStateHolder.precise) locateByDevice(context) else null
+            val loc = deviceLocation ?: locateByIp() ?: throw RuntimeException("无法获取位置")
             val url = buildString {
                 append("https://api.open-meteo.com/v1/forecast")
                 append("?latitude=").append(loc.latitude)
@@ -299,7 +448,7 @@ internal suspend fun fetchWeather(context: Context, forceRefresh: Boolean = fals
                 append("&forecast_days=6")
             }
             val body = httpGetText(url, 10000)
-            parseWeatherJson(body, loc.city)
+            parseWeatherJson(body, loc.city, loc.precise)
         }
         WeatherStateHolder.info = result
         WeatherStateHolder.lastFetchAt = System.currentTimeMillis()
@@ -313,7 +462,7 @@ internal suspend fun fetchWeather(context: Context, forceRefresh: Boolean = fals
     }
 }
 
-private fun parseWeatherJson(body: String, city: String): WeatherInfo {
+private fun parseWeatherJson(body: String, city: String, precise: Boolean = false): WeatherInfo {
     val root = JSONObject(body)
 
     val current = root.optJSONObject("current")
@@ -369,7 +518,7 @@ private fun parseWeatherJson(body: String, city: String): WeatherInfo {
         currentWindSpeed = currentWindSpeed,
         currentWindDirection = currentWindDir,
         currentHumidity = currentHumidity,
-        source = "Open-Meteo · IP 定位",
+        source = if (precise) "Open-Meteo · 精确定位" else "Open-Meteo · IP 定位",
         updatedAt = System.currentTimeMillis(),
         daily = dailyList,
     )
