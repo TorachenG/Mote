@@ -255,6 +255,8 @@ fun ScriptsPage(
             }
         }
 
+        // ★ 没有脚本时不显示「脚本」标题与卡片
+        if (scripts.isNotEmpty()) {
         item(key = "script_title") {
             SmallTitle("脚本")
         }
@@ -267,14 +269,7 @@ fun ScriptsPage(
                         .padding(bottom = 12.dp),
                 ) {
                     Column(Modifier.fillMaxWidth()) {
-                        if (scripts.isEmpty()) {
-                            Text(
-                                text = "还没有脚本，点右上角「更多」添加",
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-                            )
-                        } else {
+                        run {
                             scripts.forEachIndexed { index, script ->
                                 if (index > 0) {
                                     Spacer(
@@ -345,6 +340,7 @@ fun ScriptsPage(
                     onDismissRequest = { menuTarget = null },
                 )
             }
+        }
         }
 
         item(key = "bottom_spacer") {

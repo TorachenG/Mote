@@ -1209,9 +1209,7 @@ private fun SettingsMainPageMiuix(
                     .statusBarsPadding()
                     .onGloballyPositioned { coords ->
                         val bottomPx = coords.boundsInWindow().bottom.toInt()
-                        // ★ 只记录历史最大高度（标题栏完全展开时）：滚动折叠时高度每帧变化，
-                        //   每帧回写会触发整页重组 + 列表 contentPadding 抖动，模糊区文字会闪烁。
-                        if (bottomPx > topBarBottomPx + 1) {
+                        if (bottomPx != topBarBottomPx) {
                             topBarBottomPx = bottomPx
                         }
                     }
@@ -1747,9 +1745,7 @@ fun SettingsSubPage(
                     .statusBarsPadding()
                     .onGloballyPositioned { coords ->
                         val bottomPx = coords.boundsInWindow().bottom.toInt()
-                        // ★ 只记录历史最大高度（标题栏完全展开时）：滚动折叠时高度每帧变化，
-                        //   每帧回写会触发整页重组 + 列表 contentPadding 抖动，模糊区文字会闪烁。
-                        if (bottomPx > topBarBottomPx + 1) {
+                        if (bottomPx != topBarBottomPx) {
                             topBarBottomPx = bottomPx
                         }
                     }
