@@ -1124,8 +1124,6 @@ private fun SettingsLayoutMiuix(
                     )
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Spacer(Modifier.height(contentTopPadding))
-
                     HorizontalPager(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
@@ -1140,6 +1138,7 @@ private fun SettingsLayoutMiuix(
                                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
+                                    contentPadding = PaddingValues(top = contentTopPadding),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "general_content") {
@@ -1338,6 +1337,7 @@ private fun SettingsLayoutMiuix(
                                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
+                                    contentPadding = PaddingValues(top = contentTopPadding),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "newtab_content") {
