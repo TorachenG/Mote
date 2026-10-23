@@ -107,6 +107,7 @@ import top.yukonga.miuix.kmp.icon.extended.Lock
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.layout.DialogDefaults
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -124,6 +125,7 @@ import androidx.compose.material3.TopAppBar as M3TopAppBar
 import androidx.compose.material3.TopAppBarDefaults as M3TopAppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.torachen.mote.MoteApplication
 
 // ============================================================
 // 常量
@@ -135,6 +137,7 @@ private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
 private val SmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
 internal const val KEY_SAVED_PASSWORDS = "saved_passwords_v1"
+private const val KEY_UX_IMPROVEMENT = "ux_improvement_enabled"
 
 // ============================================================
 // 数据模型 & 持久化
@@ -333,10 +336,19 @@ internal fun exportPasswordCsv(context: Context, uri: Uri, entries: List<Passwor
 fun SettingsPersonalInfoPage(
     onBack: () -> Unit,
     onOpenPasswordManager: () -> Unit,
+    onOpenUxImprovement: () -> Unit,
 ) {
     when (LocalUiMode.current) {
-        UiMode.Miuix -> SettingsPersonalInfoMiuix(onBack, onOpenPasswordManager)
-        UiMode.Material -> SettingsPersonalInfoMaterial(onBack, onOpenPasswordManager)
+        UiMode.Miuix -> SettingsPersonalInfoMiuix(
+            onBack = onBack,
+            onOpenPasswordManager = onOpenPasswordManager,
+            onOpenUxImprovement = onOpenUxImprovement,
+        )
+        UiMode.Material -> SettingsPersonalInfoMaterial(
+            onBack = onBack,
+            onOpenPasswordManager = onOpenPasswordManager,
+            onOpenUxImprovement = onOpenUxImprovement,
+        )
     }
 }
 
@@ -344,6 +356,7 @@ fun SettingsPersonalInfoPage(
 private fun SettingsPersonalInfoMiuix(
     onBack: () -> Unit,
     onOpenPasswordManager: () -> Unit,
+    onOpenUxImprovement: () -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -351,6 +364,9 @@ private fun SettingsPersonalInfoMiuix(
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var uxImprovementEnabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_UX_IMPROVEMENT, true))
     }
     var progressiveTitleBlur by remember {
         mutableStateOf(prefs.getBoolean(KEY_PROGRESSIVE_TITLE_BLUR, true))
@@ -364,6 +380,7 @@ private fun SettingsPersonalInfoMiuix(
                 KEY_PROGRESSIVE_TITLE_BLUR -> progressiveTitleBlur =
                     prefs.getBoolean(key, true)
                 "ui_material_style" -> materialStyle = prefs.getInt(key, 2)
+                KEY_UX_IMPROVEMENT -> uxImprovementEnabled = prefs.getBoolean(key, true)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -439,7 +456,7 @@ private fun SettingsPersonalInfoMiuix(
                 ) {
                     item(key = "content") {
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            SmallTitle("信息")
+                            SmallTitle("功能")
 
                             Card(
                                 modifier = Modifier
@@ -455,6 +472,43 @@ private fun SettingsPersonalInfoMiuix(
                                     ArrowPreference(
                                         title = "密码管理器",
                                         onClick = onOpenPasswordManager,
+                                    )
+                                }
+                            }
+
+                            SmallTitle("其它")
+
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                SearchableItem(
+                                    title = "加入“用户体验改进计划”",
+                                    pageRoute = "settings_personal_info",
+                                    pageTitle = "个人信息",
+                                    itemKey = "settings_personal_info_ux_improvement_toggle",
+                                ) {
+                                    SwitchPreference(
+                                        title = "加入“用户体验改进计划”",
+                                        summary = "允许 Mote 收集相关信息分析产品的使用情况，用以改善产品服务和提升用户体验。更多信息请查看用户体验改进计划",
+                                        checked = uxImprovementEnabled,
+                                        onCheckedChange = { checked ->
+                                            uxImprovementEnabled = checked
+                                            prefs.edit().putBoolean(KEY_UX_IMPROVEMENT, checked).apply()
+                                            MoteApplication.setAnalyticsEnabled(checked)
+                                        },
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "查看用户体验改进计划",
+                                    pageRoute = "settings_personal_info",
+                                    pageTitle = "个人信息",
+                                    itemKey = "settings_personal_info_ux_improvement_view",
+                                ) {
+                                    ArrowPreference(
+                                        title = "查看用户体验改进计划",
+                                        onClick = onOpenUxImprovement,
                                     )
                                 }
                             }
@@ -537,8 +591,16 @@ private fun SettingsPersonalInfoMiuix(
 private fun SettingsPersonalInfoMaterial(
     onBack: () -> Unit,
     onOpenPasswordManager: () -> Unit,
+    onOpenUxImprovement: () -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var uxImprovementEnabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_UX_IMPROVEMENT, true))
+    }
 
     val pageBg = M3MaterialTheme.colorScheme.surface
 
@@ -573,7 +635,7 @@ private fun SettingsPersonalInfoMaterial(
             ) {
                 item(key = "info_header") {
                     M3Text(
-                        text = "信息",
+                        text = "功能",
                         color = M3MaterialTheme.colorScheme.primary,
                         style = M3MaterialTheme.typography.titleSmall,
                         modifier = Modifier
@@ -595,6 +657,49 @@ private fun SettingsPersonalInfoMaterial(
                                     M3SegmentArrowItem(
                                         title = "密码管理器",
                                         onClick = onOpenPasswordManager,
+                                    )
+                                }
+                            )
+                        )
+                    }
+                }
+
+                item(key = "other_header") {
+                    M3Text(
+                        text = "其它",
+                        color = M3MaterialTheme.colorScheme.primary,
+                        style = M3MaterialTheme.typography.titleSmall,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    )
+                }
+
+                item(key = "other_items") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentSwitchItem(
+                                        title = "加入“用户体验改进计划”",
+                                        summary = "允许 Mote 收集相关信息分析产品的使用情况，用以改善产品服务和提升用户体验。更多信息请查看用户体验改进计划",
+                                        checked = uxImprovementEnabled,
+                                        onCheckedChange = { checked ->
+                                            uxImprovementEnabled = checked
+                                            prefs.edit().putBoolean(KEY_UX_IMPROVEMENT, checked).apply()
+                                            MoteApplication.setAnalyticsEnabled(checked)
+                                        },
+                                    )
+                                },
+                                {
+                                    M3SegmentArrowItem(
+                                        title = "查看用户体验改进计划",
+                                        onClick = onOpenUxImprovement,
                                     )
                                 }
                             )

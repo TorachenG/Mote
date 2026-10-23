@@ -196,4 +196,8 @@ dependencies {
 
     // ★ 关键：主工程引入子模块
     baselineProfile(project(":baselineprofile"))
+
+    // ★ 云端同步SDK
+    implementation("com.github.aptabase:aptabase-kotlin:0.0.8")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

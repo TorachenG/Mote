@@ -32,7 +32,9 @@
 
     <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
+    <!-- ★ 补全了 android:name=".MoteApplication" -->
     <application
+        android:name=".MoteApplication"
         android:allowBackup="true"
         android:enableOnBackInvokedCallback="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

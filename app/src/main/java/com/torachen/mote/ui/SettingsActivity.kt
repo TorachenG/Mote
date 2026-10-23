@@ -122,6 +122,8 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Contacts
+import top.yukonga.miuix.kmp.icon.extended.CloudFill
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Link
@@ -160,6 +162,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Cloud
 
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.delay
@@ -288,6 +291,12 @@ private val settingsSections = listOf(
     SettingsSection(
         title = "其它",
         items = listOf(
+            SettingsItem(
+                "空间管理",
+                MiuixIcons.Delete,
+                "settings_space_management",
+                iconBgColor = Color(0xFFFA382E),
+            ),
             SettingsItem("法律信息", MiuixIcons.Contacts, "settings_legal", MEDIUM_ICON_INNER_SIZE),
             SettingsItem("关于", MiuixIcons.Info, "settings_about", iconBgColor = Color(0xFFA4A4A4)),
         )
@@ -616,6 +625,7 @@ internal fun lookupPageIconColor(route: String): Color? =
 // ============================================================
 
 private fun materialIconFor(title: String): ImageVector = when (title) {
+    "同步" -> Icons.Rounded.Cloud
     "主页设置" -> Icons.Rounded.Home
     "搜索设置" -> Icons.Rounded.Search
     "网页浏览设置" -> Icons.Rounded.Language
@@ -1108,6 +1118,34 @@ private fun SettingsMainPageMiuix(
                     }
 
                     if (shouldShowSettings) {
+                        // 新增：顶部无标题“同步”卡片
+                        item(key = "sync_card") {
+                            SearchAnimatedItem(
+                                searchFocus = searchFocusAnim,
+                                shiftPx = shiftPx,
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .padding(horizontal = 12.dp)
+                                        .padding(top = 4.dp, bottom = 12.dp)
+                                ) {
+                                    ArrowPreference(
+                                        title = "同步",
+                                        startAction = {
+                                            Box(modifier = Modifier.padding(end = ICON_TO_TITLE_GAP)) {
+                                                SettingsIcon(
+                                                    icon = MiuixIcons.CloudFill,
+                                                    innerSize = DEFAULT_ICON_INNER_SIZE,
+                                                    bgColor = null
+                                                )
+                                            }
+                                        },
+                                        onClick = { onItemClick("settings_sync") }
+                                    )
+                                }
+                            }
+                        }
+
                         settingsSections.forEach { section ->
                             item(key = "title_${section.title}") {
                                 SearchAnimatedItem(
@@ -1557,6 +1595,33 @@ private fun SettingsMainPageMaterial(
                         }
                     }
                 } else {
+                    item(key = "sync_card") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                .padding(top = 4.dp, bottom = M3_SEGMENT_GROUP_GAP)
+                        ) {
+                            MoteSegmentedColumn(
+                                content = listOf(
+                                    {
+                                        M3SegmentArrowItem(
+                                            title = "同步",
+                                            leading = {
+                                                M3SettingsIcon(
+                                                    icon = materialIconFor("同步"),
+                                                    containerColor = iconContainerColor,
+                                                    contentColor = iconContentColor
+                                                )
+                                            },
+                                            onClick = { onItemClick("settings_sync") }
+                                        )
+                                    }
+                                )
+                            )
+                        }
+                    }
+
                     settingsSections.forEach { section ->
                         item(key = "header_${section.title}") {
                             M3Text(

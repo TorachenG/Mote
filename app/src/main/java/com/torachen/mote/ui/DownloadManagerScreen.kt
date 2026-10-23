@@ -180,6 +180,7 @@ import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
+import com.torachen.mote.MoteApplication
 import com.torachen.mote.R
 import org.json.JSONArray
 import org.json.JSONObject
@@ -750,6 +751,17 @@ internal object MoteDownloader {
             tasks[idx] = newTask
             if (oldTask.status != newTask.status || oldTask.isMissing != newTask.isMissing) {
                 saveTasks()
+            }
+            if (oldTask.status != MoteDownloadStatus.COMPLETED &&
+                newTask.status == MoteDownloadStatus.COMPLETED
+            ) {
+                MoteApplication.trackEventSafe(
+                    "download_completed",
+                    mapOf(
+                        "mime_type" to newTask.mimeType.take(64),
+                        "size_bytes" to newTask.downloadedBytes,
+                    )
+                )
             }
         }
     }

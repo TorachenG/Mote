@@ -204,7 +204,12 @@ import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -250,6 +255,7 @@ import top.yukonga.miuix.kmp.theme.lightColorScheme
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
@@ -286,6 +292,7 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.icon.extended.ExpandLess
 import top.yukonga.miuix.kmp.icon.extended.AddFolder
 import top.yukonga.miuix.kmp.icon.extended.All
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
@@ -328,6 +335,7 @@ import top.yukonga.miuix.kmp.icon.extended.Lock
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.icon.extended.Link
 
+import com.torachen.mote.MoteApplication
 import com.torachen.mote.service.HomeWallpaperCropOverlay
 import com.torachen.mote.service.saveCroppedWallpaper
 import com.torachen.mote.service.TrackerBlockList
@@ -770,6 +778,18 @@ internal object SecurityStateHolder {
             blockedTrackers = if (category != "ad") info.blockedTrackers + 1 else info.blockedTrackers,
             blockedTotal = info.blockedTotal + 1,
         )
+        try {
+            val ctx = MoteAppContextHolder.appContext ?: return
+            val prefs = ctx.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+            val today = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+                .format(java.util.Date())
+            val key = if (category == "ad") {
+                "blocker_daily_${today}_ads"
+            } else {
+                "blocker_daily_${today}_trackers"
+            }
+            prefs.edit().putInt(key, prefs.getInt(key, 0) + 1).apply()
+        } catch (_: Exception) {}
     }
 }
 
@@ -2331,6 +2351,8 @@ data class HistoryEntry(
     val title: String,
     val url: String,
     val timestamp: Long,
+    val isClosed: Boolean = false,
+    val isRemote: Boolean = false
 )
 
 data class BookmarkItem(
@@ -2760,6 +2782,9 @@ class MainActivity : ComponentActivity() {
 
         run {
             val prefs = getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+            lifecycleScope.launch(Dispatchers.IO) {
+                AutoCacheCleaner.checkAndClean(applicationContext)
+            }
 
             // ★ 方案3：数据迁移移到 IO 线程，不阻塞首帧。
             lifecycleScope.launch(Dispatchers.IO) {
@@ -2829,7 +2854,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MoteThemeWrapper {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppRoot()
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppRoot()
+                        PrivacyPolicyDialog()
+                    }
                 }
             }
         }
@@ -3514,8 +3542,12 @@ private fun RenderPageContent(
             "settings_personal_info" -> SettingsPersonalInfoPage(
                 onBack = { onPop() },
                 onOpenPasswordManager = { onPush("settings_password_manager") },
+                onOpenUxImprovement = { onPush("legal_ux_improvement") },
             )
             "settings_password_manager" -> PasswordManagerPage(
+                onBack = { onPop() },
+            )
+            "settings_sync" -> SettingsSyncPage(
                 onBack = { onPop() },
             )
             "settings_legal" -> SettingsLegalPage(
@@ -3547,6 +3579,11 @@ private fun RenderPageContent(
             "download_settings" -> DownloadSettingsScreen(
                 onBack = { onPop() }
             )
+            "settings_space_management" -> SettingsSpaceManagementPage(
+                onBack = { onPop() },
+                onOpenCacheSettings = { onPush("settings_cache_settings") }
+            )
+            "settings_cache_settings" -> CacheSettingsPage(onBack = { onPop() })
             "settings_about" -> SettingsAboutPage(onBack = { onPop() })
             else -> SettingsSubPage(
                 title = routeTitle(entry.route),
@@ -3809,6 +3846,14 @@ fun BrowserScreen(
     var showSourceDialog by remember { mutableStateOf(false) }
     var showScriptDialog by remember { mutableStateOf(false) }
     var sourceContent by remember { mutableStateOf("") }
+    var sourceSearchQuery by remember { mutableStateOf("") }
+    var sourceMatchCurrent by remember { mutableIntStateOf(0) }
+    var sourceMatchTotal by remember { mutableIntStateOf(0) }
+    var sourceWrapEnabled by remember { mutableStateOf(true) }
+    var sourceFontSize by remember { mutableIntStateOf(13) }
+    var sourceWebViewRef by remember { mutableStateOf<WebView?>(null) }
+    var isSourceSearchActive by remember { mutableStateOf(false) }
+
     var scriptContent by remember { mutableStateOf("") }
     var pendingDeleteBookmarkId by remember { mutableStateOf<String?>(null) }
     var showDeleteBookmarkDialog by remember { mutableStateOf(false) }
@@ -4260,6 +4305,13 @@ fun BrowserScreen(
                             webViewMap[id]?.let { applyNightModeToWebView(it, enabled) }
                         }
                     }
+                    val mode = prefs.getInt(key, 0)
+                    if (mode == 1 || mode == 2) {
+                        MoteApplication.trackEventSafe(
+                            "night_mode_toggled",
+                            mapOf("enabled" to (mode == 2))
+                        )
+                    }
                 }
                 "web_night_mode_dim" -> {
                     globalNightDim = prefs.getBoolean(key, true)
@@ -4425,6 +4477,7 @@ fun BrowserScreen(
     }
 
     val history = remember { mutableStateListOf<HistoryEntry>() }
+    val closedHistory = remember { mutableStateListOf<HistoryEntry>() }
 
     fun isHomeUrl(url: String): Boolean {
         if (url.isBlank()) return true
@@ -4453,6 +4506,7 @@ fun BrowserScreen(
                     put("title", entry.title)
                     put("url", entry.url)
                     put("time", entry.timestamp)
+                    put("isRemote", entry.isRemote)
                 })
             }
             prefs.edit().putString("history", json.toString()).apply()
@@ -4474,6 +4528,7 @@ fun BrowserScreen(
                         title = obj.optString("title", "无标题"),
                         url = url,
                         timestamp = obj.optLong("time", 0L),
+                        isRemote = obj.optBoolean("isRemote", false)
                     )
                 )
             }
@@ -4491,6 +4546,7 @@ fun BrowserScreen(
             history[0] = history[0].copy(
                 title = title.ifBlank { history[0].title },
                 timestamp = System.currentTimeMillis(),
+                isRemote = false
             )
             saveHistory()
             return
@@ -4501,12 +4557,14 @@ fun BrowserScreen(
             old.copy(
                 title = title.ifBlank { old.title },
                 timestamp = System.currentTimeMillis(),
+                isRemote = false
             )
         } else {
             HistoryEntry(
                 title = title.ifBlank { "无标题" },
                 url = url,
                 timestamp = System.currentTimeMillis(),
+                isRemote = false
             )
         }
 
@@ -5047,6 +5105,11 @@ fun BrowserScreen(
         val index = windows.indexOfFirst { it.id == id }
         if (index < 0) return
 
+        val closingWin = windows[index]
+        if (closingWin.url.isNotBlank() && closingWin.url != "about:blank") {
+            closedHistory.add(0, HistoryEntry(closingWin.title, closingWin.url, System.currentTimeMillis(), isClosed = true))
+        }
+
         webViewMap.remove(id)?.let { wv ->
             (wv.parent as? ViewGroup)?.removeView(wv)
             wv.destroy()
@@ -5138,6 +5201,10 @@ fun BrowserScreen(
             isWebsite(trimmed) -> "https://$trimmed"
             else -> {
                 val engine = searchEngines.getOrElse(engineIndex) { searchEngines[0] }
+                MoteApplication.trackEventSafe(
+                    "search_performed",
+                    mapOf("engine" to engine.first)
+                )
                 engine.second.replace("%s", URLEncoder.encode(trimmed, "UTF-8"))
             }
         }
@@ -5857,6 +5924,7 @@ fun BrowserScreen(
     }
     fun runDynamicToolAction(toolId: String) {
         val id = activeWindowId
+        MoteApplication.trackEventSafe("tool_used", mapOf("tool_id" to toolId))
         when (toolId) {
             "home" -> {
                 clearSearchFocus()
@@ -7658,6 +7726,7 @@ fun BrowserScreen(
         onDismiss = { showToolSheet = false },
         onToolAction = { toolId, isActive ->
             val id = activeWindowId
+            MoteApplication.trackEventSafe("tool_used", mapOf("tool_id" to toolId))
             when (toolId) {
                 "home" -> {
                     goToHomePage()
@@ -7720,7 +7789,7 @@ fun BrowserScreen(
                     }
                 }
                 "view_source" -> {
-                    if (id != null) {
+                    if (id != null && !showNewTabPage) {
                         webViewMap[id]?.evaluateJavascript("document.documentElement.outerHTML") { raw ->
                             sourceContent = decodeJsString(raw)
                             showSourceDialog = true
@@ -7969,6 +8038,7 @@ fun BrowserScreen(
     HistorySheet(
         show = showHistorySheet,
         history = history,
+        closedHistory = closedHistory,
         multiSelect = historyMultiSelect,
         selectedUrls = historySelected,
         onEnterMultiSelect = { url ->
@@ -7995,6 +8065,7 @@ fun BrowserScreen(
         onDeleteSelected = {
             val toRemove = historySelected.toSet()
             history.removeAll { it.url in toRemove }
+            closedHistory.removeAll { it.url in toRemove }
             saveHistory()
             historyMultiSelect = false
             historySelected.clear()
@@ -8711,56 +8782,266 @@ fun BrowserScreen(
         }
     }
 
-    if (showSourceDialog) {
-        WindowBottomSheet(
-            show = true,
-            onDismissRequest = { showSourceDialog = false },
-            title = "网页源码",
-            backgroundColor = MiuixTheme.colorScheme.surface,
-            allowDismiss = true,
+    WindowBottomSheet(
+        show = showSourceDialog,
+        onDismissRequest = {
+            showSourceDialog = false
+            isSourceSearchActive = false
+            sourceWebViewRef?.clearMatches()
+            sourceSearchQuery = ""
+            sourceMatchCurrent = 0
+            sourceMatchTotal = 0
+        },
+        title = "网页源码",
+        backgroundColor = MiuixTheme.colorScheme.surface,
+        allowDismiss = true,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(animationSpec = tween(durationMillis = 260))
+                .padding(bottom = 24.dp),
         ) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 12.dp)
+                    .height(44.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isSourceSearchActive) {
+                    // 搜索激活状态：页面查找同款输入框 + Close 按钮
+                    BasicTextField(
+                        value = sourceSearchQuery,
+                        onValueChange = { query ->
+                            sourceSearchQuery = query
+                            val wv = sourceWebViewRef ?: return@BasicTextField
+                            if (query.isBlank()) {
+                                wv.clearMatches()
+                                sourceMatchCurrent = 0
+                                sourceMatchTotal = 0
+                            } else {
+                                wv.findAllAsync(query)
+                            }
+                        },
+                        singleLine = true,
+                        textStyle = TextStyle(
+                            fontSize = 14.sp,
+                            color = MiuixTheme.colorScheme.onSurface,
+                        ),
+                        cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                        decorationBox = { inner ->
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(34.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MiuixTheme.colorScheme.secondaryContainer)
+                                    .padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.CenterStart,
+                            ) {
+                                if (sourceSearchQuery.isEmpty()) {
+                                    Text(
+                                        text = "搜索源码",
+                                        fontSize = 13.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
+                                inner()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            isSourceSearchActive = false
+                            sourceSearchQuery = ""
+                            sourceWebViewRef?.clearMatches()
+                            sourceMatchCurrent = 0
+                            sourceMatchTotal = 0
+                        },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Close,
+                            contentDescription = "关闭搜索",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                } else {
+                    // 默认状态：搜索按钮在左，所有选项居中
+                    IconButton(
+                        onClick = { isSourceSearchActive = true },
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Search,
+                            contentDescription = "搜索源码",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = if (sourceMatchTotal > 0) "${sourceMatchCurrent}/${sourceMatchTotal}" else "0/0",
+                                fontSize = 12.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.width(44.dp),
+                                textAlign = TextAlign.Center,
+                            )
+                            IconButton(
+                                onClick = {
+                                    val wv = sourceWebViewRef ?: return@IconButton
+                                    if (sourceSearchQuery.isNotBlank()) wv.findNext(false)
+                                },
+                                enabled = sourceMatchTotal > 0,
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.ChevronBackward,
+                                    contentDescription = "上一个",
+                                    tint = if (sourceMatchTotal > 0) MiuixTheme.colorScheme.onSurface
+                                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val wv = sourceWebViewRef ?: return@IconButton
+                                    if (sourceSearchQuery.isNotBlank()) wv.findNext(true)
+                                },
+                                enabled = sourceMatchTotal > 0,
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.ChevronForward,
+                                    contentDescription = "下一个",
+                                    tint = if (sourceMatchTotal > 0) MiuixTheme.colorScheme.onSurface
+                                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    sourceWrapEnabled = !sourceWrapEnabled
+                                    sourceWebViewRef?.evaluateJavascript(
+                                        "window.moteSetWrap($sourceWrapEnabled);", null
+                                    )
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.VerticalSplit,
+                                    contentDescription = if (sourceWrapEnabled) "关闭自动换行" else "开启自动换行",
+                                    tint = if (sourceWrapEnabled) MiuixTheme.colorScheme.primary
+                                    else MiuixTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val newSize = (sourceFontSize + 1).coerceAtMost(20)
+                                    sourceFontSize = newSize
+                                    sourceWebViewRef?.evaluateJavascript(
+                                        "window.moteSetFontSize($newSize);", null
+                                    )
+                                },
+                                enabled = sourceFontSize < 20,
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.ExpandMore,
+                                    contentDescription = "增大字号",
+                                    tint = if (sourceFontSize < 20) MiuixTheme.colorScheme.onSurface
+                                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    val newSize = (sourceFontSize - 1).coerceAtLeast(9)
+                                    sourceFontSize = newSize
+                                    sourceWebViewRef?.evaluateJavascript(
+                                        "window.moteSetFontSize($newSize);", null
+                                    )
+                                },
+                                enabled = sourceFontSize > 9,
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = MiuixIcons.ExpandLess,
+                                    contentDescription = "减小字号",
+                                    tint = if (sourceFontSize > 9) MiuixTheme.colorScheme.onSurface
+                                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // 右侧占位，与左侧搜索按钮宽度一致，确保中间按钮组绝对居中
+                    Spacer(Modifier.size(32.dp))
+                }
+            }
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 0.dp, bottom = 20.dp), // ★ 增加一点下间距
             ) {
                 SourceWebView(
                     html = sourceContent,
+                    wrapEnabled = sourceWrapEnabled,
+                    fontSizeSp = sourceFontSize,
+                    onWebViewCreated = { wv ->
+                        sourceWebViewRef = wv
+                        wv.setFindListener { activeOrdinal, totalMatches, _ ->
+                            sourceMatchCurrent = activeOrdinal + 1
+                            sourceMatchTotal = totalMatches
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(480.dp)
-                        .padding(horizontal = 12.dp)
                         .clip(RoundedCornerShape(14.dp)),
                 )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = { showSourceDialog = false },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.secondaryContainer,
-                            contentColor = MiuixTheme.colorScheme.onSurface,
-                        ),
-                    ) { Text("关闭") }
-                    Button(
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("html", sourceContent))
-                            Toast.makeText(context, "源码已复制", Toast.LENGTH_SHORT).show()
-                            showSourceDialog = false
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.primary,
-                            contentColor = Color.White,
-                        ),
-                    ) { Text("复制源码") }
-                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = { showSourceDialog = false },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                        contentColor = MiuixTheme.colorScheme.onSurface,
+                    ),
+                ) { Text("关闭") }
+                Button(
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("html", sourceContent))
+                        Toast.makeText(context, "源码已复制", Toast.LENGTH_SHORT).show()
+                        showSourceDialog = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                    ),
+                ) { Text("复制源码") }
             }
         }
     }
@@ -9988,6 +10269,7 @@ private fun createWebView(
             }
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                try { view?.tag = System.currentTimeMillis() } catch (_: Exception) {}
                 onEnglishPageDetected(false)
                 if (url != null) {
                     SecurityStateHolder.reset(url)
@@ -9998,6 +10280,16 @@ private fun createWebView(
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                try {
+                    val start = (view?.tag as? Long) ?: 0L
+                    if (start > 0L) {
+                        val duration = System.currentTimeMillis() - start
+                        MoteApplication.trackEventSafe(
+                            "page_load_finished",
+                            mapOf("duration_ms" to duration)
+                        )
+                    }
+                } catch (_: Exception) {}
                 url?.let { u ->
                     onPageStateChanged(
                         u,
@@ -11761,6 +12053,7 @@ private enum class HistorySort { OLDEST_FIRST, NEWEST_FIRST }
 private fun HistorySheet(
     show: Boolean,
     history: List<HistoryEntry>,
+    closedHistory: List<HistoryEntry>,
     multiSelect: Boolean,
     selectedUrls: List<String>,
     onEnterMultiSelect: (String) -> Unit,
@@ -11772,27 +12065,36 @@ private fun HistorySheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-
-
-
     var filter by remember { mutableStateOf(HistoryFilter.ALL) }
     var sort by remember { mutableStateOf(HistorySort.NEWEST_FIRST) }
+    var currentTab by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(show) {
         if (show) {
             filter = HistoryFilter.ALL
             sort = HistorySort.NEWEST_FIRST
+            currentTab = 0
         }
     }
 
-    val filteredSorted = remember(history.toList(), filter, sort) {
+    // 根据 Tab 选出基础列表
+    val currentSourceList = remember(history.toList(), closedHistory.toList(), currentTab) {
+        when (currentTab) {
+            0 -> history
+            1 -> closedHistory
+            2 -> history.filter { it.isRemote }
+            else -> history
+        }
+    }
+
+    val filteredSorted = remember(currentSourceList, filter, sort) {
         val now = System.currentTimeMillis()
         val filtered = when (filter) {
-            HistoryFilter.ALL -> history.toList()
-            HistoryFilter.LAST_7_DAYS -> history.filter {
+            HistoryFilter.ALL -> currentSourceList
+            HistoryFilter.LAST_7_DAYS -> currentSourceList.filter {
                 now - it.timestamp <= 7L * 24 * 3600 * 1000
             }
-            HistoryFilter.LAST_30_DAYS -> history.filter {
+            HistoryFilter.LAST_30_DAYS -> currentSourceList.filter {
                 now - it.timestamp <= 30L * 24 * 3600 * 1000
             }
         }
@@ -11819,35 +12121,15 @@ private fun HistorySheet(
         listOf(
             DropdownEntry(
                 items = listOf(
-                    DropdownItem(
-                        text = "全部",
-                        selected = filter == HistoryFilter.ALL,
-                        onClick = { filter = HistoryFilter.ALL },
-                    ),
-                    DropdownItem(
-                        text = "近7日",
-                        selected = filter == HistoryFilter.LAST_7_DAYS,
-                        onClick = { filter = HistoryFilter.LAST_7_DAYS },
-                    ),
-                    DropdownItem(
-                        text = "近30日",
-                        selected = filter == HistoryFilter.LAST_30_DAYS,
-                        onClick = { filter = HistoryFilter.LAST_30_DAYS },
-                    ),
+                    DropdownItem(text = "全部", selected = filter == HistoryFilter.ALL, onClick = { filter = HistoryFilter.ALL }),
+                    DropdownItem(text = "近7日", selected = filter == HistoryFilter.LAST_7_DAYS, onClick = { filter = HistoryFilter.LAST_7_DAYS }),
+                    DropdownItem(text = "近30日", selected = filter == HistoryFilter.LAST_30_DAYS, onClick = { filter = HistoryFilter.LAST_30_DAYS }),
                 ),
             ),
             DropdownEntry(
                 items = listOf(
-                    DropdownItem(
-                        text = "从晚到早",
-                        selected = sort == HistorySort.NEWEST_FIRST,
-                        onClick = { sort = HistorySort.NEWEST_FIRST },
-                    ),
-                    DropdownItem(
-                        text = "从早到晚",
-                        selected = sort == HistorySort.OLDEST_FIRST,
-                        onClick = { sort = HistorySort.OLDEST_FIRST },
-                    ),
+                    DropdownItem(text = "从晚到早", selected = sort == HistorySort.NEWEST_FIRST, onClick = { sort = HistorySort.NEWEST_FIRST }),
+                    DropdownItem(text = "从早到晚", selected = sort == HistorySort.OLDEST_FIRST, onClick = { sort = HistorySort.OLDEST_FIRST }),
                 ),
             ),
         )
@@ -11902,8 +12184,7 @@ private fun HistorySheet(
                         Icon(
                             imageVector = MiuixIcons.SelectAll,
                             contentDescription = if (allSelected) "取消全选" else "全选",
-                            tint = if (allSelected) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurface,
+                            tint = if (allSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp),
                         )
                     }
@@ -11930,12 +12211,9 @@ private fun HistorySheet(
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 return@PredictiveBackHandler
             }
-            if (multiSelect) {
-                onCancelMultiSelect()
-            } else {
-                onDismiss()
-            }
+            if (multiSelect) onCancelMultiSelect() else onDismiss()
         }
+
         val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val normalBottomPadding = if (navBarBottom > 12.dp) navBarBottom else 12.dp
 
@@ -11951,6 +12229,17 @@ private fun HistorySheet(
                     .animateContentSize(animationSpec = tween(durationMillis = 260))
                     .padding(bottom = bottomPadding),
             ) {
+                // 主题与界面同款 TabRow
+                TabRowWithContour(
+                    tabs = listOf("全部", "最近关闭", "其它设备"),
+                    selectedTabIndex = currentTab,
+                    onTabSelected = { currentTab = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 8.dp)
+                )
+
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -11970,20 +12259,13 @@ private fun HistorySheet(
                             )
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
+                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
                             grouped.forEach { (dayLabel, entries) ->
                                 item(key = "h_day_$dayLabel") {
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(
-                                                start = 16.dp,
-                                                end = 16.dp,
-                                                top = 12.dp,
-                                                bottom = 4.dp,
-                                            ),
+                                            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Text(
@@ -12029,14 +12311,8 @@ private fun HistorySheet(
 
             AnimatedVisibility(
                 visible = multiSelect,
-                enter = slideInVertically(
-                    animationSpec = tween(220),
-                    initialOffsetY = { it + 40 },
-                ) + fadeIn(tween(180)),
-                exit = slideOutVertically(
-                    animationSpec = tween(200),
-                    targetOffsetY = { it + 40 },
-                ) + fadeOut(tween(150)),
+                enter = slideInVertically(animationSpec = tween(220), initialOffsetY = { it + 40 }) + fadeIn(tween(180)),
+                exit = slideOutVertically(animationSpec = tween(200), targetOffsetY = { it + 40 }) + fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
                 Box(
@@ -12055,18 +12331,15 @@ private fun HistorySheet(
                                 spotShadowColor = Color.Transparent
                             }
                             .clip(RoundedCornerShape(28.dp))
-                            .background(
-                                color = MiuixTheme.colorScheme.surfaceContainer,
-                                shape = RoundedCornerShape(28.dp),
-                            )
+                            .background(color = MiuixTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(28.dp))
                             .padding(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         IconButton(onClick = {
-                            val selectedEntries = history.filter { it.url in selectedUrls }
+                            val selectedEntries = (history + closedHistory).filter { it.url in selectedUrls }
                             if (selectedEntries.isNotEmpty()) {
-                                val text = selectedEntries.joinToString("\n") {
+                                val text = selectedEntries.distinctBy { it.url }.joinToString("\n") {
                                     "【${it.title.ifBlank { "无标题" }}】${it.url}"
                                 }
                                 try {
@@ -12075,31 +12348,16 @@ private fun HistorySheet(
                                         putExtra(Intent.EXTRA_TEXT, text)
                                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     }
-                                    context.startActivity(
-                                        Intent.createChooser(send, "分享网页").apply {
-                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        }
-                                    )
-                                } catch (_: Exception) {
-                                }
+                                    context.startActivity(Intent.createChooser(send, "分享网页").apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
+                                } catch (_: Exception) {}
                             }
                         }) {
-                            Icon(
-                                imageVector = MiuixIcons.Share,
-                                contentDescription = "分享",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(22.dp),
-                            )
+                            Icon(imageVector = MiuixIcons.Share, contentDescription = "分享", tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
                         }
-                        IconButton(onClick = {
-                            if (selectedUrls.isNotEmpty()) onDeleteSelected()
-                        }) {
-                            Icon(
-                                imageVector = MiuixIcons.Delete,
-                                contentDescription = "删除",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(22.dp),
-                            )
+                        IconButton(onClick = { if (selectedUrls.isNotEmpty()) onDeleteSelected() }) {
+                            Icon(imageVector = MiuixIcons.Delete, contentDescription = "删除", tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
                         }
                     }
                 }
@@ -13129,7 +13387,7 @@ private fun ToolGrid(
     onToolClick: (String) -> Unit,
 ) {
     val density = LocalDensity.current
-    val disabledTools = remember { setOf("translate", "zoom", "find_in_page", "tts", "sniff", "save_page", "print", "share", "play_in_player") }
+    val disabledTools = remember { setOf("translate", "zoom", "find_in_page", "tts", "sniff", "save_page", "print", "share", "play_in_player", "view_source") }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth(),
@@ -14187,25 +14445,74 @@ private fun SniffThumbnail(
 // ============================================================
 
 @Composable
-private fun SourceWebView(html: String, modifier: Modifier = Modifier) {
+private fun SourceWebView(
+    html: String,
+    wrapEnabled: Boolean,
+    fontSizeSp: Int,
+    onWebViewCreated: (WebView) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+    val bgHex = if (isDark) "transparent" else "transparent"
+    val textHex = if (isDark) "#E6E6E6" else "#1C1C1E"
+    val lineNumHex = if (isDark) "#6B6B6B" else "#8E8E93"
+    val tagHex = if (isDark) "#7FB3FF" else "#0A66C2"
+    val attrHex = if (isDark) "#C792EA" else "#7B30B5"
+    val valueHex = if (isDark) "#A8D08D" else "#2E7D32"
+    val commentHex = if (isDark) "#7A7A7A" else "#8E8E93"
+
+    val tag = Triple(html, textHex, isDark)
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
             WebView(ctx).apply {
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                settings.javaScriptEnabled = false
+                settings.javaScriptEnabled = true
                 settings.builtInZoomControls = true
                 settings.displayZoomControls = false
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
-                tag = html
-                loadDataWithBaseURL(null, buildSourceHtml(html), "text/html", "utf-8", null)
+                this.tag = tag
+                loadDataWithBaseURL(
+                    null,
+                    buildSourceHtml(
+                        source = html,
+                        textHex = textHex,
+                        lineNumHex = lineNumHex,
+                        tagHex = tagHex,
+                        attrHex = attrHex,
+                        valueHex = valueHex,
+                        commentHex = commentHex,
+                        wrapEnabled = wrapEnabled,
+                        fontSizeSp = fontSizeSp,
+                    ),
+                    "text/html",
+                    "utf-8",
+                    null,
+                )
+                onWebViewCreated(this)
             }
         },
         update = { wv ->
-            if (wv.tag != html) {
-                wv.tag = html
-                wv.loadDataWithBaseURL(null, buildSourceHtml(html), "text/html", "utf-8", null)
+            if (wv.tag != tag) {
+                wv.tag = tag
+                wv.loadDataWithBaseURL(
+                    null,
+                    buildSourceHtml(
+                        source = html,
+                        textHex = textHex,
+                        lineNumHex = lineNumHex,
+                        tagHex = tagHex,
+                        attrHex = attrHex,
+                        valueHex = valueHex,
+                        commentHex = commentHex,
+                        wrapEnabled = wrapEnabled,
+                        fontSizeSp = fontSizeSp,
+                    ),
+                    "text/html",
+                    "utf-8",
+                    null,
+                )
             }
         },
         onRelease = { wv ->
@@ -14218,15 +14525,366 @@ private fun SourceWebView(html: String, modifier: Modifier = Modifier) {
     )
 }
 
-private fun buildSourceHtml(source: String): String {
-    val escaped = source
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    return "<!DOCTYPE html><html><head>" +
-            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
-            "<style>html,body{margin:0;padding:10px;background:#f7f7f9;color:#1c1c1e;}" +
-            "pre{margin:0;font:12px/1.55 ui-monospace,Menlo,Consolas,monospace;" +
-            "white-space:pre-wrap;word-break:break-word;}</style></head>" +
-            "<body><pre>" + escaped + "</pre></body></html>"
+private fun buildSourceHtml(
+    source: String,
+    textHex: String,
+    lineNumHex: String,
+    tagHex: String,
+    attrHex: String,
+    valueHex: String,
+    commentHex: String,
+    wrapEnabled: Boolean,
+    fontSizeSp: Int,
+): String {
+    val lines = source.split("\n")
+    val lineHtml = StringBuilder()
+    lines.forEachIndexed { index, line ->
+        val escaped = line
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        lineHtml.append(
+            "<div class=\"line\"><span class=\"ln\">${index + 1}</span>" +
+                    "<span class=\"code\">$escaped</span></div>"
+        )
+    }
+
+    val wrapClass = if (wrapEnabled) "wrap" else "nowrap"
+
+    return """<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: transparent;
+    color: $textHex;
+    font: ${fontSizeSp}px/1.55 ui-monospace, Menlo, Consolas, monospace;
+  }
+  #viewer { padding: 10px 12px 10px 0; }
+  .line { display: flex; align-items: flex-start; }
+  .ln {
+    flex: 0 0 auto;
+    width: 44px;
+    text-align: right;
+    padding-right: 10px;
+    color: $lineNumHex;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .code {
+    flex: 1 1 auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-width: 0;
+  }
+  .nowrap .code {
+    white-space: pre;
+    word-break: normal;
+    overflow-x: auto;
+  }
+  .tag { color: $tagHex; }
+  .attr { color: $attrHex; }
+  .value { color: $valueHex; }
+  .comment { color: $commentHex; font-style: italic; }
+  .mote-find-highlight { background: rgba(255, 200, 0, 0.45); border-radius: 2px; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.4); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="viewer" class="$wrapClass">$lineHtml</div>
+<script>
+(function(){
+  var root = document.getElementById('viewer');
+
+  function escapeReg(s) {
+    return s.replace(/[.*+?^${'$'}{}()|[\]\\]/g, '\\${'$'}&');
+  }
+
+  function highlightHtml(text) {
+    var esc = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    esc = esc.replace(/&lt;!--[\s\S]*?--&gt;/g, function(m) {
+      return '<span class="comment">' + m + '</span>';
+    });
+    esc = esc.replace(/(&lt;\/?)([a-zA-Z][a-zA-Z0-9:-]*)([^&]*?)(\/?&gt;)/g, function(_, open, tag, attrs, close) {
+      var attrHtml = attrs.replace(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)(\s*=\s*)("[^"]*"|'[^']*'|[^\s>]+)/g,
+        '<span class="attr">${'$'}1</span>${'$'}2<span class="value">${'$'}3</span>');
+      return open + '<span class="tag">' + tag + '</span>' + attrHtml + close;
+    });
+    return esc;
+  }
+
+  var codeNodes = document.querySelectorAll('.code');
+  for (var i = 0; i < codeNodes.length; i++) {
+    var raw = codeNodes[i].textContent;
+    codeNodes[i].innerHTML = highlightHtml(raw);
+  }
+
+  window.moteSetWrap = function(enabled) {
+    if (enabled) root.classList.remove('nowrap');
+    else root.classList.add('nowrap');
+  };
+  window.moteSetFontSize = function(px) {
+    document.body.style.fontSize = px + 'px';
+  };
+})();
+</script>
+</body></html>"""
+}
+
+
+@Composable
+fun PrivacyPolicyDialog() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    var showDialog by remember { mutableStateOf(!prefs.getBoolean("privacy_agreed", false)) }
+    // 0: 用户协议, 1: 隐私政策
+    var currentDocIndex by remember { mutableIntStateOf(0) }
+
+    // ★ 移除了 if (!showDialog) return，保证 Miuix 退场动画能正常执行
+
+    // 1. 不可被返回操作关闭
+    androidx.activity.compose.BackHandler(enabled = showDialog) { }
+
+    val onAgree: () -> Unit = {
+        prefs.edit().putBoolean("privacy_agreed", true).apply()
+        showDialog = false
+        val appKey = "A-US-1587001410"
+        (context.applicationContext as? com.torachen.mote.MoteApplication)?.initAptabase(appKey)
+    }
+
+    // 2. 拒绝后退出应用（加入延迟等待退场动画）
+    val onExit: () -> Unit = {
+        showDialog = false
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            (context as? android.app.Activity)?.finishAndRemoveTask()
+        }, 300) // 300ms 后关闭 Activity
+    }
+
+    // 3. 拼接带有下划线、主题蓝的富文本
+    val annotatedString = buildAnnotatedString {
+        append("欢迎使用 Mote！在开始使用之前，请阅读并同意")
+
+        pushStringAnnotation(tag = "LINK", annotation = "user_agreement")
+        withStyle(SpanStyle(color = MiuixTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+            append("《用户协议》")
+        }
+        pop()
+
+        append("和")
+
+        pushStringAnnotation(tag = "LINK", annotation = "privacy_policy")
+        withStyle(SpanStyle(color = MiuixTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+            append("《隐私政策》")
+        }
+        pop()
+        append("。")
+    }
+
+    val textLayoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
+
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> {
+            top.yukonga.miuix.kmp.window.WindowDialog(
+                show = showDialog, // ★ 传入状态，让组件自己播放退场动画
+                title = "阅读用户协议与隐私政策",
+                onDismissRequest = { /* 禁止外部点击关闭 */ },
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    // 第一段正文：富文本点击
+                    Text(
+                        text = annotatedString,
+                        style = MiuixTheme.textStyles.body1,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        onTextLayout = { textLayoutResult.value = it },
+                        modifier = Modifier.pointerInput(Unit) {
+                            detectTapGestures { pos ->
+                                textLayoutResult.value?.let { layout ->
+                                    val offset = layout.getOffsetForPosition(pos)
+                                    annotatedString.getStringAnnotations(tag = "LINK", start = offset, end = offset).firstOrNull()?.let {
+                                        if (it.item == "user_agreement") currentDocIndex = 0
+                                        else if (it.item == "privacy_policy") currentDocIndex = 1
+                                    }
+                                }
+                            }
+                        }
+                    )
+
+                    // 灰底自适应高度区 + 左右平滑过渡动画 + Markdown渲染
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 150.dp, max = 400.dp)
+                            .animateContentSize(),
+                        colors = top.yukonga.miuix.kmp.basic.CardDefaults.defaultColors(
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                        )
+                    ) {
+                        AnimatedContent(
+                            targetState = currentDocIndex,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    (slideInHorizontally(animationSpec = tween(300)) { width -> width } + fadeIn()) togetherWith
+                                            (slideOutHorizontally(animationSpec = tween(300)) { width -> -width } + fadeOut())
+                                } else {
+                                    (slideInHorizontally(animationSpec = tween(300)) { width -> -width } + fadeIn()) togetherWith
+                                            (slideOutHorizontally(animationSpec = tween(300)) { width -> width } + fadeOut())
+                                }
+                            },
+                            label = "docTransition"
+                        ) { targetIndex ->
+                            val doc = if (targetIndex == 0) {
+                                RemoteLegalDocs.loadInitial(context, RemoteLegalDoc.USER_AGREEMENT)
+                            } else {
+                                RemoteLegalDocs.loadInitial(context, RemoteLegalDoc.PRIVACY_POLICY)
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                MarkdownText(
+                                    text = doc,
+                                    baseColor = MiuixTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        top.yukonga.miuix.kmp.basic.Button(
+                            onClick = onExit,
+                            modifier = Modifier.weight(1f),
+                            colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.secondaryContainer,
+                                contentColor = MiuixTheme.colorScheme.onSurface,
+                            ),
+                        ) {
+                            Text("拒绝并退出")
+                        }
+                        top.yukonga.miuix.kmp.basic.Button(
+                            onClick = onAgree,
+                            modifier = Modifier.weight(1f),
+                            colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.primary,
+                                contentColor = Color.White,
+                            ),
+                        ) {
+                            Text("同意并继续")
+                        }
+                    }
+                }
+            }
+        }
+        UiMode.Material -> {
+            // M3 分支保留 if 包裹
+            if (showDialog) {
+                val m3AnnotatedString = buildAnnotatedString {
+                    append("欢迎使用 Mote！在开始使用之前，请阅读并同意")
+                    pushStringAnnotation(tag = "LINK", annotation = "user_agreement")
+                    withStyle(SpanStyle(color = androidx.compose.material3.MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+                        append("《用户协议》")
+                    }
+                    pop()
+                    append("和")
+                    pushStringAnnotation(tag = "LINK", annotation = "privacy_policy")
+                    withStyle(SpanStyle(color = androidx.compose.material3.MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+                        append("《隐私政策》")
+                    }
+                    pop()
+                    append("。")
+                }
+
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { },
+                    title = { androidx.compose.material3.Text("阅读用户协议与隐私政策") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            androidx.compose.material3.Text(
+                                text = m3AnnotatedString,
+                                onTextLayout = { textLayoutResult.value = it },
+                                modifier = Modifier.pointerInput(Unit) {
+                                    detectTapGestures { pos ->
+                                        textLayoutResult.value?.let { layout ->
+                                            val offset = layout.getOffsetForPosition(pos)
+                                            m3AnnotatedString.getStringAnnotations(tag = "LINK", start = offset, end = offset).firstOrNull()?.let {
+                                                if (it.item == "user_agreement") currentDocIndex = 0
+                                                else if (it.item == "privacy_policy") currentDocIndex = 1
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+
+                            androidx.compose.material3.Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 150.dp, max = 400.dp)
+                                    .animateContentSize(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                AnimatedContent(
+                                    targetState = currentDocIndex,
+                                    transitionSpec = {
+                                        if (targetState > initialState) {
+                                            (slideInHorizontally(animationSpec = tween(300)) { width -> width } + fadeIn()) togetherWith
+                                                    (slideOutHorizontally(animationSpec = tween(300)) { width -> -width } + fadeOut())
+                                        } else {
+                                            (slideInHorizontally(animationSpec = tween(300)) { width -> -width } + fadeIn()) togetherWith
+                                                    (slideOutHorizontally(animationSpec = tween(300)) { width -> width } + fadeOut())
+                                        }
+                                    },
+                                    label = "docTransition"
+                                ) { targetIndex ->
+                                    val doc = if (targetIndex == 0) {
+                                        RemoteLegalDocs.loadInitial(context, RemoteLegalDoc.USER_AGREEMENT)
+                                    } else {
+                                        RemoteLegalDocs.loadInitial(context, RemoteLegalDoc.PRIVACY_POLICY)
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .verticalScroll(rememberScrollState())
+                                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                                    ) {
+                                        MiuixTheme {
+                                            MarkdownText(
+                                                text = doc,
+                                                baseColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = onAgree) {
+                            androidx.compose.material3.Text("同意并继续")
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = onExit) {
+                            androidx.compose.material3.Text("拒绝并退出")
+                        }
+                    },
+                )
+            }
+        }
+    }
 }

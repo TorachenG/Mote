@@ -1,0 +1,10 @@
+{
+  "name": "mote-auth",
+  "version": "2.0.0",
+  "description": "Mote 云同步账号与数据云函数",
+  "main": "index.js",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@cloudbase/node-sdk": "latest"
+  }
+}

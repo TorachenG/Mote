@@ -1,0 +1,18 @@
+{
+  "envId": "mote-sync-d9geb238o1c1ea40e",
+  "version": "2.0",
+  "functionRoot": "./cloudbase/functions",
+  "functions": [
+    {
+      "name": "auth",
+      "type": "HTTP",
+      "timeout": 20,
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "installDependency": true,
+      "public": true,
+      "gatewayPath": "/moteauth",
+      "ignore": ["node_modules", "node_modules/**/*", "*.log"]
+    }
+  ]
+}

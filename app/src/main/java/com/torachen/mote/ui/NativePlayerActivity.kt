@@ -1382,12 +1382,12 @@ private fun NativePlayerScreen(
 
     var showEpisodeSheet by remember { mutableStateOf(false) }
 
-    val isWebPageUrl = (refererUrl.startsWith("http://") ||
-            refererUrl.startsWith("https://")) &&
-            !refererUrl.endsWith(".m3u8", true) &&
-            !refererUrl.endsWith(".mp4", true) &&
-            !refererUrl.endsWith(".webm", true) &&
-            refererUrl.length > "https://x.x/".length
+    val isWebPageUrl = (refererUrlInitial.startsWith("http://") ||
+            refererUrlInitial.startsWith("https://")) &&
+            !refererUrlInitial.endsWith(".m3u8", true) &&
+            !refererUrlInitial.endsWith(".mp4", true) &&
+            !refererUrlInitial.endsWith(".webm", true) &&
+            refererUrlInitial.length > "https://x.x/".length
 
     var episodeList by remember(refererUrlInitial) {
         val isInitialWebPage = (refererUrlInitial.startsWith("http://") ||
@@ -1402,8 +1402,10 @@ private fun NativePlayerScreen(
         )
     }
 
-    // ★ 只有 DOM 真实抓取到 > 1 集时，才把选集按钮视为"可信"并显示。
-    var episodeListTrusted by remember(refererUrlInitial) { mutableStateOf(false) }
+    // ★ 只有 DOM 真实抓取到 > 1 集，或者 URL 规则直接解析出 > 1 集时，才显示选集按钮。
+    var episodeListTrusted by remember(refererUrlInitial) {
+        mutableStateOf((episodeList?.total ?: 0) > 1)
+    }
 
     val timeText = rememberTimeText()
     val (battery, charging) = rememberBattery(ctx)
@@ -2941,48 +2943,50 @@ private fun NativePlayerScreen(
             }
 
             if (isWebPageUrl) {
-                HiddenEpisodeWebView(
-                    context = ctx,
-                    pageUrl = refererUrl,
-                    onEpisodeListExtracted = { result ->
-                        if (result.total > 1) {
-                            episodeList = result
-                            episodeListTrusted = true
-                        }
-                    },
-                    onVideoUrlExtracted = { newUrl ->
-                        if (newUrl.isNotBlank()) {
-                            scope.launch {
-                                switchMutex.withLock {
-                                    if (newUrl == PlaybackSessionHolder.currentUrl) {
-                                        return@withLock
-                                    }
-                                    try {
-                                        val factory = mediaSourceFactoryRef.value
-                                        val newMediaSource: MediaSource =
-                                            factory.createMediaSource(buildMediaItem(newUrl))
-                                        exo.setMediaSource(newMediaSource)
-                                        exo.prepare()
-                                        exo.playWhenReady = true
-                                        PlaybackSessionHolder.currentUrl = newUrl
-                                        PlaybackPositionHolder.savedUrl = newUrl
-                                        PlaybackPositionHolder.positionMs = 0L
-                                        val ep = episodeList
-                                        if (ep != null) {
-                                            val idx = ep.episodes.indexOfFirst {
-                                                newUrl.contains("/${it.episodeNumber}/") ||
-                                                        newUrl.contains("/${it.episodeNumber}.")
-                                            }
-                                            if (idx >= 0) {
-                                                episodeList = ep.copy(currentIndex = idx)
-                                            }
+                Box(modifier = Modifier.size(1.dp)) {
+                    HiddenEpisodeWebView(
+                        context = ctx,
+                        pageUrl = refererUrlInitial,
+                        onEpisodeListExtracted = { result ->
+                            if (result.total > 1) {
+                                episodeList = result
+                                episodeListTrusted = true
+                            }
+                        },
+                        onVideoUrlExtracted = { newUrl ->
+                            if (newUrl.isNotBlank()) {
+                                scope.launch {
+                                    switchMutex.withLock {
+                                        if (newUrl == PlaybackSessionHolder.currentUrl) {
+                                            return@withLock
                                         }
-                                    } catch (_: Exception) {}
+                                        try {
+                                            val factory = mediaSourceFactoryRef.value
+                                            val newMediaSource: MediaSource =
+                                                factory.createMediaSource(buildMediaItem(newUrl))
+                                            exo.setMediaSource(newMediaSource)
+                                            exo.prepare()
+                                            exo.playWhenReady = true
+                                            PlaybackSessionHolder.currentUrl = newUrl
+                                            PlaybackPositionHolder.savedUrl = newUrl
+                                            PlaybackPositionHolder.positionMs = 0L
+                                            val ep = episodeList
+                                            if (ep != null) {
+                                                val idx = ep.episodes.indexOfFirst {
+                                                    newUrl.contains("/${it.episodeNumber}/") ||
+                                                            newUrl.contains("/${it.episodeNumber}.")
+                                                }
+                                                if (idx >= 0) {
+                                                    episodeList = ep.copy(currentIndex = idx)
+                                                }
+                                            }
+                                        } catch (_: Exception) {}
+                                    }
                                 }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
 
             val epList = episodeList
@@ -2995,26 +2999,48 @@ private fun NativePlayerScreen(
                         val targetUrl = when {
                             ep.url.startsWith("http://") || ep.url.startsWith("https://") -> ep.url
                             ep.url.startsWith("/") -> {
-                                val origin = refererUrl.substringBefore("/vodplay/")
-                                    .ifBlank { refererUrl.substringBefore("/play/") }
+                                val origin = refererUrlInitial.substringBefore("/vodplay/")
+                                    .ifBlank { refererUrlInitial.substringBefore("/play/") }
                                     .ifBlank {
-                                        val s = refererUrl.substringBefore("://")
-                                        val h = refererUrl.substringAfter("://").substringBefore("/")
+                                        val s = refererUrlInitial.substringBefore("://")
+                                        val h = refererUrlInitial.substringAfter("://").substringBefore("/")
                                         if (s.isNotBlank() && h.isNotBlank()) "$s://$h" else ""
                                     }
                                 if (origin.isNotBlank()) "$origin${ep.url}" else ep.url
                             }
                             ep.url.startsWith("#") -> {
-                                val base = refererUrl.substringBefore("#").trimEnd('/')
+                                val base = refererUrlInitial.substringBefore("#").trimEnd('/')
                                 "$base${ep.url}"
                             }
                             else -> {
-                                val base = refererUrl.substringBefore("#").trimEnd('/')
+                                val base = refererUrlInitial.substringBefore("#").trimEnd('/')
                                 "$base/${ep.url}"
                             }
                         }
-                        refererUrlState = targetUrl
                         showEpisodeSheet = false
+                        scope.launch {
+                            switchMutex.withLock {
+                                if (targetUrl == PlaybackSessionHolder.currentUrl) {
+                                    return@withLock
+                                }
+                                try {
+                                    val factory = mediaSourceFactoryRef.value
+                                    val newMediaSource: MediaSource =
+                                        factory.createMediaSource(buildMediaItem(targetUrl))
+                                    exo.setMediaSource(newMediaSource)
+                                    exo.prepare()
+                                    exo.playWhenReady = true
+                                    PlaybackSessionHolder.currentUrl = targetUrl
+                                    PlaybackPositionHolder.savedUrl = targetUrl
+                                    PlaybackPositionHolder.positionMs = 0L
+
+                                    val idx = epList.episodes.indexOf(ep)
+                                    if (idx >= 0) {
+                                        episodeList = epList.copy(currentIndex = idx)
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                        }
                     },
                     onDismiss = { showEpisodeSheet = false },
                 )

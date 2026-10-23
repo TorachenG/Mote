@@ -4079,12 +4079,10 @@ private fun WeatherDetailSheet(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val density = LocalDensity.current
     var precise by remember {
         initWeatherPreciseFromPrefs(context)
         mutableStateOf(WeatherStateHolder.precise)
     }
-    var showMoreMenu by remember { mutableStateOf(false) }
 
     fun applyPrecise(enabled: Boolean) {
         setWeatherPrecise(context, enabled)
@@ -4112,6 +4110,31 @@ private fun WeatherDetailSheet(
         }
     }
 
+    val moreMenuEntries = remember(precise) {
+        listOf(
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(
+                        text = "精确到县、市",
+                        selected = precise,
+                        onClick = {
+                            when {
+                                precise -> applyPrecise(false)
+                                hasFineLocationPermission(context) -> applyPrecise(true)
+                                else -> locationPermissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    )
+                                )
+                            }
+                        },
+                    ),
+                ),
+            ),
+        )
+    }
+
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides sheetNavOwner
     ) {
@@ -4122,66 +4145,13 @@ private fun WeatherDetailSheet(
             backgroundColor = MiuixTheme.colorScheme.surface,
             allowDismiss = true,
             endAction = {
-                Box {
-                    Box(
-                        modifier = Modifier
-                            .padding(6.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { showMoreMenu = true },
-                    ) {
-                        Icon(
-                            imageVector = MiuixIcons.More,
-                            contentDescription = "更多",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-
-                    if (showMoreMenu) {
-                        Popup(
-                            alignment = Alignment.TopEnd,
-                            offset = IntOffset(0, with(density) { 44.dp.roundToPx() }),
-                            onDismissRequest = { showMoreMenu = false },
-                            properties = PopupProperties(focusable = true),
-                        ) {
-                            Card(modifier = Modifier.width(196.dp)) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            showMoreMenu = false
-                                            when {
-                                                precise -> applyPrecise(false)
-                                                hasFineLocationPermission(context) -> applyPrecise(true)
-                                                else -> locationPermissionLauncher.launch(
-                                                    arrayOf(
-                                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                                                    )
-                                                )
-                                            }
-                                        },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = "精确到县、市",
-                                        fontSize = 15.sp,
-                                        color = MiuixTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    if (precise) {
-                                        Text(
-                                            text = "已开启",
-                                            fontSize = 12.sp,
-                                            color = MiuixTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                WindowIconCascadingDropdownMenu(entries = moreMenuEntries) {
+                    Icon(
+                        imageVector = MiuixIcons.More,
+                        contentDescription = "更多",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
             },
         ) {
