@@ -13128,18 +13128,16 @@ private fun BookmarkSheet(
                                             .animateItem()
                                             .combinedClickable(
                                                 onClick = {
-                                                    if (entry.isFolder) {
+                                                    if (multiSelect) {
+                                                        onToggleSelect(entry.id)
+                                                    } else if (entry.isFolder) {
                                                         onEnterFolder(entry)
                                                     } else {
-                                                        if (multiSelect) {
-                                                            onToggleSelect(entry.id)
-                                                        } else {
-                                                            entry.url?.let { onOpenUrl(it) }
-                                                        }
+                                                        entry.url?.let { onOpenUrl(it) }
                                                     }
                                                 },
                                                 onLongClick = {
-                                                    if (!multiSelect && !entry.isFolder) {
+                                                    if (!multiSelect) {
                                                         onEnterMultiSelect(entry.id)
                                                     }
                                                 },
