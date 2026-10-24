@@ -54,10 +54,12 @@
   button.primary{background:var(--blue);color:#fff;box-shadow:0 8px 20px rgba(47,123,246,.18)}
   button.primary:hover{background:#2a70e4}
   .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
-  .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:20px}
+  .status{font-size:13px;color:var(--muted);margin-top:10px}
+  .status:empty{display:none;margin-top:0}
   .status.ok{color:var(--ok)}
   .status.err{color:var(--danger)}
   .hint{font-size:12.5px;color:var(--muted);line-height:1.75;margin:10px 0 0}
+  .hint:last-child{margin-bottom:0}
   .hidden{display:none}
   .account-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
   .account-name{font-size:14px;color:var(--text);letter-spacing:.2px}
