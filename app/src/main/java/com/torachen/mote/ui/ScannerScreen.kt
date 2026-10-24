@@ -779,12 +779,43 @@ private fun blackWhiteDocumentFilter(pixels: IntArray, width: Int, height: Int):
         }
     }
 
-    // 5. Otsu 阈值（限定在合理区间，防止整页偏黑/偏白）
-    val threshold = computeOtsuThreshold(norm, n).coerceIn(70f, 205f)
+    // 5. 全局 Otsu 阈值作为基准
+    val otsu = computeOtsuThreshold(norm, n).coerceIn(70f, 205f)
 
+    // 6. 自适应阈值：积分图求局部均值（窗口约为短边的 1/12），
+    //    解决拍照光照不均时「一半黑一半白」的问题，比纯 Otsu 更接近文档扫描效果
+    val integral = LongArray((width + 1) * (height + 1))
+    for (y in 0 until height) {
+        var rowSum = 0L
+        val rowBase = (y + 1) * (width + 1)
+        val prevBase = y * (width + 1)
+        for (x in 0 until width) {
+            rowSum += norm[y * width + x].toLong()
+            integral[rowBase + x + 1] = integral[prevBase + x + 1] + rowSum
+        }
+    }
+
+    val radius = ((minOf(width, height) / 12).coerceAtLeast(6)).coerceAtMost(40)
+    val c = 9f
     val out = IntArray(n)
-    for (i in 0 until n) {
-        out[i] = if (norm[i] < threshold) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+    for (y in 0 until height) {
+        val y0 = (y - radius).coerceAtLeast(0)
+        val y1 = (y + radius).coerceAtMost(height - 1)
+        for (x in 0 until width) {
+            val x0 = (x - radius).coerceAtLeast(0)
+            val x1 = (x + radius).coerceAtMost(width - 1)
+            val area = ((x1 - x0 + 1) * (y1 - y0 + 1)).toFloat()
+            val sum = integral[(y1 + 1) * (width + 1) + (x1 + 1)] -
+                    integral[y0 * (width + 1) + (x1 + 1)] -
+                    integral[(y1 + 1) * (width + 1) + x0] +
+                    integral[y0 * (width + 1) + x0]
+            val localMean = sum / area
+            val value = norm[y * width + x]
+            // 局部对比度低（纯色纸面/背景）时退回 Otsu，避免大面积噪点
+            val threshold = if (kotlin.math.abs(localMean - value) < 6f) otsu
+            else (localMean - c).coerceIn(otsu - 45f, otsu + 45f)
+            out[y * width + x] = if (value < threshold) 0xFF000000.toInt() else 0xFFFFFFFF.toInt()
+        }
     }
     return out
 }
