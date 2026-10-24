@@ -149,7 +149,22 @@ private fun DownloadsShellMiuix(
                 .fillMaxSize()
                 .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
         ) {
-            Crossfade(targetState = tab, animationSpec = tween(160), label = "sheetTab") { current ->
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    val forward = targetState > initialState
+                    val slide = tween<androidx.compose.ui.unit.IntOffset>(durationMillis = 280)
+                    val fade = tween<Float>(durationMillis = 200)
+                    if (forward) {
+                        (slideInHorizontally(slide) { it / 4 } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { -it / 4 } + fadeOut(fade))
+                    } else {
+                        (slideInHorizontally(slide) { -it / 4 } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { it / 4 } + fadeOut(fade))
+                    }
+                },
+                label = "sheetTab",
+            ) { current ->
                 if (current == 0) {
                     DownloadManagerScreen(
                         onBack = onBack,
