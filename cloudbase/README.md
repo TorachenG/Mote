@@ -15,11 +15,8 @@ cloudbase/
 
 ## 管理面板怎么用
 
-管理面板**不在仓库里**（避免公开暴露入口），本地路径：
-
-```
-~\Documents\MoteAdmin\index.html
-```
+管理面板**不在仓库里**（避免公开暴露入口），放在仓库之外的任意目录，
+例如 `Documents/MoteAdmin/index.html`。
 
 1. 双击用浏览器打开（不需要起服务器）；
 2. 填两项：
