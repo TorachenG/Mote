@@ -1139,29 +1139,25 @@ private fun FileInfoDialog(
         ) {
             if (single && one != null) {
                 InfoRow("位置") {
-                    Column {
-                        Text(
-                            one.file.absolutePath,
-                            fontSize = 13.sp,
-                            color = MiuixTheme.colorScheme.primary,
-                            modifier = Modifier.clickable { onJump(one.file.parentFile ?: one.file) },
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                        )
-                    }
+                    Text(
+                        one.file.absolutePath,
+                        style = MiuixTheme.textStyles.body1,
+                        color = MiuixTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { onJump(one.file.parentFile ?: one.file) },
+                    )
                 }
-                InfoRow("大小") { Text(if (one.isDir) "文件夹" else fmFormatSize(one.size), fontSize = 13.sp) }
-                InfoRow("时间") { Text(fmFormatTime(one.modified), fontSize = 13.sp) }
-                InfoRow("可读") { Text(if (one.file.canRead()) "是" else "否", fontSize = 13.sp) }
-                InfoRow("可写") { Text(if (one.file.canWrite()) "是" else "否", fontSize = 13.sp) }
-                InfoRow("隐藏") { Text(if (one.file.isHidden) "是" else "否", fontSize = 13.sp) }
+                InfoRow("大小") {
+                    Text(
+                        if (one.isDir) "文件夹" else fmFormatSize(one.size),
+                        style = MiuixTheme.textStyles.body1,
+                    )
+                }
+                InfoRow("时间") { Text(fmFormatTime(one.modified), style = MiuixTheme.textStyles.body1) }
+                InfoRow("可读") { Text(if (one.file.canRead()) "是" else "否", style = MiuixTheme.textStyles.body1) }
+                InfoRow("可写") { Text(if (one.file.canWrite()) "是" else "否", style = MiuixTheme.textStyles.body1) }
+                InfoRow("隐藏") { Text(if (one.file.isHidden) "是" else "否", style = MiuixTheme.textStyles.body1) }
             } else {
-                InfoRow("总计大小") { Text(fmFormatSize(totalSize), fontSize = 13.sp) }
+                InfoRow("总计大小") { Text(fmFormatSize(totalSize), style = MiuixTheme.textStyles.body1) }
             }
         }
     }
@@ -1172,7 +1168,7 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Text(
             label,
-            fontSize = 14.sp,
+            style = MiuixTheme.textStyles.body1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             modifier = Modifier.width(88.dp),
         )
