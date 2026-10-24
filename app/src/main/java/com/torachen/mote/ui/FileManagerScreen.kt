@@ -124,6 +124,7 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
@@ -684,11 +685,16 @@ private fun FileManagerMiuix(
                 ) {
                     if (controller.needsAllFiles) {
                         item {
-                            BasicComponent(
-                                title = "需要「所有文件访问权限」才能显示全部文件（含未知格式）",
-                                summary = "点击去授权",
-                                onClick = { requestAllFiles(controller.context) },
-                            )
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                ArrowPreference(
+                                    title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
+                                    onClick = { requestAllFiles(controller.context) },
+                                )
+                            }
                         }
                     }
                     items(controller.entriesOf(dir)) { entry ->
@@ -1120,20 +1126,22 @@ private fun FileManagerMaterial(
                 ) {
                     if (controller.needsAllFiles) {
                         item {
-                            M3Surface(
-                                color = M3MaterialTheme.colorScheme.secondaryContainer,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
-                                    .clickable { requestAllFiles(controller.context) },
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                    .padding(bottom = M3_SEGMENT_GROUP_GAP),
                             ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    M3Text("需要「所有文件访问权限」才能浏览 Android/data", fontSize = 13.sp)
-                                    M3Text(
-                                        "点击去授权",
-                                        fontSize = 13.sp,
-                                        color = M3MaterialTheme.colorScheme.primary,
+                                MoteSegmentedColumn(
+                                    content = listOf(
+                                        {
+                                            M3SegmentArrowItem(
+                                                title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
+                                                onClick = { requestAllFiles(controller.context) },
+                                            )
+                                        }
                                     )
-                                }
+                                )
                             }
                         }
                     }
