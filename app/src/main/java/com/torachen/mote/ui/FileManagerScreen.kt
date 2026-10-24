@@ -1167,10 +1167,10 @@ private fun FileInfoDialog(
 private fun InfoRow(label: String, value: @Composable () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Text(
-            label,
+            "$label：",
             style = MiuixTheme.textStyles.body1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier.width(88.dp),
+            modifier = Modifier.width(96.dp),
         )
         Box(modifier = Modifier.weight(1f)) { value() }
     }
