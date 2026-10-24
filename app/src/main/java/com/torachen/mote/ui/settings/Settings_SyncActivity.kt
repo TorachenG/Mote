@@ -371,23 +371,40 @@ internal object MoteCloudSyncManager {
         })
     }
 
-    /** 拉取云端密文，没有数据返回空串 */
-    fun pullRemote(token: String): Pair<String?, String?> {
-        val (data, err) = callFunction(JSONObject().apply {
-            put("action", "pull")
-            put("token", token)
+    /** 带自动刷新的调用：token 失效时用 refresh token 换新 token 再重试一次 */
+    private fun callWithRefresh(body: JSONObject, prefs: SharedPreferences): Pair<JSONObject?, String?> {
+        body.put("token", prefs.getString(KEY_CLOUDBASE_ACCESS_TOKEN, "") ?: "")
+        val first = callFunction(body)
+        if (first.first != null) return first
+
+        val refresh = prefs.getString(KEY_CLOUDBASE_REFRESH_TOKEN, "") ?: ""
+        if (refresh.isBlank()) return first
+
+        val (refreshed, _) = callFunction(JSONObject().apply {
+            put("action", "refresh")
+            put("refresh", refresh)
         })
+        val newToken = refreshed?.optString("token").orEmpty()
+        if (newToken.isBlank()) return first
+
+        prefs.edit().putString(KEY_CLOUDBASE_ACCESS_TOKEN, newToken).apply()
+        body.put("token", newToken)
+        return callFunction(body)
+    }
+
+    /** 拉取云端密文，没有数据返回空串；token 过期会自动刷新 */
+    fun pullRemote(prefs: SharedPreferences): Pair<String?, String?> {
+        val (data, err) = callWithRefresh(JSONObject().apply { put("action", "pull") }, prefs)
         if (data == null) return null to err
         return data.optString("content", "") to null
     }
 
-    /** 上传密文 */
-    fun pushRemote(token: String, content: String): Pair<Boolean, String?> {
-        val (data, err) = callFunction(JSONObject().apply {
+    /** 上传密文；token 过期会自动刷新 */
+    fun pushRemote(prefs: SharedPreferences, content: String): Pair<Boolean, String?> {
+        val (data, err) = callWithRefresh(JSONObject().apply {
             put("action", "push")
-            put("token", token)
             put("content", content)
-        })
+        }, prefs)
         return (data != null) to err
     }
 
@@ -523,7 +540,9 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
 
     fun applyLoginSuccess(data: JSONObject, accountName: String, accountPassword: String) {
         val token = data.optString("token").ifBlank { data.optString("access_token") }.ifBlank { data.optString("accessToken") }
-        val refresh = data.optString("refresh_token").ifBlank { data.optString("refreshToken") }
+        val refresh = data.optString("refresh")
+            .ifBlank { data.optString("refresh_token") }
+            .ifBlank { data.optString("refreshToken") }
         val uid = data.optString("uid")
             .ifBlank { data.optString("sub") }
             .ifBlank { data.optString("userId") }
@@ -600,7 +619,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                         val localObj = MoteCloudSyncManager.buildLocalData(prefs)
                         val localJson = localObj.toString()
 
-                        val (remoteContent, pullError) = MoteCloudSyncManager.pullRemote(accessToken)
+                        val (remoteContent, pullError) = MoteCloudSyncManager.pullRemote(prefs)
                         if (remoteContent == null) throw Exception(pullError ?: "拉取云端数据失败")
                         run {
                             val encryptedData = remoteContent
@@ -628,7 +647,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                         }
 
                         val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                        val ok = MoteCloudSyncManager.pushRemote(accessToken, encrypted).first
+                        val ok = MoteCloudSyncManager.pushRemote(prefs, encrypted).first
                         withContext(Dispatchers.Main) {
                             isSyncing = false
                             if (ok) {
@@ -678,9 +697,22 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                         }
                     }
                 } catch (e: Exception) {
+                    val message = e.message ?: "未知错误"
                     withContext(Dispatchers.Main) {
                         isSyncing = false
-                        errorDialogMessage = "同步异常：${e.message}"
+                        if (message.contains("登录已过期") || message.contains("重新登录")) {
+                            prefs.edit()
+                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN)
+                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN)
+                                .apply()
+                            isLoggedIn = false
+                            usernameInput = ""
+                            passwordInput = ""
+                            showLoginDialog = true
+                            Toast.makeText(context, "登录已过期，请重新登录", Toast.LENGTH_SHORT).show()
+                        } else {
+                            errorDialogMessage = "同步异常：$message"
+                        }
                     }
                 }
             }
@@ -974,7 +1006,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                 val userId = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: return@launch
                                 val localJson = conflictData!!.first.payload.toString()
                                 val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                                MoteCloudSyncManager.pushRemote(accessToken, encrypted)
+                                MoteCloudSyncManager.pushRemote(prefs, encrypted)
                                 withContext(Dispatchers.Main) { Toast.makeText(context, "已上传本地数据", Toast.LENGTH_SHORT).show(); conflictData = null }
                             }
                         } else {
@@ -1134,7 +1166,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                         val localObj = MoteCloudSyncManager.buildLocalData(prefs)
                         val localJson = localObj.toString()
 
-                        val (remoteContent, pullError) = MoteCloudSyncManager.pullRemote(accessToken)
+                        val (remoteContent, pullError) = MoteCloudSyncManager.pullRemote(prefs)
                         if (remoteContent == null) throw Exception(pullError ?: "拉取云端数据失败")
                         run {
                             val encryptedData = remoteContent
@@ -1162,7 +1194,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                         }
 
                         val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                        val ok = MoteCloudSyncManager.pushRemote(accessToken, encrypted).first
+                        val ok = MoteCloudSyncManager.pushRemote(prefs, encrypted).first
                         withContext(Dispatchers.Main) {
                             isSyncing = false
                             if (ok) {
@@ -1212,9 +1244,22 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                         }
                     }
                 } catch (e: Exception) {
+                    val message = e.message ?: "未知错误"
                     withContext(Dispatchers.Main) {
                         isSyncing = false
-                        errorDialogMessage = "同步异常：${e.message}"
+                        if (message.contains("登录已过期") || message.contains("重新登录")) {
+                            prefs.edit()
+                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN)
+                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN)
+                                .apply()
+                            isLoggedIn = false
+                            usernameInput = ""
+                            passwordInput = ""
+                            showLoginDialog = true
+                            Toast.makeText(context, "登录已过期，请重新登录", Toast.LENGTH_SHORT).show()
+                        } else {
+                            errorDialogMessage = "同步异常：$message"
+                        }
                     }
                 }
             }
@@ -1477,7 +1522,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                 val userId = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: return@launch
                                 val localJson = conflictData!!.first.payload.toString()
                                 val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                                MoteCloudSyncManager.pushRemote(accessToken, encrypted)
+                                MoteCloudSyncManager.pushRemote(prefs, encrypted)
                                 withContext(Dispatchers.Main) { Toast.makeText(context, "已上传本地数据", Toast.LENGTH_SHORT).show(); conflictData = null }
                             }
                         } else {

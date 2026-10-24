@@ -13,6 +13,7 @@ const tcb = require('@cloudbase/node-sdk')
 const SECRET = process.env.MOTE_SECRET || 'mote-default-secret-please-change'
 const USERNAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{2,47}$/
 const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000
+const REFRESH_TTL_MS = 365 * 24 * 3600 * 1000
 
 const app = tcb.init({ env: process.env.TCB_ENV || process.env.SCF_NAMESPACE })
 const db = app.database()
@@ -72,6 +73,13 @@ function verifyToken(token) {
   }
 }
 
+function verifyAccess(token) {
+  const payload = verifyToken(token)
+  if (!payload) return null
+  if (payload.typ && payload.typ !== 'access') return null
+  return payload
+}
+
 // ---------- 密码 ----------
 function hashPassword(password, salt) {
   return crypto.pbkdf2Sync(String(password), salt, 120000, 64, 'sha256').toString('hex')
@@ -129,13 +137,20 @@ async function handleLogin(body) {
   const token = issueToken({
     uid: user.uid,
     username: user.username,
+    typ: 'access',
     exp: Date.now() + TOKEN_TTL_MS,
   })
-  return { token, uid: user.uid, username: user.username }
+  const refresh = issueToken({
+    uid: user.uid,
+    username: user.username,
+    typ: 'refresh',
+    exp: Date.now() + REFRESH_TTL_MS,
+  })
+  return { token, refresh, uid: user.uid, username: user.username }
 }
 
 async function handlePull(body) {
-  const payload = verifyToken(body.token)
+  const payload = verifyAccess(body.token)
   if (!payload) return { error: '登录已过期，请重新登录', code: 401 }
 
   const res = await db.collection('SyncData').where({ user_id: payload.uid }).limit(1).get()
@@ -145,7 +160,7 @@ async function handlePull(body) {
 }
 
 async function handlePush(body) {
-  const payload = verifyToken(body.token)
+  const payload = verifyAccess(body.token)
   if (!payload) return { error: '登录已过期，请重新登录', code: 401 }
   const content = String(body.content || '')
   if (!content) return { error: '内容为空' }
@@ -161,9 +176,24 @@ async function handlePush(body) {
   return { ok: true, updated_at: now }
 }
 
+async function handleRefresh(body) {
+  const payload = verifyToken(body.refresh)
+  if (!payload || payload.typ !== 'refresh') {
+    return { error: '登录已过期，请重新登录', code: 401 }
+  }
+  const token = issueToken({
+    uid: payload.uid,
+    username: payload.username,
+    typ: 'access',
+    exp: Date.now() + TOKEN_TTL_MS,
+  })
+  return { token, uid: payload.uid, username: payload.username }
+}
+
 const handlers = {
   register: handleRegister,
   login: handleLogin,
+  refresh: handleRefresh,
   pull: handlePull,
   push: handlePush,
 }
