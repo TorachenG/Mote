@@ -109,6 +109,12 @@ object MoteAutoSync {
 
     fun restart(context: Context) = start(context)
 
+    /** 请求一次后台同步（不等结果），用于打开书签/历史等界面时刷新数据 */
+    fun requestSync(context: Context) {
+        val app = context.applicationContext
+        scope.launch { syncNow(app) }
+    }
+
     fun syncNow(context: Context) {
         if (syncing) return
         syncing = true

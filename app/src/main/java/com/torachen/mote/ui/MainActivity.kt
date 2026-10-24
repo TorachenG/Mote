@@ -5887,6 +5887,13 @@ fun BrowserScreen(
     var historyMultiSelect by remember { mutableStateOf(false) }
     val historySelected = remember { mutableStateListOf<String>() }
     var bookmarkMultiSelect by remember { mutableStateOf(false) }
+    // 打开书签 / 历史时先同步一次，尽量把其它设备的新数据带回来
+    LaunchedEffect(showBookmarkSheet) {
+        if (showBookmarkSheet) com.torachen.mote.MoteAutoSync.requestSync(context)
+    }
+    LaunchedEffect(showHistorySheet) {
+        if (showHistorySheet) com.torachen.mote.MoteAutoSync.requestSync(context)
+    }
     val bookmarkSelected = remember { mutableStateListOf<String>() }
     var bookmarkFaviconReload by remember { mutableIntStateOf(0) }
     LaunchedEffect(showBookmarkSheet) {

@@ -289,7 +289,7 @@ async function ensureMoteFolder() {
   return { id: folder.id, created };
 }
 
-function toMoteTree(nodes, prevIds) {
+function chromeNodesToTree(nodes, prevIds) {
   const out = [];
   for (const node of nodes) {
     if (node.url) {
@@ -305,7 +305,7 @@ function toMoteTree(nodes, prevIds) {
         id: prevIds.get("[folder]" + (node.title || "")) || uuid(),
         title: node.title || "未命名文件夹",
         folder: true,
-        children: toMoteTree(node.children || [], prevIds),
+        children: chromeNodesToTree(node.children || [], prevIds),
         time: node.dateAdded || Date.now()
       });
     }
@@ -397,6 +397,37 @@ function mergeTrees(prev, local, remote) {
   return buildTree(links, folders);
 }
 
+/** Mote 的书签 JSON 用 isFolder 表示文件夹，内部统一用 folder */
+function fromMoteTree(nodes) {
+  return (nodes || []).map(function (n) {
+    var isFolder = n.isFolder === true || n.folder === true;
+    return {
+      id: n.id,
+      title: n.title || "",
+      url: isFolder ? undefined : n.url,
+      folder: isFolder,
+      time: n.time || 0,
+      children: isFolder ? fromMoteTree(n.children || []) : undefined,
+    };
+  });
+}
+
+/** 写回云端时转成 Mote 认识的字段 */
+function treeToMoteJson(nodes) {
+  return (nodes || []).map(function (n) {
+    var isFolder = n.folder === true;
+    var out = {
+      id: n.id,
+      title: n.title || "",
+      isFolder: isFolder,
+      time: n.time || Date.now(),
+    };
+    if (isFolder) out.children = treeToMoteJson(n.children || []);
+    else out.url = n.url || "";
+    return out;
+  });
+}
+
 function normalizeTree(tree) {
   return JSON.stringify(
     (function strip(nodes) {
@@ -431,7 +462,7 @@ async function readChromeTree(rootId) {
   } catch (e) { /* ignore */ }
   const id = rootId || (await ensureMoteFolder()).id;
   const [rootNode] = await chrome.bookmarks.getSubTree(id);
-  return toMoteTree(rootNode.children || [], prevMap);
+  return chromeNodesToTree(rootNode.children || [], prevMap);
 }
 
 let applying = false;
@@ -493,7 +524,7 @@ async function sync(reason) {
       }
       remoteData = JSON.parse(decoded.plain);
       try {
-        remoteTree = JSON.parse(remoteData.bookmarks_v2 || "[]");
+        remoteTree = fromMoteTree(JSON.parse(remoteData.bookmarks_v2 || "[]"));
       } catch (e) {
         remoteTree = [];
       }
@@ -524,7 +555,7 @@ async function sync(reason) {
 
     if (remoteChanged) {
       const bag = remoteData || { fallback_key: "" };
-      bag.bookmarks_v2 = JSON.stringify(merged);
+      bag.bookmarks_v2 = JSON.stringify(treeToMoteJson(merged));
       const cipher = await encryptAny(JSON.stringify(bag));
       await writeRemote(cipher);
     }
