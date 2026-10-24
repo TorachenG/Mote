@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mote · 轻快、纯净的 Android 浏览器</title>
+<title>Mote</title>
 <meta name="description" content="Mote —— 轻快、纯净的 Android 浏览器。">
 <meta name="theme-color" content="#f4f7fb">
-<link rel="icon" href="assets/icon.png">
+<link rel="icon" href="assets/mote_logo.png">
 <style>
   :root{
     --ink:#8b93a1;
@@ -37,9 +37,14 @@
     display:flex;align-items:flex-start;justify-content:space-between;
     padding:44px 56px;
     gap:24px;
+    z-index:10;
   }
-  .brand{line-height:1}
+  .brand{
+    display:inline-flex;flex-direction:column;align-items:stretch;
+    line-height:1;text-decoration:none;color:inherit;
+  }
   .brand .org{
+    text-align:center;
     font-size:14px;letter-spacing:2.6px;font-weight:500;
     color:#9aa3b0;
   }
@@ -55,6 +60,30 @@
   }
   nav a:hover{color:#4b5563}
   nav i{font-style:normal;color:var(--sep);font-size:14px}
+
+  /* 下拉菜单 */
+  .nav-item{position:relative;display:flex;align-items:center}
+  .nav-item > .nav-link{cursor:pointer}
+  .nav-item .dropdown{
+    position:absolute;top:100%;right:0;
+    margin-top:10px;min-width:132px;
+    padding:6px;
+    background:#fff;
+    border-radius:12px;
+    box-shadow:0 14px 34px rgba(80,98,130,.16),0 1px 2px rgba(80,98,130,.08);
+    display:none;
+    z-index:20;
+  }
+  .nav-item .dropdown::before{
+    content:"";position:absolute;left:0;right:0;top:-10px;height:10px;
+  }
+  .nav-item .dropdown a{
+    display:block;padding:8px 12px;border-radius:8px;font-size:14px;
+    color:#7d8798;letter-spacing:.5px;
+  }
+  .nav-item .dropdown a:hover{background:#f2f5fa;color:#4b5563}
+  .nav-item:hover .dropdown,
+  .nav-item.open .dropdown{display:block}
 
   /* ---------- 主体 ---------- */
   main{
@@ -122,7 +151,7 @@
     letter-spacing:.5px;
   }
 
-  /* ---------- 入场动画：从下往上平滑归位 + 渐显，按从上到下的顺序依次出现 ---------- */
+  /* ---------- 入场动画 ---------- */
   @keyframes rise {
     from { opacity: 0; transform: translate3d(0, 26px, 0); }
     to   { opacity: 1; transform: translate3d(0, 0, 0); }
@@ -131,7 +160,18 @@
     animation: rise .78s cubic-bezier(.22,1,.36,1) backwards;
     will-change: transform, opacity;
   }
-  main > .star { animation-delay: .06s }
+
+  /* 星芒：从上方落下 + 旋转 340°，时长更长 */
+  @keyframes starDrop {
+    from { opacity: 0; transform: translate3d(0, -78px, 0) rotate(-340deg); }
+    60%  { opacity: 1; }
+    to   { opacity: 1; transform: translate3d(0, 0, 0) rotate(0deg); }
+  }
+  main > .star {
+    animation: starDrop 2.1s cubic-bezier(.18,.9,.24,1) .06s backwards;
+    will-change: transform, opacity;
+  }
+
   main > h1    { animation-delay: .15s }
   main > .meta { animation-delay: .24s }
   main > .dl   { animation-delay: .33s }
@@ -158,16 +198,22 @@
 <body>
 
   <div class="top">
-    <div class="brand">
+    <a class="brand" href="./" aria-label="回到首页">
       <div class="org">[ TORACHEN ]</div>
       <div class="name">MOTE</div>
-    </div>
+    </a>
     <nav>
       <a href="https://gitee.com/TorachenG/Mote" target="_blank" rel="noopener">Gitee</a><i>|</i>
       <a href="https://github.com/TorachenG/Mote" target="_blank" rel="noopener">Github</a><i>|</i>
       <a href="https://github.com/TorachenG/Mote/releases" target="_blank" rel="noopener">更新日志</a><i>|</i>
-      <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/user-agreement.md" target="_blank" rel="noopener">用户协议</a><i>|</i>
-      <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/privacy-policy.md" target="_blank" rel="noopener">隐私政策</a>
+      <div class="nav-item" id="legalMenu">
+        <a class="nav-link" href="javascript:void(0)" id="legalLink">用户协议</a>
+        <div class="dropdown">
+          <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/user-agreement.md" target="_blank" rel="noopener">用户协议</a>
+          <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/privacy-policy.md" target="_blank" rel="noopener">隐私政策</a>
+        </div>
+      </div><i>|</i>
+      <a href="developer.html">开发者入口</a>
     </nav>
   </div>
 
@@ -203,6 +249,19 @@
   </footer>
 
 <script>
+/* 用户协议下拉：悬停显示，点击可切换（触屏） */
+(function () {
+  const menu = document.getElementById('legalMenu');
+  const link = document.getElementById('legalLink');
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (!menu.contains(e.target)) menu.classList.remove('open');
+  });
+})();
+
 (async function () {
   const verEl = document.getElementById('ver');
   const dateEl = document.getElementById('date');

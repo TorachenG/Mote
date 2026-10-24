@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>开发者入口 · Mote</title>
+<meta name="theme-color" content="#f4f7fb">
+<link rel="icon" href="assets/mote_logo.png">
+<style>
+  :root{
+    --ink:#8b93a1;
+    --nav:#8b93a0;
+    --sep:#c9cfd8;
+    --brand:#c6cfdb;
+    --blue:#2f7bf6;
+    --text:#4b5563;
+    --muted:#98a0ac;
+    --line:#e6eaf1;
+    --danger:#e5484d;
+    --ok:#1f9d55;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    min-height:100svh;
+    color:var(--ink);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:
+      radial-gradient(1200px 700px at 12% 0%, rgba(255,255,255,.95), transparent 60%),
+      linear-gradient(140deg,#f8f9fb 0%,#f4f7fb 42%,#e9eff8 100%);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- 顶部（与首页一致） ---------- */
+  .top{
+    position:relative;
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:44px 56px;
+    gap:24px;
+  }
+  .brand{
+    display:inline-flex;flex-direction:column;align-items:stretch;
+    line-height:1;text-decoration:none;color:inherit;
+  }
+  .brand .org{text-align:center;font-size:14px;letter-spacing:2.6px;font-weight:500;color:#9aa3b0}
+  .brand .name{margin-top:8px;font-size:62px;font-weight:200;letter-spacing:8px;color:var(--brand)}
+  nav{display:flex;align-items:center;flex-wrap:wrap;gap:18px;padding-top:2px}
+  nav a{color:var(--nav);text-decoration:none;font-size:14.5px;letter-spacing:.5px;transition:color .18s}
+  nav a:hover{color:#4b5563}
+  nav a.active{color:#4b5563}
+  nav i{font-style:normal;color:var(--sep);font-size:14px}
+  .nav-item{position:relative;display:flex;align-items:center}
+  .nav-item > .nav-link{cursor:pointer}
+  .nav-item .dropdown{
+    position:absolute;top:100%;right:0;margin-top:10px;min-width:132px;padding:6px;
+    background:#fff;border-radius:12px;
+    box-shadow:0 14px 34px rgba(80,98,130,.16),0 1px 2px rgba(80,98,130,.08);
+    display:none;z-index:20;
+  }
+  .nav-item .dropdown::before{content:"";position:absolute;left:0;right:0;top:-10px;height:10px}
+  .nav-item .dropdown a{display:block;padding:8px 12px;border-radius:8px;font-size:14px;color:#7d8798;letter-spacing:.5px}
+  .nav-item .dropdown a:hover{background:#f2f5fa;color:#4b5563}
+  .nav-item:hover .dropdown,.nav-item.open .dropdown{display:block}
+
+  /* ---------- 内容 ---------- */
+  .wrap{max-width:1040px;margin:0 auto;padding:8px 24px 70px}
+  .head{margin:0 0 20px}
+  .head h1{margin:0;font-size:26px;font-weight:600;color:var(--text);letter-spacing:.5px}
+  .head p{margin:6px 0 0;color:var(--muted);font-size:14px;letter-spacing:.3px}
+
+  .card{
+    background:#fff;border-radius:16px;padding:18px;
+    box-shadow:0 10px 30px rgba(80,98,130,.08),0 1px 2px rgba(80,98,130,.05);
+    margin-bottom:16px;
+  }
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  label{display:block;color:var(--muted);font-size:12px;letter-spacing:.4px;margin-bottom:6px}
+  input{
+    width:100%;border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font:inherit;color:var(--text);background:#fbfcfe;outline:none;
+  }
+  input:focus{border-color:#b7cdf3;background:#fff}
+  .grow{flex:1 1 320px}
+  .keycol{flex:0 1 280px;min-width:220px}
+  button{
+    border:0;border-radius:10px;padding:10px 18px;font:inherit;cursor:pointer;
+    background:#eef2f8;color:var(--text);letter-spacing:.4px;
+    transition:background .16s,box-shadow .16s;
+  }
+  button:hover{background:#e7edf6}
+  button.primary{background:var(--blue);color:#fff;box-shadow:0 8px 20px rgba(47,123,246,.2)}
+  button.primary:hover{background:#2a70e4}
+  button.danger{background:#fdeced;color:var(--danger)}
+  button.small{padding:6px 12px;font-size:12.5px;border-radius:9px}
+  button:disabled{opacity:.55;cursor:default}
+  .hint{color:var(--muted);font-size:12.5px;margin-top:10px;letter-spacing:.3px}
+
+  .stats{display:flex;gap:34px;flex-wrap:wrap}
+  .stat b{display:block;font-size:22px;font-weight:600;color:var(--text)}
+  .stat span{color:var(--muted);font-size:12.5px;letter-spacing:.4px}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:12px 8px;border-bottom:1px solid var(--line);font-size:14px}
+  th{color:var(--muted);font-weight:500;font-size:12.5px;letter-spacing:.4px}
+  tr:last-child td{border-bottom:0}
+  td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;color:var(--muted)}
+  td.actions{white-space:nowrap}
+  td.actions button + button{margin-left:6px}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px}
+  .tag.on{background:#eaf7ef;color:var(--ok)}
+  .tag.off{background:#fdeced;color:var(--danger)}
+  .empty{padding:36px 0;text-align:center;color:var(--muted)}
+  #message{min-height:20px;margin:2px 2px 12px;color:var(--muted);font-size:13px}
+  #message.error{color:var(--danger)}
+  #message.ok{color:var(--ok)}
+
+  .modal-mask{
+    position:fixed;inset:0;background:rgba(60,72,92,.28);
+    display:none;align-items:center;justify-content:center;padding:20px;z-index:50;
+  }
+  .modal-mask.show{display:flex}
+  .modal{background:#fff;border-radius:16px;padding:20px;width:380px;max-width:100%;box-shadow:0 24px 60px rgba(60,72,92,.22)}
+  .modal h3{margin:0 0 14px;font-size:16px;color:var(--text);font-weight:600}
+  .modal .row{justify-content:flex-end;margin-top:18px}
+
+  footer{text-align:center;color:#98a0ac;font-size:12.5px;padding:0 24px 30px;letter-spacing:.4px}
+
+  @media (max-width:760px){
+    .top{padding:22px 20px;flex-direction:column;gap:14px}
+    .brand .name{font-size:34px;letter-spacing:5px;margin-top:5px}
+    .brand .org{font-size:11.5px;letter-spacing:2px}
+    nav{gap:10px;padding-top:0}
+    nav a{font-size:13px}
+    .wrap{padding:0 16px 60px}
+    .head h1{font-size:21px}
+    .stats{gap:22px}
+    table{font-size:13px}
+    td.actions button{padding:5px 9px;font-size:12px}
+  }
+</style>
+</head>
+<body>
+
+  <div class="top">
+    <a class="brand" href="./" aria-label="回到首页">
+      <div class="org">[ TORACHEN ]</div>
+      <div class="name">MOTE</div>
+    </a>
+    <nav>
+      <a href="https://gitee.com/TorachenG/Mote" target="_blank" rel="noopener">Gitee</a><i>|</i>
+      <a href="https://github.com/TorachenG/Mote" target="_blank" rel="noopener">Github</a><i>|</i>
+      <a href="https://github.com/TorachenG/Mote/releases" target="_blank" rel="noopener">更新日志</a><i>|</i>
+      <div class="nav-item" id="legalMenu">
+        <a class="nav-link" href="javascript:void(0)" id="legalLink">用户协议</a>
+        <div class="dropdown">
+          <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/user-agreement.md" target="_blank" rel="noopener">用户协议</a>
+          <a href="https://github.com/TorachenG/Mote/blob/main/docs/legal/privacy-policy.md" target="_blank" rel="noopener">隐私政策</a>
+        </div>
+      </div><i>|</i>
+      <a href="developer.html" class="active">开发者入口</a>
+    </nav>
+  </div>
+
+  <div class="wrap">
+    <div class="head">
+      <h1>账号管理</h1>
+      <p>直接调用云函数 admin 接口，地址与密钥只保存在当前浏览器</p>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div class="grow">
+          <label>云函数地址</label>
+          <input id="url" placeholder="https://xxx.ap-shanghai.app.tcloudbase.com/moteauth">
+        </div>
+        <div class="keycol">
+          <label>管理员密钥</label>
+          <input id="key" type="password" placeholder="ADMIN_KEY">
+        </div>
+        <div>
+          <button class="primary" id="connect">连接并刷新</button>
+        </div>
+        <div>
+          <button id="copylink">复制带配置的链接</button>
+        </div>
+      </div>
+      <div class="hint">地址和密钥保存在当前浏览器，下次打开自动填好；换浏览器或清缓存后需重新输入。</div>
+    </div>
+
+    <div id="message"></div>
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><b id="statTotal">-</b><span>账号总数</span></div>
+        <div class="stat"><b id="statSynced">-</b><span>有云端数据</span></div>
+        <div class="stat"><b id="statSize">-</b><span>数据总量</span></div>
+        <div class="stat"><b id="statDisabled">-</b><span>已停用</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>用户名</th>
+            <th>UID</th>
+            <th>注册时间</th>
+            <th>最近同步</th>
+            <th>数据量</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty">填好地址和密钥后点「连接并刷新」</div>
+    </div>
+
+    <footer>Mote · 开发者入口</footer>
+  </div>
+
+  <div class="modal-mask" id="mask">
+    <div class="modal">
+      <h3 id="modalTitle">重置密码</h3>
+      <input id="modalInput" placeholder="新密码（8~32 位）">
+      <div class="row">
+        <button id="modalCancel">取消</button>
+        <button class="primary" id="modalOk">确定</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* 用户协议下拉 */
+(function () {
+  const menu = document.getElementById('legalMenu');
+  const link = document.getElementById('legalLink');
+  link.addEventListener('click', function (e) {
+    e.preventDefault();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', function (e) {
+    if (!menu.contains(e.target)) menu.classList.remove('open');
+  });
+})();
+
+const LS_URL = "mote.admin.url";
+const LS_KEY = "mote.admin.key";
+const $ = (id) => document.getElementById(id);
+const urlInput = $("url");
+const keyInput = $("key");
+const rowsEl = $("rows");
+const emptyEl = $("empty");
+
+urlInput.value = localStorage.getItem(LS_URL) || "";
+keyInput.value = localStorage.getItem(LS_KEY) || "";
+try {
+  const params = new URLSearchParams(location.search);
+  if (params.get("url")) urlInput.value = params.get("url");
+  if (params.get("key")) keyInput.value = params.get("key");
+} catch (e) {}
+
+function setMessage(text, type) {
+  const el = $("message");
+  el.textContent = text || "";
+  el.className = type || "";
+}
+
+async function call(body) {
+  const url = urlInput.value.trim();
+  if (!url) throw new Error("请先填写云函数地址");
+  const key = keyInput.value.trim();
+  if (!key) throw new Error("请先填写管理员密钥");
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({}, body, { key: key })),
+  });
+  const json = await resp.json();
+  if (json.code !== 0) throw new Error(json.message || "请求失败");
+  return json.data;
+}
+
+function fmtTime(ms) {
+  if (!ms) return "—";
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+    " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+
+function fmtSize(size) {
+  if (!size) return "—";
+  return size > 1024 ? (size / 1024).toFixed(1) + " KB" : size + " B";
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function render(data) {
+  const users = data.users || [];
+  localStorage.setItem(LS_URL, urlInput.value.trim());
+  localStorage.setItem(LS_KEY, keyInput.value.trim());
+
+  $("statTotal").textContent = data.total != null ? data.total : users.length;
+  $("statSynced").textContent = users.filter((u) => u.sync_at).length;
+  $("statDisabled").textContent = users.filter((u) => u.disabled).length;
+  const totalBytes = users.reduce((sum, u) => sum + (u.sync_size || 0), 0);
+  $("statSize").textContent = totalBytes ? (totalBytes / 1024).toFixed(1) + " KB" : "0 B";
+
+  rowsEl.innerHTML = "";
+  if (!users.length) {
+    emptyEl.style.display = "block";
+    emptyEl.textContent = "还没有任何账号";
+    return;
+  }
+  emptyEl.style.display = "none";
+
+  users.forEach((u) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + escapeHtml(u.username) + "</td>" +
+      '<td class="mono">' + u.uid + "</td>" +
+      "<td>" + fmtTime(u.created_at) + "</td>" +
+      "<td>" + fmtTime(u.sync_at) + "</td>" +
+      "<td>" + fmtSize(u.sync_size) + "</td>" +
+      '<td><span class="tag ' + (u.disabled ? "off" : "on") + '">' +
+        (u.disabled ? "已停用" : "正常") + "</span></td>" +
+      '<td class="actions"></td>';
+
+    const actions = tr.querySelector(".actions");
+
+    const reset = document.createElement("button");
+    reset.className = "small";
+    reset.textContent = "重置密码";
+    reset.onclick = () => resetPassword(u.username);
+    actions.appendChild(reset);
+
+    const toggle = document.createElement("button");
+    toggle.className = "small";
+    toggle.textContent = u.disabled ? "启用" : "停用";
+    toggle.onclick = () => setDisabled(u.username, !u.disabled);
+    actions.appendChild(toggle);
+
+    const del = document.createElement("button");
+    del.className = "small danger";
+    del.textContent = "删除";
+    del.onclick = () => removeUser(u.username);
+    actions.appendChild(del);
+
+    rowsEl.appendChild(tr);
+  });
+}
+
+async function refresh() {
+  setMessage("加载中…");
+  try {
+    const data = await call({ action: "adminList" });
+    render(data);
+    setMessage("已加载 " + data.total + " 个账号", "ok");
+  } catch (e) {
+    setMessage("加载失败：" + e.message, "error");
+  }
+}
+
+let modalResolve = null;
+function askInput(title, placeholder) {
+  $("modalTitle").textContent = title;
+  const input = $("modalInput");
+  input.placeholder = placeholder;
+  input.value = "";
+  $("mask").classList.add("show");
+  input.focus();
+  return new Promise((resolve) => { modalResolve = resolve; });
+}
+$("modalCancel").onclick = () => {
+  $("mask").classList.remove("show");
+  if (modalResolve) modalResolve(null);
+  modalResolve = null;
+};
+$("modalOk").onclick = () => {
+  const v = $("modalInput").value.trim();
+  $("mask").classList.remove("show");
+  if (modalResolve) modalResolve(v || null);
+  modalResolve = null;
+};
+$("modalInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("modalOk").click();
+});
+
+async function resetPassword(username) {
+  const pwd = await askInput("重置 " + username + " 的密码", "新密码（8~32 位）");
+  if (!pwd) return;
+  try {
+    await call({ action: "adminResetPassword", username: username, newPassword: pwd });
+    setMessage("已重置 " + username + " 的密码", "ok");
+  } catch (e) {
+    setMessage("重置失败：" + e.message, "error");
+  }
+}
+
+async function setDisabled(username, disabled) {
+  try {
+    await call({ action: "adminDisable", username: username, disabled: disabled });
+    setMessage("已" + (disabled ? "停用" : "启用") + " " + username, "ok");
+    refresh();
+  } catch (e) {
+    setMessage("操作失败：" + e.message, "error");
+  }
+}
+
+async function removeUser(username) {
+  if (!confirm("确定删除账号「" + username + "」？\n\n会同时删除他的云端同步数据，不可恢复。")) return;
+  try {
+    await call({ action: "adminDelete", username: username });
+    setMessage("已删除 " + username + " 及其云端数据", "ok");
+    refresh();
+  } catch (e) {
+    setMessage("删除失败：" + e.message, "error");
+  }
+}
+
+$("connect").onclick = refresh;
+$("copylink").onclick = async () => {
+  const url = urlInput.value.trim();
+  const key = keyInput.value.trim();
+  if (!url || !key) { setMessage("先填好地址和密钥", "error"); return; }
+  const link = location.href.split("?")[0].split("#")[0] +
+    "?url=" + encodeURIComponent(url) + "&key=" + encodeURIComponent(key);
+  try {
+    await navigator.clipboard.writeText(link);
+    setMessage("带配置的链接已复制，存成书签即可免输入", "ok");
+  } catch (e) {
+    setMessage("复制失败，可手动复制：" + link, "error");
+  }
+};
+</script>
+</body>
+</html>
