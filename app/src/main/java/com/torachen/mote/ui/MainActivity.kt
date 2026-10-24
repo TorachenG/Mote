@@ -8227,6 +8227,7 @@ fun BrowserScreen(
             }
         },
         onMoveSelected = { showMoveBookmarksDialog = true },
+        canMove = collectAllFolders(bookmarks).isNotEmpty(),
         onAddBookmark = {
             addFromBookmarkSheet = true
             showBookmarkSheet = false
@@ -8789,44 +8790,30 @@ fun BrowserScreen(
         title = "移动到",
         onDismissRequest = { showMoveBookmarksDialog = false }
     ) {
+        val folders = collectAllFolders(bookmarks)
+        val options = buildList {
+            add("根目录" to 0)
+            folders.forEach { (folder, depth) -> add(folder.title to depth) }
+        }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 420.dp)
                 .padding(top = 8.dp)
                 .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        val moved = moveSelectedBookmarks(null)
-                        showMoveBookmarksDialog = false
-                        if (moved > 0) {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    message = "已移动 $moved 项",
-                                    duration = SnackbarDuration.Short,
-                                )
-                            }
-                        }
-                    }
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-            ) {
-                Text(
-                    text = "根目录",
-                    fontSize = 15.sp,
-                    color = MiuixTheme.colorScheme.onSurface,
-                )
-            }
-            collectAllFolders(bookmarks).forEach { (folder, depth) ->
+            options.forEachIndexed { index, option ->
+                val title = option.first
+                val depth = option.second
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
+                        .background(MiuixTheme.colorScheme.secondaryContainer)
                         .clickable {
-                            val moved = moveSelectedBookmarks(folder.id)
+                            val targetId = if (index == 0) null else folders.getOrNull(index - 1)?.first?.id
+                            val moved = moveSelectedBookmarks(targetId)
                             showMoveBookmarksDialog = false
                             if (moved > 0) {
                                 scope.launch {
@@ -8838,17 +8825,28 @@ fun BrowserScreen(
                             }
                         }
                         .padding(
-                            start = 12.dp + (depth * 16).dp,
-                            end = 12.dp,
-                            top = 12.dp,
-                            bottom = 12.dp,
+                            start = 16.dp + (depth * 16).dp,
+                            end = 16.dp,
+                            top = 14.dp,
+                            bottom = 14.dp,
                         ),
                 ) {
-                    Text(
-                        text = folder.title,
-                        fontSize = 15.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Folder,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Text(
+                            text = title,
+                            fontSize = 15.sp,
+                            color = MiuixTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
         }
@@ -12711,6 +12709,7 @@ private fun BookmarkSheet(
     onDeleteSelected: () -> Unit,
     onShareSelected: (List<String>) -> Unit,
     onMoveSelected: () -> Unit,
+    canMove: Boolean,
     onAddBookmark: () -> Unit,
     onAddFolder: () -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -13129,11 +13128,15 @@ private fun BookmarkSheet(
                                 modifier = Modifier.size(22.dp),
                             )
                         }
-                        IconButton(onClick = { if (selectedIds.isNotEmpty()) onMoveSelected() }) {
+                        IconButton(
+                            onClick = { if (selectedIds.isNotEmpty() && canMove) onMoveSelected() },
+                            enabled = canMove,
+                        ) {
                             Icon(
                                 imageVector = MiuixIcons.MoveFile,
                                 contentDescription = "移动",
-                                tint = MiuixTheme.colorScheme.onSurface,
+                                tint = if (canMove) MiuixTheme.colorScheme.onSurface
+                                else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                 modifier = Modifier.size(22.dp),
                             )
                         }
