@@ -149,20 +149,20 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
-private data class FsEntry(
+internal data class FsEntry(
     val file: java.io.File,
     val isDir: Boolean,
     val size: Long,
     val modified: Long,
 )
 
-private enum class PendingOp { COPY, MOVE }
+internal enum class PendingOp { COPY, MOVE }
 
 private const val FM_BLUR_RADIUS = 25f
 private const val FM_BLEND_ALPHA = 0.8f
 private val FM_FALLBACK_HEIGHT = 128.dp
 
-private class FileManagerController(
+internal class FileManagerController(
     val context: Context,
     val onOpenInBrowser: (String) -> Unit,
     val onBack: () -> Unit,
@@ -407,13 +407,14 @@ private fun loadThumbnail(file: java.io.File): ImageBitmap? {
 }
 
 @Composable
-fun FileManagerPage(
+internal fun FileManagerPage(
     onBack: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onSelectionModeChange: (Boolean) -> Unit = {},
+    controller: FileManagerController? = null,
 ) {
     val context = LocalContext.current
-    val controller = remember { FileManagerController(context, onOpenInBrowser, onBack) }
+    val controller = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
 
     LaunchedEffect(controller.currentDir) { controller.reload() }
     LaunchedEffect(controller.selecting) { onSelectionModeChange(controller.selecting) }

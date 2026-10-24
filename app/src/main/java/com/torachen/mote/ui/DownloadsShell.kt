@@ -6,6 +6,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.Crossfade
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -73,11 +78,20 @@ fun DownloadsShell(
 ) {
     val tabState = remember { mutableIntStateOf(initialTab) }
     val tab = tabState.intValue
+    val context = LocalContext.current
+    // 复用同一个 controller，避免每次切到文件页都重新扫描目录导致掉帧
+    val fileController = remember {
+        FileManagerController(context, onOpenInBrowser) { tabState.intValue = 0 }
+    }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { fileController.reload() }
+    }
     var downloadsSelecting by remember { mutableStateOf(false) }
     var filesSelecting by remember { mutableStateOf(false) }
 
     when (LocalUiMode.current) {
         UiMode.Miuix -> DownloadsShellMiuix(
+            fileController = fileController,
             tab = tab,
             onTabChange = { tabState.intValue = it },
             onBack = onBack,
@@ -90,6 +104,7 @@ fun DownloadsShell(
             selectedIndex = { tabState.intValue },
         )
         UiMode.Material -> DownloadsShellMaterial(
+            fileController = fileController,
             tab = tab,
             onTabChange = { tabState.intValue = it },
             onBack = onBack,
@@ -116,6 +131,7 @@ private fun DownloadsShellMiuix(
     onDownloadsSelectingChange: (Boolean) -> Unit,
     onFilesSelectingChange: (Boolean) -> Unit,
     selectedIndex: () -> Int,
+    fileController: FileManagerController,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -133,22 +149,7 @@ private fun DownloadsShellMiuix(
                 .fillMaxSize()
                 .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
         ) {
-            AnimatedContent(
-                targetState = tab,
-                transitionSpec = {
-                    val forward = targetState > initialState
-                    val slide = tween<androidx.compose.ui.unit.IntOffset>(durationMillis = 300)
-                    val fade = tween<Float>(durationMillis = 220)
-                    if (forward) {
-                        (slideInHorizontally(slide) { it / 4 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { -it / 4 } + fadeOut(fade))
-                    } else {
-                        (slideInHorizontally(slide) { -it / 4 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { it / 4 } + fadeOut(fade))
-                    }
-                },
-                label = "sheetTab",
-            ) { current ->
+            Crossfade(targetState = tab, animationSpec = tween(160), label = "sheetTab") { current ->
                 if (current == 0) {
                     DownloadManagerScreen(
                         onBack = onBack,
@@ -161,6 +162,7 @@ private fun DownloadsShellMiuix(
                         onBack = { onTabChange(0) },
                         onOpenInBrowser = onOpenInBrowser,
                         onSelectionModeChange = onFilesSelectingChange,
+                        controller = fileController,
                     )
                 }
             }
@@ -264,6 +266,7 @@ private fun DownloadsShellMaterial(
     onDownloadsSelectingChange: (Boolean) -> Unit,
     onFilesSelectingChange: (Boolean) -> Unit,
     selectedIndex: () -> Int,
+    fileController: FileManagerController,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
