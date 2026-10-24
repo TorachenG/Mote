@@ -31,7 +31,6 @@ function updateProviderUI() {
 
 async function load() {
   const s = await send({ type: "get-settings" });
-  $("cloudUrl").value = s.cloudUrl || "";
   $("username").value = s.username || "";
   $("webdavUrl").value = s.webdavUrl || "";
   $("webdavUser").value = s.webdavUser || "";
@@ -55,7 +54,6 @@ async function load() {
 async function saveSettings() {
   const patch = {
     provider: currentProvider(),
-    cloudUrl: $("cloudUrl").value.trim(),
     webdavUrl: $("webdavUrl").value.trim(),
     webdavUser: $("webdavUser").value.trim(),
     webdavPass: $("webdavPass").value,
@@ -81,7 +79,6 @@ $("loginBtn").addEventListener("click", async () => {
   $("loginBtn").disabled = true;
   setStatus($("saveStatus"), "登录中…");
   try {
-    await send({ type: "save-settings", patch: { cloudUrl: $("cloudUrl").value.trim() } });
     const r = await send({ type: "login", username, password });
     if (r.ok) {
       setStatus($("saveStatus"), "登录成功", "ok");
