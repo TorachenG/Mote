@@ -4539,6 +4539,7 @@ fun BrowserScreen(
 
     fun loadHistory() {
         val raw = prefs.getString("history", null) ?: return
+
         try {
             val json = JSONArray(raw)
             history.clear()
@@ -4557,6 +4558,7 @@ fun BrowserScreen(
             }
         } catch (_: Exception) {
         }
+
     }
 
     fun recordHistory(url: String, title: String) {
@@ -5504,14 +5506,15 @@ fun BrowserScreen(
         }
     }
 
+    val prefsReloadScope = rememberCoroutineScope()
     DisposableEffect(Unit) {
         val externalListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             when (key) {
-                "bookmarks_v2" -> {
+                "bookmarks_v2" -> prefsReloadScope.launch(Dispatchers.Main) {
                     loadBookmarks()
                     bookmarkFolderPath.clear()
                 }
-                "history" -> {
+                "history" -> prefsReloadScope.launch(Dispatchers.Main) {
                     loadHistory()
                 }
             }
@@ -5523,12 +5526,11 @@ fun BrowserScreen(
     }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            loadHistory()
-            loadBookmarks()
-            loadSearchHistory()
-            loadSavedZooms()
-        }
+        // 这些 load 会写 Compose 状态列表，必须在主线程执行，否则界面可能收不到刷新
+        loadHistory()
+        loadBookmarks()
+        loadSearchHistory()
+        loadSavedZooms()
     }
 
     LaunchedEffect(windows.toList()) {
@@ -5884,6 +5886,11 @@ fun BrowserScreen(
     val historySelected = remember { mutableStateListOf<String>() }
     var bookmarkMultiSelect by remember { mutableStateOf(false) }
     val bookmarkSelected = remember { mutableStateListOf<String>() }
+    var bookmarkFaviconReload by remember { mutableIntStateOf(0) }
+    LaunchedEffect(showBookmarkSheet) {
+        if (showBookmarkSheet) bookmarkFaviconReload++
+    }
+
 
     fun moveSelectedBookmarks(targetFolderId: String?): Int {
         if (bookmarkSelected.isEmpty()) return 0
@@ -7765,6 +7772,16 @@ fun BrowserScreen(
                 if (bookmarks.none { it.url == win.url }) {
                     bookmarks.add(0, BookmarkItem(title = title, url = win.url, timestamp = System.currentTimeMillis()))
                     saveBookmarks()
+                    val host = try { win.url.toUri().host } catch (_: Exception) { null }
+                    if (!host.isNullOrBlank()) {
+                        val bmp = faviconCache[host] ?: win.favicon
+                        if (bmp != null) {
+                            scope.launch(Dispatchers.IO) {
+                                FaviconStore.save(context, host, bmp)
+                            }
+                        }
+                    }
+
                     scope.launch {
                         snackbarHostState.showSnackbar(message = "已添加到书签", duration = SnackbarDuration.Short)
                     }
@@ -8228,6 +8245,7 @@ fun BrowserScreen(
         },
         onMoveSelected = { showMoveBookmarksDialog = true },
         canMove = collectAllFolders(bookmarks).isNotEmpty(),
+        faviconReload = bookmarkFaviconReload,
         onAddBookmark = {
             addFromBookmarkSheet = true
             showBookmarkSheet = false
@@ -8595,6 +8613,21 @@ fun BrowserScreen(
                                     message = "书签已添加",
                                     duration = SnackbarDuration.Short,
                                 )
+                            }
+
+                            // ★ 把当前窗口已拿到的图标落到 FaviconStore 磁盘缓存。
+                            //   手动输入网址时 faviconCache 里可能没有（从没在当前窗口加载过），
+                            //   这时若 host 与当前窗口一致，退回用窗口自身的 favicon。
+                            val urlHost = try { url.toUri().host } catch (_: Exception) { null }
+                            if (!urlHost.isNullOrBlank()) {
+                                val winHost = try { activeWindow?.url?.toUri()?.host } catch (_: Exception) { null }
+                                val bmp = faviconCache[urlHost]
+                                    ?: activeWindow?.favicon?.takeIf { winHost == urlHost }
+                                if (bmp != null) {
+                                    scope.launch(Dispatchers.IO) {
+                                        FaviconStore.save(context, urlHost, bmp)
+                                    }
+                                }
                             }
                         }
                         saveBookmarks()
@@ -12221,7 +12254,7 @@ private fun HistorySheet(
         }
     }
 
-    val filteredSorted = remember(currentSourceList, filter, sort) {
+    val filteredSorted = remember(currentSourceList.toList(), filter, sort) {
         val now = System.currentTimeMillis()
         val filtered = when (filter) {
             HistoryFilter.ALL -> currentSourceList
@@ -12710,6 +12743,7 @@ private fun BookmarkSheet(
     onShareSelected: (List<String>) -> Unit,
     onMoveSelected: () -> Unit,
     canMove: Boolean,
+    faviconReload: Int,
     onAddBookmark: () -> Unit,
     onAddFolder: () -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -12956,9 +12990,11 @@ private fun BookmarkSheet(
                                     var favicon by remember(host) {
                                         mutableStateOf(if (host.isNotBlank()) FaviconStore.get(context, host) else null)
                                     }
-                                    LaunchedEffect(host) {
+                                    // 每次打开书签列表都会重试加载尚未拿到的网站图标
+                                    LaunchedEffect(faviconReload, host) {
                                         if (host.isNotBlank() && favicon == null) {
-                                            favicon = FaviconStore.fetchFromHost(context, host)
+                                            favicon = FaviconStore.get(context, host)
+                                                ?: FaviconStore.fetchFromHost(context, host)
                                         }
                                     }
 
