@@ -1033,9 +1033,13 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                     },
                     actions = {
                         Box {
-                            IconButton(onClick = { showMoreMenu = true }) {
-                                Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = MiuixTheme.colorScheme.onSurface)
-                            }
+                            SettingsTopBarAction(
+                                backCardAlpha = backCardAlpha,
+                                backCardMaterialModifier = backCardMaterialModifier,
+                                onClick = { showMoreMenu = true },
+                                contentDescription = "更多",
+                                icon = MiuixIcons.More,
+                            )
                             WindowCascadingListPopup(
                                 show = showMoreMenu,
                                 entries = listOf(

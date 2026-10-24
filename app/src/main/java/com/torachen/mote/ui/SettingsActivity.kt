@@ -1274,6 +1274,36 @@ private fun SettingsMainPageMiuix(
 }
 
 @Composable
+internal fun SettingsTopBarAction(
+    backCardAlpha: Float,
+    backCardMaterialModifier: Modifier,
+    onClick: () -> Unit,
+    contentDescription: String?,
+    icon: ImageVector,
+    tint: Color = MiuixTheme.colorScheme.onSurface,
+) {
+    Box(
+        modifier = Modifier.size(40.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { alpha = backCardAlpha }
+                .then(backCardMaterialModifier)
+        )
+        IconButton(onClick = onClick, modifier = Modifier.matchParentSize()) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = tint,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
+
+@Composable
 internal fun SettingsBackButton(
     onBack: () -> Unit,
     progressiveTitleBlur: Boolean,

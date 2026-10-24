@@ -1246,21 +1246,30 @@ private fun DownloadManagerScreenMiuix(
                     actions = {
                         if (isMultiSelectMode) {
                             val allSelected = tasks.isNotEmpty() && selectedIds.size == tasks.size
-                            IconButton(onClick = {
-                                if (allSelected) {
-                                    selectedIds.clear()
-                                } else {
-                                    selectedIds.clear()
-                                    selectedIds.addAll(tasks.map { it.id })
-                                }
-                            }) {
-                                Icon(imageVector = MiuixIcons.SelectAll, contentDescription = "全选", tint = if (allSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface)
-                            }
+                            SettingsTopBarAction(
+                                backCardAlpha = backCardAlpha,
+                                backCardMaterialModifier = backCardMaterialModifier,
+                                onClick = {
+                                    if (allSelected) {
+                                        selectedIds.clear()
+                                    } else {
+                                        selectedIds.clear()
+                                        selectedIds.addAll(tasks.map { it.id })
+                                    }
+                                },
+                                contentDescription = "全选",
+                                icon = MiuixIcons.SelectAll,
+                                tint = if (allSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+                            )
                         } else {
                             Box {
-                                IconButton(onClick = { showMoreMenu = true }) {
-                                    Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = MiuixTheme.colorScheme.onSurface)
-                                }
+                                SettingsTopBarAction(
+                                    backCardAlpha = backCardAlpha,
+                                    backCardMaterialModifier = backCardMaterialModifier,
+                                    onClick = { showMoreMenu = true },
+                                    contentDescription = "更多",
+                                    icon = MiuixIcons.More,
+                                )
                                 WindowCascadingListPopup(
                                     show = showMoreMenu,
                                     entries = listOf(

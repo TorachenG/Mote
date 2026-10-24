@@ -731,9 +731,13 @@ private fun SettingsSpaceManagementMiuix(
                     navigationIcon = { SettingsBackButton(onBack = onBack, progressiveTitleBlur = progressiveTitleBlur, backCardAlpha = backCardAlpha, backCardMaterialModifier = backCardMaterialModifier, iconTint = MiuixTheme.colorScheme.onSurface) },
                     actions = {
                         Box {
-                            IconButton(onClick = { showMoreMenu = true }) {
-                                Icon(imageVector = MiuixIcons.More, contentDescription = "更多", tint = MiuixTheme.colorScheme.onSurface)
-                            }
+                            SettingsTopBarAction(
+                                backCardAlpha = backCardAlpha,
+                                backCardMaterialModifier = backCardMaterialModifier,
+                                onClick = { showMoreMenu = true },
+                                contentDescription = "更多",
+                                icon = MiuixIcons.More,
+                            )
                             WindowCascadingListPopup(
                                 show = showMoreMenu,
                                 entries = listOf(DropdownEntry(items = listOf(DropdownItem(text = "清理设置", onClick = { showMoreMenu = false; onOpenCacheSettings() })))),
