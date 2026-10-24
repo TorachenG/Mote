@@ -122,6 +122,7 @@ import top.yukonga.miuix.kmp.icon.extended.Folder as FolderIcon
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 private data class FsEntry(
     val file: java.io.File,
@@ -486,8 +487,12 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
             ) { dir ->
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .overScrollVertical(),
                     contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
+                    overscrollEffect = null,
                 ) {
                     if (controller.needsAllFiles) {
                         item {
