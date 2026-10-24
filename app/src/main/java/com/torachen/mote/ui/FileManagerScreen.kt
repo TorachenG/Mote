@@ -88,6 +88,19 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.luminance
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 import com.torachen.mote.service.FileOpService
 import com.torachen.mote.service.FileOpState
 import kotlinx.coroutines.Dispatchers
@@ -118,6 +131,10 @@ private data class FsEntry(
 )
 
 private enum class PendingOp { COPY, MOVE }
+
+private const val FM_BLUR_RADIUS = 25f
+private const val FM_BLEND_ALPHA = 0.8f
+private val FM_FALLBACK_HEIGHT = 128.dp
 
 private class FileManagerController(
     val context: Context,
@@ -377,6 +394,56 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
     val listState = rememberLazyListState()
     val surface = MiuixTheme.colorScheme.surface
 
+    val blurSupported = isRuntimeShaderSupported()
+    val backdrop = if (blurSupported) {
+        rememberLayerBackdrop {
+            drawRect(surface)
+            drawContent()
+        }
+    } else null
+
+    val prefs = remember {
+        controller.context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var progressiveTitleBlur by remember {
+        mutableStateOf(prefs.getBoolean(KEY_PROGRESSIVE_TITLE_BLUR, true))
+    }
+    var materialStyle by remember {
+        mutableIntStateOf(prefs.getInt("ui_material_style", 2))
+    }
+    DisposableEffect(Unit) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                KEY_PROGRESSIVE_TITLE_BLUR -> progressiveTitleBlur = prefs.getBoolean(key, true)
+                "ui_material_style" -> materialStyle = prefs.getInt(key, 2)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset == 0 &&
+                !listState.isScrollInProgress
+        }
+    }
+    val themeIsDark = surface.luminance() < 0.5f
+    val backCardAlpha by animateFloatAsState(
+        targetValue = if (isAtTop || !progressiveTitleBlur) 0f else 1f,
+        animationSpec = tween(400, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+        label = "fmBackCardAlpha",
+    )
+    val backCardMaterialModifier = if (progressiveTitleBlur) {
+        buildBackCardMaterialModifier(materialStyle, blurSupported, backdrop, themeIsDark)
+    } else {
+        Modifier
+    }
+    val titleBarBlendColorEntries = remember(surface) {
+        listOf(BlendColorEntry(color = surface.copy(alpha = FM_BLEND_ALPHA)))
+    }
+
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
 
@@ -392,13 +459,14 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
     }
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            // 固定目录轴：上下间距一致，左间距与标题对齐
-            MiuixBreadcrumb(controller, controller.currentDir)
-
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
+        ) {
             AnimatedContent(
                 targetState = controller.currentDir,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 transitionSpec = {
                     val forward = targetState.absolutePath.length > initialState.absolutePath.length
                     val slide = tween<androidx.compose.ui.unit.IntOffset>(
@@ -419,7 +487,7 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = 96.dp),
+                    contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
                 ) {
                     if (controller.needsAllFiles) {
                         item {
@@ -437,17 +505,41 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
             }
         }
 
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .background(surface)
+                .then(
+                    if (blurSupported && backdrop != null && materialStyle != 0) {
+                        if (progressiveTitleBlur) {
+                            Modifier.progressiveTextureBlur(
+                                backdrop = backdrop,
+                                shape = RectangleShape,
+                                blurRadius = FM_BLUR_RADIUS,
+                                gradient = ProgressiveBlur.Top,
+                                colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                            )
+                        } else {
+                            Modifier.textureBlur(
+                                backdrop = backdrop,
+                                shape = RectangleShape,
+                                blurRadius = FM_BLUR_RADIUS,
+                                noiseCoefficient = BlurDefaults.NoiseCoefficient,
+                                colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                            )
+                        }
+                    } else {
+                        Modifier.background(surface)
+                    }
+                )
                 .statusBarsPadding()
                 .onGloballyPositioned { coords ->
                     val bottom = coords.boundsInWindow().bottom.toInt()
                     if (bottom != barBottomPx) barBottomPx = bottom
                 },
         ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
             TopAppBar(
                 title = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
                 largeTitle = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
@@ -455,22 +547,37 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                 defaultWindowInsetsPadding = false,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    IconButton(onClick = {
-                        when {
-                            controller.pendingOp != null -> controller.cancelPick()
-                            controller.selecting -> controller.selected = emptyList()
-                            !controller.up() -> controller.onBack()
+                    when {
+                        controller.pendingOp != null -> IconButton(onClick = { controller.cancelPick() }) {
+                            Icon(
+                                imageVector = MiuixIcons.ChevronBackward,
+                                contentDescription = "返回",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp),
+                            )
                         }
-                    }) {
-                        Icon(
-                            imageVector = MiuixIcons.ChevronBackward,
-                            contentDescription = "返回",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp),
+                        controller.selecting -> IconButton(onClick = { controller.selected = emptyList() }) {
+                            Icon(
+                                imageVector = MiuixIcons.ChevronBackward,
+                                contentDescription = "退出多选",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp),
+                            )
+                        }
+                        else -> SettingsBackButton(
+                            onBack = {
+                                if (!controller.up()) controller.onBack()
+                            },
+                            progressiveTitleBlur = progressiveTitleBlur,
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardMaterialModifier,
+                            iconTint = MiuixTheme.colorScheme.onSurface,
                         )
                     }
                 },
             )
+            MiuixBreadcrumb(controller, controller.currentDir)
+            }
         }
 
         AnimatedVisibility(
