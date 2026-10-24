@@ -62,7 +62,7 @@
     "bgDavWrite": "WebDAV write failed: HTTP $1$",
     "bgBadResp": "Unexpected response: $1$",
     "bgReqFail": "Request failed",
-    "statusSignedInAs": "Signed in as @$1$",
+    "statusSignedInAs": "Signed in as $1$",
     "btnLogout": "Sign out",
     "msgSigningOut": "Signing out…"
 },
@@ -127,7 +127,7 @@
     "bgDavWrite": "WebDAV 写入失败：HTTP $1$",
     "bgBadResp": "接口返回异常：$1$",
     "bgReqFail": "请求失败",
-    "statusSignedInAs": "已登录：@$1$",
+    "statusSignedInAs": "已登录：$1$",
     "btnLogout": "退出登录",
     "msgSigningOut": "正在退出…"
 }

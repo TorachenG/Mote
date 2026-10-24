@@ -125,7 +125,8 @@ $("logoutBtn").addEventListener("click", async () => {
   if (r.ok) {
     setStatus($("saveStatus"), "");
     $("password").value = "";
-    await load();
+    // 整页重载，保证回到干净的未登录状态，输入框可正常聚焦
+    location.reload();
   } else {
     setStatus($("saveStatus"), t("msgSaveFailed", [r.error || ""]), "err");
   }

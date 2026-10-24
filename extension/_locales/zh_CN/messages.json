@@ -235,7 +235,7 @@
     "message": "请求失败"
   },
   "statusSignedInAs": {
-    "message": "已登录：@$1$",
+    "message": "已登录：$1$",
     "placeholders": {
       "1": {
         "content": "$1"
