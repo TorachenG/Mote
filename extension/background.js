@@ -592,6 +592,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: e.message || String(e) }));
     return true;
   }
+  if (msg && msg.type === "logout") {
+    setSettings({
+      accessToken: "",
+      refreshToken: "",
+      uid: "",
+      username: "",
+      password: "",
+      e2eeKey: "",
+      snapshot: "",
+      lastStatus: "idle",
+      lastError: ""
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => sendResponse({ ok: false, error: e.message || String(e) }));
+    return true;
+  }
   if (msg && msg.type === "save-settings") {
     setSettings(msg.patch || {})
       .then(() => reconfigure())

@@ -59,6 +59,8 @@
   .status.err{color:var(--danger)}
   .hint{font-size:12.5px;color:var(--muted);line-height:1.75;margin:10px 0 0}
   .hidden{display:none}
+  .account-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .account-name{font-size:14px;color:var(--text);letter-spacing:.2px}
   .check{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text)}
   .check input{width:16px;height:16px}
 </style>
@@ -76,20 +78,29 @@
     </div>
 
     <div id="cloudBox">
-      <div class="row">
-        <div class="field">
-          <label data-i18n="labelUser">Username</label>
-          <input type="text" id="username" spellcheck="false" autocomplete="username">
+      <div id="loginForm">
+        <div class="row">
+          <div class="field">
+            <label data-i18n="labelUser">Username</label>
+            <input type="text" id="username" spellcheck="false" autocomplete="username">
+          </div>
+          <div class="field">
+            <label data-i18n="labelPass">Password</label>
+            <input type="password" id="password" autocomplete="current-password">
+          </div>
         </div>
-        <div class="field">
-          <label data-i18n="labelPass">Password</label>
-          <input type="password" id="password" autocomplete="current-password">
+        <div class="actions">
+          <button class="primary" id="loginBtn" data-i18n="btnLogin">Sign in and save</button>
+        </div>
+        <p class="hint" data-i18n="hintLogin">The password is kept in local extension storage only.</p>
+      </div>
+
+      <div id="accountBox" class="hidden">
+        <div class="account-row">
+          <span class="account-name" id="accountName">—</span>
+          <button id="logoutBtn" data-i18n="btnLogout">Sign out</button>
         </div>
       </div>
-      <div class="actions">
-        <button class="primary" id="loginBtn" data-i18n="btnLogin">Sign in and save</button>
-      </div>
-      <p class="hint" data-i18n="hintLogin">The password is kept in local extension storage only.</p>
     </div>
 
     <div id="webdavBox" class="hidden">

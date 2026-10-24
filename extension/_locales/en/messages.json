@@ -233,5 +233,19 @@
   },
   "bgReqFail": {
     "message": "Request failed"
+  },
+  "statusSignedInAs": {
+    "message": "Signed in as @$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "btnLogout": {
+    "message": "Sign out"
+  },
+  "msgSigningOut": {
+    "message": "Signing out…"
   }
 }

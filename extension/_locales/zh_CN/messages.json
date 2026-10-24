@@ -233,5 +233,19 @@
   },
   "bgReqFail": {
     "message": "请求失败"
+  },
+  "statusSignedInAs": {
+    "message": "已登录：@$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "btnLogout": {
+    "message": "退出登录"
+  },
+  "msgSigningOut": {
+    "message": "正在退出…"
   }
 }

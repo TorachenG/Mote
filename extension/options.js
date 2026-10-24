@@ -30,12 +30,26 @@ function updateProviderUI() {
   $("webdavBox").classList.toggle("hidden", isCloud);
 }
 
+function applyAccountState(s) {
+  const loginForm = $("loginForm");
+  const accountBox = $("accountBox");
+  if (!loginForm || !accountBox) return;
+  const logged = !!s.uid;
+  loginForm.classList.toggle("hidden", logged);
+  accountBox.classList.toggle("hidden", !logged);
+  if (logged) {
+    $("accountName").textContent = t("statusSignedInAs", [s.username || "-"]);
+  }
+}
+
 function renderStatus(s) {
   const parts = [];
-  parts.push(s.uid ? t("statusLoggedIn", [s.username || "-"]) : t("statusNotLogged"));
+  // 已登录时上面单独显示账号与退出按钮，这里不再重复账号信息
+  if (!s.uid) parts.push(t("statusNotLogged"));
   parts.push(s.hasKey ? t("statusKeyReady") : t("statusKeyBasic"));
   parts.push(t("statusLastSync", [fmtTime(s.lastSyncAt)]));
   if (s.lastStatus === "error" && s.lastError) parts.push(t("statusLastError", [s.lastError]));
+  applyAccountState(s);
   setStatus($("status"), parts.join(" · "), s.lastStatus === "error" ? "err" : "");
 }
 
@@ -100,6 +114,20 @@ $("loginBtn").addEventListener("click", async () => {
     }
   } finally {
     $("loginBtn").disabled = false;
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  $("logoutBtn").disabled = true;
+  setStatus($("saveStatus"), t("msgSigningOut"));
+  const r = await send({ type: "logout" });
+  $("logoutBtn").disabled = false;
+  if (r.ok) {
+    setStatus($("saveStatus"), "");
+    $("password").value = "";
+    await load();
+  } else {
+    setStatus($("saveStatus"), t("msgSaveFailed", [r.error || ""]), "err");
   }
 });
 
