@@ -100,6 +100,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
@@ -201,13 +202,33 @@ internal object MoteCloudSyncManager {
         } catch (_: Exception) {}
     }
 
-    fun encrypt(plainText: String, prefs: SharedPreferences): String {
-        // 始终使用「用户名+密码」派生的密钥，保证换设备后仍能解密
+    /** 端到端密钥：由「用户名 + 密码」派生，云端无法还原 */
+    private fun e2eeKey(prefs: SharedPreferences): SecretKeySpec? {
         val keyBase64 = prefs.getString(KEY_E2EE_DERIVED_KEY, "") ?: ""
-        if (keyBase64.isBlank()) throw Exception("请重新登录以生成加密密钥")
-        val secretKey = SecretKeySpec(Base64.decode(keyBase64, Base64.NO_WRAP), "AES")
+        if (keyBase64.isBlank()) return null
+        return try {
+            SecretKeySpec(Base64.decode(keyBase64, Base64.NO_WRAP), "AES")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** 普通加密密钥：由账号 uid 派生，换设备登录后即可恢复（云端理论上可解） */
+    private fun normalKey(prefs: SharedPreferences): SecretKeySpec? {
+        val uid = prefs.getString(KEY_CLOUDBASE_USER_ID, "") ?: ""
+        if (uid.isBlank()) return null
+        return try {
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val spec = PBEKeySpec(uid.toCharArray(), "MoteNormalSalt".toByteArray(), 10000, 256)
+            SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun encryptWith(key: SecretKeySpec, plainText: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
         val iv = cipher.iv
         val cipherText = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
         val combined = ByteArray(iv.size + cipherText.size)
@@ -216,25 +237,41 @@ internal object MoteCloudSyncManager {
         return Base64.encodeToString(combined, Base64.NO_WRAP)
     }
 
-    fun decrypt(encryptedBase64: String, prefs: SharedPreferences): String? {
-        val keyBase64 = prefs.getString(KEY_E2EE_DERIVED_KEY, "") ?: ""
-        if (keyBase64.isNotBlank()) {
-            try {
-                val secretKey = SecretKeySpec(Base64.decode(keyBase64, Base64.NO_WRAP), "AES")
-                val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-                if (combined.size >= 12) {
-                    val iv = combined.copyOfRange(0, 12)
-                    val cipherText = combined.copyOfRange(12, combined.size)
-                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                    cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-                    return String(cipher.doFinal(cipherText), Charsets.UTF_8)
-                }
-            } catch (_: Exception) {
-                // 落到下面的旧格式兼容分支
-            }
+    private fun tryDecrypt(key: SecretKeySpec, encryptedBase64: String): String? {
+        return try {
+            val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            if (combined.size < 12) return null
+            val iv = combined.copyOfRange(0, 12)
+            val cipherText = combined.copyOfRange(12, combined.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            String(cipher.doFinal(cipherText), Charsets.UTF_8)
+        } catch (_: Exception) {
+            null
         }
+    }
 
-        // 兼容旧版本：用本机随机口令 + salt 加密的历史数据
+    /**
+     * 加密方式由「高级数据保护」开关决定：
+     * - 开启：端到端加密，密钥由账号密码派生，云端无法解密
+     * - 关闭（默认）：普通加密，密钥由 uid 派生，云端可解，换设备同样能恢复
+     */
+    fun encrypt(plainText: String, prefs: SharedPreferences): String {
+        val useE2EE = prefs.getBoolean(KEY_E2EE_ENABLED, false)
+        val key = (if (useE2EE) e2eeKey(prefs) else normalKey(prefs))
+            ?: throw Exception("缺少加密密钥，请重新登录后再同步")
+        return encryptWith(key, plainText)
+    }
+
+    fun decrypt(encryptedBase64: String, prefs: SharedPreferences): String? {
+        val useE2EE = prefs.getBoolean(KEY_E2EE_ENABLED, false)
+        val primary = if (useE2EE) e2eeKey(prefs) else normalKey(prefs)
+        val secondary = if (useE2EE) normalKey(prefs) else e2eeKey(prefs)
+
+        if (primary != null) tryDecrypt(primary, encryptedBase64)?.let { return it }
+        if (secondary != null) tryDecrypt(secondary, encryptedBase64)?.let { return it }
+
+        // 兼容旧版本：本机随机口令 + 随机盐
         return try {
             val pass = getLocalPass(prefs)
             val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
@@ -501,6 +538,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
     var catQuickUrls by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", true)) }
     var catSettings by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", true)) }
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
+    var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var isSyncing by remember { mutableStateOf(false) }
     var conflictData by remember { mutableStateOf<Pair<MoteCloudSyncManager.SyncData, MoteCloudSyncManager.SyncData>?>(null) }
 
@@ -521,6 +559,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", catQuickUrls)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", catSettings)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", catPasswords)
+            .putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, e2eeEnabled)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_URL, webDavUrl)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_USER, webDavUser)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_PASS, webDavPass)
@@ -1043,6 +1082,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
     var catQuickUrls by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", true)) }
     var catSettings by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", true)) }
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
+    var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var isSyncing by remember { mutableStateOf(false) }
     var conflictData by remember { mutableStateOf<Pair<MoteCloudSyncManager.SyncData, MoteCloudSyncManager.SyncData>?>(null) }
 
@@ -1063,6 +1103,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", catQuickUrls)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", catSettings)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", catPasswords)
+            .putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, e2eeEnabled)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_URL, webDavUrl)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_USER, webDavUser)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_PASS, webDavPass)
@@ -1337,6 +1378,31 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                             }
                                         }
                                     }
+                                )
+                            }
+                        }
+                    }
+
+                    item(key = "e2ee_content") {
+                        Column(modifier = Modifier.padding(top = 8.dp)) {
+                            M3Text(
+                                "安全",
+                                color = M3MaterialTheme.colorScheme.primary,
+                                style = M3MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+                            )
+                            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = M3_SEGMENT_GROUP_GAP)) {
+                                MoteSegmentedColumn(
+                                    content = listOf(
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "高级数据保护",
+                                                summary = "开启：端到端加密，密钥由账号密码派生，云端无法解密；关闭：普通加密，云端可解密，两者都能换设备恢复",
+                                                checked = e2eeEnabled,
+                                                onCheckedChange = { e2eeEnabled = it },
+                                            )
+                                        },
+                                    )
                                 )
                             }
                         }
