@@ -1,4 +1,4 @@
-/* 顶部导航：品牌字距 + 用户协议下拉（悬停已由 CSS 处理，这里负责点击切换） */
+/* 顶部导航：品牌字距 + 下拉菜单（悬停已由 CSS 处理，这里负责点击切换） */
 (function () {
   /* [ TORACHEN ] 拆成单字，配合 flex 让它与 MOTE 左右对齐 */
   document.querySelectorAll('.brand .org').forEach(function (el) {
@@ -11,19 +11,34 @@
     });
   });
 
-  const menu = document.querySelector('.nav-item');
-  if (!menu) return;
-  const link = menu.querySelector('.nav-link');
-  if (link) {
-    link.addEventListener('click', function (e) {
-      e.preventDefault();
-      menu.classList.toggle('open');
+  const menus = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+  if (!menus.length) return;
+
+  function closeAll(except) {
+    menus.forEach(function (menu) {
+      if (menu !== except) menu.classList.remove('open');
     });
   }
-  document.addEventListener('click', function (e) {
-    if (!menu.contains(e.target)) menu.classList.remove('open');
+
+  menus.forEach(function (menu) {
+    const link = menu.querySelector('.nav-link');
+    if (!link) return;
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const willOpen = !menu.classList.contains('open');
+      closeAll(menu);
+      menu.classList.toggle('open', willOpen);
+    });
   });
+
+  document.addEventListener('click', function (e) {
+    menus.forEach(function (menu) {
+      if (!menu.contains(e.target)) menu.classList.remove('open');
+    });
+  });
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') menu.classList.remove('open');
+    if (e.key === 'Escape') closeAll(null);
   });
 })();
