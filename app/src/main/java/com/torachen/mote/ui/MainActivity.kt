@@ -3588,7 +3588,8 @@ private fun RenderPageContent(
             "downloads" -> DownloadManagerScreen(
                 onBack = { onPop() },
                 onOpenDownloadSettings = { onPush("download_settings") },
-                onOpenTaskDetail = { onPush("download_task_detail") }
+                onOpenTaskDetail = { onPush("download_task_detail") },
+        onOpenFileManager = { onPush("file_manager") }
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }
@@ -3599,6 +3600,13 @@ private fun RenderPageContent(
             "settings_space_management" -> SettingsSpaceManagementPage(
                 onBack = { onPop() },
                 onOpenCacheSettings = { onPush("settings_cache_settings") }
+            )
+            "file_manager" -> FileManagerPage(
+                onBack = { onPop() },
+                onOpenInBrowser = { uri ->
+                    PendingOpenInNewWindowStore.pending = uri
+                    onPopToRoot()
+                },
             )
             "settings_cache_settings" -> CacheSettingsPage(onBack = { onPop() })
             "settings_about" -> SettingsAboutPage(

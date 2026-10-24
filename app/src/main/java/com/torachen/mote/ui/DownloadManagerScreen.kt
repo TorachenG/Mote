@@ -215,6 +215,7 @@ import androidx.compose.material3.TopAppBarDefaults as M3TopAppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.rounded.Description
@@ -918,7 +919,8 @@ private fun MonitorFileStatus(context: Context) {
 fun DownloadManagerScreen(
     onBack: () -> Unit,
     onOpenDownloadSettings: () -> Unit = {},
-    onOpenTaskDetail: () -> Unit = {}
+    onOpenTaskDetail: () -> Unit = {},
+    onOpenFileManager: () -> Unit = {},
 ) {
     val context = LocalContext.current
     LaunchedEffect(MoteDownloader.toastEvent) {
@@ -932,8 +934,8 @@ fun DownloadManagerScreen(
     MonitorFileStatus(context)
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail)
-        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail)
+        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager)
+        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager)
     }
 }
 
@@ -945,7 +947,8 @@ fun DownloadManagerScreen(
 private fun DownloadManagerScreenMiuix(
     onBack: () -> Unit,
     onOpenDownloadSettings: () -> Unit,
-    onOpenTaskDetail: () -> Unit
+    onOpenTaskDetail: () -> Unit,
+    onOpenFileManager: () -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -1302,7 +1305,7 @@ private fun DownloadManagerScreenMiuix(
 
             val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             AnimatedVisibility(
-                visible = isMultiSelectMode && !showDeleteDialog,
+                visible = !showDeleteDialog,
                 enter = slideInVertically(tween(220), initialOffsetY = { it + 40 }) + fadeIn(tween(180)),
                 exit = slideOutVertically(tween(200), targetOffsetY = { it + 40 }) + fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.BottomEnd).zIndex(10f).padding(end = 24.dp, bottom = navBarBottom + 24.dp),
@@ -1324,6 +1327,25 @@ private fun DownloadManagerScreenMiuix(
                     ).padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (!isMultiSelectMode) {
+                        Column(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { onOpenFileManager() }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Folder,
+                                contentDescription = "文件管理",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text("文件管理", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurface)
+                        }
+                    }
+                    if (isMultiSelectMode) {
                     IconButton(onClick = {
                         val toShare = tasks.filter { it.id in selectedIds && it.status == MoteDownloadStatus.COMPLETED && !it.isMissing }
                         if (toShare.isEmpty()) {
@@ -1339,6 +1361,7 @@ private fun DownloadManagerScreenMiuix(
 
                     IconButton(onClick = { if (selectedIds.isNotEmpty()) { pendingDeleteIds = selectedIds.toList(); deleteLocalFile = false; showDeleteDialog = true } }) {
                         Icon(imageVector = MiuixIcons.Delete, contentDescription = "删除", tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
+                    }
                     }
                 }
             }
@@ -1920,7 +1943,8 @@ private fun M3DownloadSectionHeader(text: String) {
 private fun DownloadManagerScreenMaterial(
     onBack: () -> Unit,
     onOpenDownloadSettings: () -> Unit,
-    onOpenTaskDetail: () -> Unit
+    onOpenTaskDetail: () -> Unit,
+    onOpenFileManager: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -2138,13 +2162,27 @@ private fun DownloadManagerScreenMaterial(
 
                 val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 AnimatedVisibility(
-                    visible = isMultiSelectMode && !showDeleteDialog,
+                    visible = !showDeleteDialog,
                     enter = slideInVertically(tween(220), initialOffsetY = { it + 40 }) + fadeIn(tween(180)),
                     exit = slideOutVertically(tween(200), targetOffsetY = { it + 40 }) + fadeOut(tween(150)),
                     modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f).padding(bottom = navBarBottom + 24.dp).padding(horizontal = 24.dp),
                 ) {
                     M3Surface(shape = RoundedCornerShape(28.dp), color = M3MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp, shadowElevation = 8.dp) {
                         Row(modifier = Modifier.height(56.dp).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (!isMultiSelectMode) {
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .clickable { onOpenFileManager() }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    M3Icon(Icons.Filled.Folder, contentDescription = "文件管理", modifier = Modifier.size(22.dp))
+                                    Spacer(Modifier.height(2.dp))
+                                    M3Text("文件管理", fontSize = 11.sp)
+                                }
+                            }
+                            if (isMultiSelectMode) {
                             M3IconButton(onClick = {
                                 val toShare = tasks.filter { it.id in selectedIds && it.status == MoteDownloadStatus.COMPLETED && !it.isMissing }
                                 if (toShare.isEmpty()) {
@@ -2158,6 +2196,7 @@ private fun DownloadManagerScreenMaterial(
 
                             M3IconButton(onClick = { if (selectedIds.isNotEmpty()) { pendingDeleteIds = selectedIds.toList(); deleteLocalFile = false; showDeleteDialog = true } }) {
                                 M3Icon(imageVector = MiuixIcons.Delete, contentDescription = "删除", tint = M3MaterialTheme.colorScheme.onSurface)
+                            }
                             }
                         }
                     }
