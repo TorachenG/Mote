@@ -40,6 +40,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -53,17 +55,17 @@ import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton as M3IconButton
-import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.LargeTopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.Surface as M3Surface
 import androidx.compose.material3.Text as M3Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -74,9 +76,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -87,10 +92,10 @@ import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
+import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -120,10 +125,12 @@ private class FileManagerController(
 
     var currentDir by mutableStateOf(root)
     var dirEntries by mutableStateOf<Map<String, List<FsEntry>>>(emptyMap())
-    var selected by mutableStateOf<FsEntry?>(null)
+    var selected by mutableStateOf<List<FsEntry>>(emptyList())
     var pendingOp by mutableStateOf<PendingOp?>(null)
     var pickDir by mutableStateOf<java.io.File?>(null)
     var needsAllFiles by mutableStateOf(false)
+
+    val selecting: Boolean get() = selected.isNotEmpty()
 
     fun segmentsOf(dir: java.io.File): List<java.io.File> {
         val list = mutableListOf<java.io.File>()
@@ -154,7 +161,7 @@ private class FileManagerController(
     fun enter(dir: java.io.File) {
         if (!dir.isDirectory) return
         currentDir = dir
-        selected = null
+        selected = emptyList()
         pickDir = dir
     }
 
@@ -162,13 +169,21 @@ private class FileManagerController(
         val parent = currentDir.parentFile ?: return false
         if (parent.absolutePath.length < root.absolutePath.length) return false
         currentDir = parent
-        selected = null
+        selected = emptyList()
         pickDir = parent
         return true
     }
 
+    fun toggle(entry: FsEntry) {
+        val existing = selected.firstOrNull { it.file.absolutePath == entry.file.absolutePath }
+        selected = if (existing != null) selected - existing else selected + entry
+    }
+
+    fun isSelected(entry: FsEntry): Boolean =
+        selected.any { it.file.absolutePath == entry.file.absolutePath }
+
     fun beginMove(op: PendingOp) {
-        if (selected == null) return
+        if (selected.isEmpty()) return
         pendingOp = op
         pickDir = currentDir
     }
@@ -176,21 +191,23 @@ private class FileManagerController(
     fun cancelPick() {
         pendingOp = null
         pickDir = null
-        selected = null
+        selected = emptyList()
     }
 
     fun confirmPick() {
         val op = pendingOp ?: return
-        val item = selected ?: return
+        val items = selected
         val dest = pickDir ?: return
-        if (item.isDir && dest.absolutePath.startsWith(item.file.absolutePath)) return
+        if (items.isEmpty()) return
+        if (items.any { it.isDir && dest.absolutePath.startsWith(it.file.absolutePath) }) return
+        val paths = items.map { it.file.absolutePath }
         when (op) {
-            PendingOp.COPY -> FileOpService.copy(context, listOf(item.file.absolutePath), dest.absolutePath)
-            PendingOp.MOVE -> FileOpService.move(context, listOf(item.file.absolutePath), dest.absolutePath)
+            PendingOp.COPY -> FileOpService.copy(context, paths, dest.absolutePath)
+            PendingOp.MOVE -> FileOpService.move(context, paths, dest.absolutePath)
         }
         pendingOp = null
         pickDir = null
-        selected = null
+        selected = emptyList()
     }
 
     fun extract(item: FsEntry) {
@@ -331,8 +348,11 @@ fun FileManagerPage(
         controller.reload()
     }
 
-    BackHandler(enabled = controller.currentDir != controller.root) {
-        controller.up()
+    BackHandler(enabled = controller.selecting || controller.currentDir != controller.root) {
+        when {
+            controller.selecting -> controller.selected = emptyList()
+            else -> controller.up()
+        }
     }
 
     val toastText = toast ?: if (running) "正在处理…" else null
@@ -348,36 +368,23 @@ fun FileManagerPage(
 @Composable
 private fun FileManagerMiuix(controller: FileManagerController, toast: String?) {
     val scrollBehavior = MiuixScrollBehavior()
+    val density = LocalDensity.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val listState = rememberLazyListState()
+    val surface = MiuixTheme.colorScheme.surface
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
-                largeTitle = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
-                navigationIcon = {
-                    IconButton(onClick = {
-                        when {
-                            controller.pendingOp != null -> controller.cancelPick()
-                            !controller.up() -> controller.onBack()
-                        }
-                    }) {
-                        Icon(
-                            imageVector = MiuixIcons.ChevronBackward,
-                            contentDescription = "返回",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+    var barBottomPx by remember { mutableIntStateOf(0) }
+    val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
+
+    Box(modifier = Modifier.fillMaxSize().background(surface)) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
+            // 固定目录轴：上下间距一致，左间距与标题对齐
+            MiuixBreadcrumb(controller, controller.currentDir)
+
             AnimatedContent(
                 targetState = controller.currentDir,
+                modifier = Modifier.weight(1f),
                 transitionSpec = {
                     val forward = targetState.absolutePath.length > initialState.absolutePath.length
                     val slide = tween<androidx.compose.ui.unit.IntOffset>(
@@ -395,10 +402,13 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                 },
                 label = "dir",
             ) { dir ->
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    item {
-                        MiuixBreadcrumb(controller, dir)
-                        if (controller.needsAllFiles) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(bottom = 96.dp),
+                ) {
+                    if (controller.needsAllFiles) {
+                        item {
                             BasicComponent(
                                 title = "需要「所有文件访问权限」才能浏览 Android/data",
                                 summary = "点击去授权",
@@ -409,28 +419,62 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                     items(controller.entriesOf(dir)) { entry ->
                         MiuixEntryRow(controller, entry)
                     }
-                    item { Spacer(Modifier.height(90.dp)) }
                 }
             }
+        }
 
-            val item = controller.selected
-            AnimatedVisibility(
-                visible = item != null || controller.pendingOp != null,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp),
-            ) {
-                if (controller.pendingOp != null) {
-                    MiuixPickBar(controller)
-                } else if (item != null) {
-                    MiuixActionBar(controller, item)
-                }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .background(surface)
+                .statusBarsPadding()
+                .onGloballyPositioned { coords ->
+                    val bottom = coords.boundsInWindow().bottom.toInt()
+                    if (bottom != barBottomPx) barBottomPx = bottom
+                },
+        ) {
+            TopAppBar(
+                title = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
+                largeTitle = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
+                color = Color.Transparent,
+                defaultWindowInsetsPadding = false,
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    IconButton(onClick = {
+                        when {
+                            controller.pendingOp != null -> controller.cancelPick()
+                            controller.selecting -> controller.selected = emptyList()
+                            !controller.up() -> controller.onBack()
+                        }
+                    }) {
+                        Icon(
+                            imageVector = MiuixIcons.ChevronBackward,
+                            contentDescription = "返回",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = controller.selecting || controller.pendingOp != null || controller.selected.isNotEmpty(),
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp),
+        ) {
+            if (controller.pendingOp != null) {
+                MiuixPickBar(controller)
+            } else if (controller.selected.isNotEmpty()) {
+                MiuixActionBar(controller)
             }
+        }
 
-            if (toast != null) {
-                Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 96.dp)) {
-                    ToastText(toast)
-                }
+        if (toast != null) {
+            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 96.dp)) {
+                ToastText(toast)
             }
         }
     }
@@ -439,7 +483,7 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
 @Composable
 private fun MiuixBreadcrumb(controller: FileManagerController, dir: java.io.File) {
     val segments = remember(dir) { controller.segmentsOf(dir) }
-    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         BreadcrumbBar(
             items = segments.map {
                 BreadcrumbItem(
@@ -453,7 +497,7 @@ private fun MiuixBreadcrumb(controller: FileManagerController, dir: java.io.File
                     if (controller.pendingOp != null) controller.pickDir = it else controller.enter(it)
                 }
             },
-            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+            insideMargin = PaddingValues(start = 16.dp, end = 16.dp),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -468,27 +512,36 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
         fmFormatTime(entry.modified),
     ).joinToString(" · ")
 
-    val onClick = {
+    val selecting = controller.selecting
+    val selected = controller.isSelected(entry)
+
+    val onClick: () -> Unit = {
         when {
             controller.pendingOp != null -> controller.pickDir = entry.file
+            selecting -> controller.toggle(entry)
             entry.isDir -> controller.enter(entry.file)
             else -> controller.open(entry)
         }
     }
-    val onLongClick = {
-        if (controller.pendingOp == null) {
-            controller.selected = if (controller.selected?.file == entry.file) null else entry
-        }
+    val onLongClick: () -> Unit = {
+        if (controller.pendingOp == null) controller.toggle(entry)
     }
-    Box(
-        modifier = Modifier.fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-    ) {
+
+    Box(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
         if (entry.isDir) {
             ArrowPreference(
                 title = entry.file.name,
                 summary = summary,
                 startAction = { EntryThumb(entry) },
+                endActions = {
+                    if (selecting) {
+                        Checkbox(
+                            state = if (selected) androidx.compose.ui.state.ToggleableState.On
+                            else androidx.compose.ui.state.ToggleableState.Off,
+                            onClick = null,
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 onClick = null,
             )
@@ -497,6 +550,9 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                 title = entry.file.name,
                 summary = summary,
                 startAction = { EntryThumb(entry) },
+                endActions = if (selecting) {
+                    { Checkbox(state = if (selected) androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off, onClick = null) }
+                } else null,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = null,
             )
@@ -532,7 +588,11 @@ private fun EntryThumb(entry: FsEntry) {
 }
 
 @Composable
-private fun MiuixActionBar(controller: FileManagerController, item: FsEntry) {
+private fun MiuixActionBar(controller: FileManagerController) {
+    val items = controller.selected
+    val single = items.size == 1
+    val one = items.firstOrNull()
+
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(28.dp))
@@ -541,11 +601,20 @@ private fun MiuixActionBar(controller: FileManagerController, item: FsEntry) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CapsuleAction(MiuixIcons.FileIcon, "打开") { controller.open(item); controller.selected = null }
-        CapsuleAction(MiuixIcons.Copy, "复制") { controller.beginMove(PendingOp.COPY) }
-        CapsuleAction(MiuixIcons.MoveFile, "移动") { controller.beginMove(PendingOp.MOVE) }
-        if (!item.isDir && isArchive(item.file.name)) {
-            CapsuleAction(MiuixIcons.FolderIcon, "解压") { controller.extract(item); controller.selected = null }
+        CapsuleAction(MiuixIcons.FileIcon, "打开", enabled = single) {
+            one?.let { controller.open(it); controller.selected = emptyList() }
+        }
+        CapsuleAction(MiuixIcons.Copy, "复制", enabled = items.isNotEmpty()) {
+            controller.beginMove(PendingOp.COPY)
+        }
+        CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = items.isNotEmpty()) {
+            controller.beginMove(PendingOp.MOVE)
+        }
+        if (single && one != null && !one.isDir && isArchive(one.file.name)) {
+            CapsuleAction(MiuixIcons.FolderIcon, "解压", enabled = true) {
+                controller.extract(one)
+                controller.selected = emptyList()
+            }
         }
     }
 }
@@ -554,16 +623,30 @@ private fun MiuixActionBar(controller: FileManagerController, item: FsEntry) {
 private fun CapsuleAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
+        Icon(
+            icon,
+            contentDescription = label,
+            modifier = Modifier.size(22.dp),
+            tint = if (enabled) MiuixTheme.colorScheme.onSurface
+            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+        )
         Spacer(Modifier.height(2.dp))
-        Text(label, fontSize = 11.sp)
+        Text(
+            label,
+            fontSize = 11.sp,
+            color = if (enabled) MiuixTheme.colorScheme.onSurface
+            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+        )
     }
 }
 
@@ -594,37 +677,21 @@ private fun MiuixPickBar(controller: FileManagerController) {
 @Composable
 private fun FileManagerMaterial(controller: FileManagerController, toast: String?) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val density = LocalDensity.current
     val topState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topState)
+    val surface = M3MaterialTheme.colorScheme.surface
+    var barBottomPx by remember { mutableIntStateOf(0) }
+    val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
 
-    Column(modifier = Modifier.fillMaxSize().background(M3MaterialTheme.colorScheme.surface)) {
-        LargeTopAppBar(
-            title = {
-                M3Text(
-                    if (controller.pendingOp != null) "选择目标目录" else "文件管理",
-                    fontWeight = FontWeight.Medium,
-                )
-            },
-            navigationIcon = {
-                M3IconButton(onClick = {
-                    when {
-                        controller.pendingOp != null -> controller.cancelPick()
-                        !controller.up() -> controller.onBack()
-                    }
-                }) {
-                    M3Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "返回",
-                    )
-                }
-            },
-            scrollBehavior = scrollBehavior,
-        )
+    Box(modifier = Modifier.fillMaxSize().background(surface)) {
+        Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
+            MiuixBreadcrumb(controller, controller.currentDir)
 
-        Box(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = controller.currentDir,
+                modifier = Modifier.weight(1f),
                 transitionSpec = {
                     val forward = targetState.absolutePath.length > initialState.absolutePath.length
                     val slide = tween<androidx.compose.ui.unit.IntOffset>(
@@ -644,14 +711,14 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
             ) { dir ->
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                    contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
-                    item {
-                        MiuixBreadcrumb(controller, dir)
-                        if (controller.needsAllFiles) {
+                    if (controller.needsAllFiles) {
+                        item {
                             M3Surface(
                                 color = M3MaterialTheme.colorScheme.secondaryContainer,
                                 shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().padding(12.dp)
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
                                     .clickable { requestAllFiles(controller.context) },
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
@@ -668,14 +735,45 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                     items(controller.entriesOf(dir)) { entry ->
                         MaterialEntryRow(controller, entry)
                     }
-                    item { Spacer(Modifier.height(90.dp)) }
                 }
             }
+        }
 
-            val item = controller.selected
-            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .background(surface)
+                .statusBarsPadding()
+                .onGloballyPositioned { coords ->
+                    val bottom = coords.boundsInWindow().bottom.toInt()
+                    if (bottom != barBottomPx) barBottomPx = bottom
+                },
+        ) {
+            LargeTopAppBar(
+                title = { M3Text(if (controller.pendingOp != null) "选择目标目录" else "文件管理") },
+                navigationIcon = {
+                    M3IconButton(onClick = {
+                        when {
+                            controller.pendingOp != null -> controller.cancelPick()
+                            controller.selecting -> controller.selected = emptyList()
+                            !controller.up() -> controller.onBack()
+                        }
+                    }) {
+                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
+                },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
+                scrollBehavior = scrollBehavior,
+            )
+        }
+
+        Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp)) {
             androidx.compose.animation.AnimatedVisibility(
-                visible = item != null || controller.pendingOp != null,
+                visible = controller.selected.isNotEmpty() || controller.pendingOp != null,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             ) {
@@ -698,36 +796,40 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                                 modifier = Modifier.clickable { controller.confirmPick() },
                             )
                         }
-                    } else if (item != null) {
+                    } else {
+                        val items = controller.selected
+                        val single = items.size == 1
+                        val one = items.firstOrNull()
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            M3CapsuleAction(Icons.Filled.InsertDriveFile, "打开") {
-                                controller.open(item); controller.selected = null
+                            M3CapsuleAction(Icons.Filled.InsertDriveFile, "打开", single) {
+                                one?.let { controller.open(it); controller.selected = emptyList() }
                             }
-                            M3CapsuleAction(Icons.Filled.Folder, "复制") { controller.beginMove(PendingOp.COPY) }
-                            M3CapsuleAction(Icons.Filled.Folder, "移动") { controller.beginMove(PendingOp.MOVE) }
-                            if (!item.isDir && isArchive(item.file.name)) {
-                                M3CapsuleAction(Icons.Filled.Folder, "解压") {
-                                    controller.extract(item); controller.selected = null
+                            M3CapsuleAction(Icons.Filled.Folder, "复制", true) { controller.beginMove(PendingOp.COPY) }
+                            M3CapsuleAction(Icons.Filled.Folder, "移动", true) { controller.beginMove(PendingOp.MOVE) }
+                            if (single && one != null && !one.isDir && isArchive(one.file.name)) {
+                                M3CapsuleAction(Icons.Filled.Folder, "解压", true) {
+                                    controller.extract(one)
+                                    controller.selected = emptyList()
                                 }
                             }
                         }
                     }
                 }
             }
-            }
+        }
 
-            if (toast != null) {
-                Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 96.dp)) {
-                    ToastText(toast)
-                }
+        if (toast != null) {
+            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 96.dp)) {
+                ToastText(toast)
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) {
     val summary = if (entry.isDir) fmFormatTime(entry.modified)
@@ -736,13 +838,23 @@ private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) 
         fmFormatTime(entry.modified),
     ).joinToString(" · ")
 
+    val selected = controller.isSelected(entry)
+
     Row(
         modifier = Modifier.fillMaxWidth()
-            .clickable {
-                if (controller.pendingOp != null) controller.pickDir = entry.file
-                else if (entry.isDir) controller.enter(entry.file)
-                else controller.open(entry)
-            }
+            .combinedClickable(
+                onClick = {
+                    when {
+                        controller.pendingOp != null -> controller.pickDir = entry.file
+                        controller.selecting -> controller.toggle(entry)
+                        entry.isDir -> controller.enter(entry.file)
+                        else -> controller.open(entry)
+                    }
+                },
+                onLongClick = {
+                    if (controller.pendingOp == null) controller.toggle(entry)
+                },
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -759,7 +871,9 @@ private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) 
                 )
             }
         }
-        if (entry.isDir) {
+        if (controller.selecting) {
+            androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = null)
+        } else if (entry.isDir) {
             M3Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
@@ -773,16 +887,20 @@ private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) 
 private fun M3CapsuleAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    val color = if (enabled) M3MaterialTheme.colorScheme.onSurface
+    else M3MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
     Column(
-        modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)
+        modifier = Modifier.clip(RoundedCornerShape(20.dp))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        M3Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
+        M3Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp), tint = color)
         Spacer(Modifier.height(2.dp))
-        M3Text(label, fontSize = 11.sp)
+        M3Text(label, fontSize = 11.sp, color = color)
     }
 }
 
