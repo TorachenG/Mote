@@ -958,7 +958,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
             TextField(
                 value = usernameInput,
                 onValueChange = { usernameInput = it },
-                label = "用户名（登录用）",
+                label = "用户名（账号不存在时自动注册）",
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1529,7 +1529,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                     M3OutlinedTextField(
                         value = usernameInput,
                         onValueChange = { usernameInput = it },
-                        label = { M3Text("用户名（登录用）") },
+                        label = { M3Text("用户名（账号不存在时自动注册）") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
