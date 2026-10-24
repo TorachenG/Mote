@@ -192,6 +192,8 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    // OpenCV：Java 绑定取自官方 AAR 的 classes.jar（app/libs），原生库为自行裁剪编译的 core/imgproc/imgcodecs
+    implementation(files("libs/opencv-4.10.0.jar"))
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
 
     // ===== 原生视频播放器 =====

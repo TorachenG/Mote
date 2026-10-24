@@ -31,6 +31,11 @@ import android.provider.Settings
 import android.util.Size
 import android.view.Surface
 import android.widget.Toast
+import org.opencv.android.Utils
+import org.opencv.core.Core
+import org.opencv.core.Mat
+import org.opencv.core.Size as CvSize
+import org.opencv.imgproc.Imgproc
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -635,6 +640,24 @@ private fun applyScanFilter(src: Bitmap, filter: ScanFilter): Bitmap {
         val pixels = IntArray(width * height)
         workSrc.getPixels(pixels, 0, width, 0, 0, width, height)
 
+        // 优先用 OpenCV（裁剪版，仅 core/imgproc/imgcodecs）处理，
+        // 不可用时回退到纯 Kotlin 实现
+        if (ensureOpenCvLoaded()) {
+            val cv = runCatching {
+                when (filter) {
+                    ScanFilter.ENHANCED -> enhancedDocumentOpenCv(workSrc)
+                    ScanFilter.GRAYSCALE -> blackWhiteDocumentOpenCv(workSrc)
+                    ScanFilter.ORIGINAL -> workSrc
+                }
+            }.getOrNull()
+            if (cv != null && cv !== workSrc) {
+                if (workSrc !== src) {
+                    try { workSrc.recycle() } catch (_: Exception) {}
+                }
+                return cv
+            }
+        }
+
         val out = when (filter) {
             ScanFilter.ENHANCED -> enhancedDocumentFilter(pixels, width, height)
             ScanFilter.GRAYSCALE -> blackWhiteDocumentFilter(pixels, width, height)
@@ -654,6 +677,81 @@ private fun applyScanFilter(src: Bitmap, filter: ScanFilter): Bitmap {
         if (workSrc !== src) workSrc else src
     }
 }
+private var openCvLoaded: Boolean? = null
+
+/** 加载裁剪版 OpenCV 原生库（core/imgproc/imgcodecs），失败则回退纯 Kotlin 实现 */
+private fun ensureOpenCvLoaded(): Boolean {
+    openCvLoaded?.let { return it }
+    val ok = try {
+        System.loadLibrary("opencv_java4")
+        true
+    } catch (_: Throwable) {
+        false
+    }
+    openCvLoaded = ok
+    return ok
+}
+
+/** 文档增强：LAB 亮度通道 CLAHE + 轻度反锐化，纸白字实且不破坏色彩 */
+private fun enhancedDocumentOpenCv(src: Bitmap): Bitmap {
+    val rgba = Mat()
+    Utils.bitmapToMat(src, rgba)
+    val rgb = Mat()
+    Imgproc.cvtColor(rgba, rgb, Imgproc.COLOR_RGBA2RGB)
+
+    val lab = Mat()
+    Imgproc.cvtColor(rgb, lab, Imgproc.COLOR_RGB2Lab)
+    val channels = ArrayList<Mat>()
+    Core.split(lab, channels)
+    val clahe = Imgproc.createCLAHE(2.2, CvSize(8.0, 8.0))
+    clahe.apply(channels[0], channels[0])
+    Core.merge(channels, lab)
+    Imgproc.cvtColor(lab, rgb, Imgproc.COLOR_Lab2RGB)
+
+    // 反锐化：原图 + 少量高频
+    val blurred = Mat()
+    Imgproc.GaussianBlur(rgb, blurred, CvSize(0.0, 0.0), 2.4)
+    Core.addWeighted(rgb, 1.45, blurred, -0.45, 0.0, rgb)
+
+    val outRgba = Mat()
+    Imgproc.cvtColor(rgb, outRgba, Imgproc.COLOR_RGB2RGBA)
+    val out = Bitmap.createBitmap(outRgba.cols(), outRgba.rows(), Bitmap.Config.ARGB_8888)
+    Utils.matToBitmap(outRgba, out)
+    rgba.release(); rgb.release(); lab.release(); blurred.release(); outRgba.release()
+    return out
+}
+
+/** 黑白：CLAHE 提局部对比度 + 高斯自适应阈值，专治光照不均 */
+private fun blackWhiteDocumentOpenCv(src: Bitmap): Bitmap {
+    val rgba = Mat()
+    Utils.bitmapToMat(src, rgba)
+    val gray = Mat()
+    Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+
+    val clahe = Imgproc.createCLAHE(2.0, CvSize(8.0, 8.0))
+    clahe.apply(gray, gray)
+    Imgproc.GaussianBlur(gray, gray, CvSize(0.0, 0.0), 1.2)
+
+    // 窗口取短边的 1/16，必须为奇数且 >= 3
+    var block = ((minOf(gray.cols(), gray.rows()) / 16) * 2 + 1).coerceIn(3, 251)
+    if (block % 2 == 0) block -= 1
+
+    val bw = Mat()
+    Imgproc.adaptiveThreshold(
+        gray, bw, 255.0,
+        Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+        Imgproc.THRESH_BINARY,
+        block, 9.0,
+    )
+
+    val outRgba = Mat()
+    Imgproc.cvtColor(bw, outRgba, Imgproc.COLOR_GRAY2RGBA)
+    val out = Bitmap.createBitmap(outRgba.cols(), outRgba.rows(), Bitmap.Config.ARGB_8888)
+    Utils.matToBitmap(outRgba, out)
+    rgba.release(); gray.release(); bw.release(); outRgba.release()
+    return out
+}
+
 // 增强滤镜：模拟小米相机「文档增强」——纸白、字实、颜色不被破坏
 private fun enhancedDocumentFilter(pixels: IntArray, width: Int, height: Int): IntArray {
     val n = width * height
