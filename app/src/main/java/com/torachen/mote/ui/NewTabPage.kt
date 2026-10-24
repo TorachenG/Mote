@@ -2274,7 +2274,17 @@ private fun NewTabPageMiuix(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(quickInputButtonBg)
-                                    .clickable { query = query + text }
+                                    .clickable {
+                                        val start = if (NtpSearchCursor.start >= 0) NtpSearchCursor.start else query.length
+                                        val end = if (NtpSearchCursor.end >= start) NtpSearchCursor.end else start
+                                        val s = start.coerceIn(0, query.length)
+                                        val e = end.coerceIn(s, query.length)
+                                        val newText = query.substring(0, s) + text + query.substring(e)
+                                        val cursor = s + text.length
+                                        NtpSearchCursor.start = cursor
+                                        NtpSearchCursor.end = cursor
+                                        query = newText
+                                    }
                                     .padding(horizontal = 8.dp, vertical = 4.dp),
                             ) {
                                 Text(text, color = quickInputTextColor)
@@ -4551,6 +4561,12 @@ private fun BannerFontSheet(
 // 搜索框
 // ============================================================
 
+/** 记录新标签页搜索框当前光标位置，供快捷输入栏按光标插入 */
+internal object NtpSearchCursor {
+    var start: Int = -1
+    var end: Int = -1
+}
+
 @Composable
 private fun SearchField(
     query: String,
@@ -4581,6 +4597,17 @@ private fun SearchField(
     suggestions: List<String>,
     onSuggestionClick: (String) -> Unit,
 ) {
+    var queryField by remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(query)) }
+    LaunchedEffect(query) {
+        if (queryField.text != query) {
+            val cursor = queryField.selection.min.coerceIn(0, query.length)
+            queryField = androidx.compose.ui.text.input.TextFieldValue(
+                query,
+                androidx.compose.ui.text.TextRange(cursor),
+            )
+        }
+    }
+
     var isFocused by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
@@ -4695,8 +4722,13 @@ private fun SearchField(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             BasicTextField(
-                value = query,
-                onValueChange = onQueryChange,
+                value = queryField,
+                onValueChange = { newValue ->
+                    queryField = newValue
+                    NtpSearchCursor.start = newValue.selection.min
+                    NtpSearchCursor.end = newValue.selection.max
+                    onQueryChange(newValue.text)
+                },
                 singleLine = true,
                 textStyle = TextStyle(fontSize = 15.sp, color = onWallpaper),
                 cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),

@@ -5321,10 +5321,16 @@ fun BrowserScreen(
     }
 
     fun insertText(text: String) {
-        val current = urlInput.text
-        val isPrefix = text.startsWith("http") || text.startsWith("ftp") || text == "www."
-        val newText = if (isPrefix) text + current else current + text
-        urlInput = TextFieldValue(newText)
+        val value = urlInput
+        val current = value.text
+        val start = value.selection.min.coerceIn(0, current.length)
+        val end = value.selection.max.coerceIn(start, current.length)
+        // 插入到光标位置（有选区时替换选区），光标停在插入内容之后
+        val newText = current.substring(0, start) + text + current.substring(end)
+        urlInput = TextFieldValue(
+            text = newText,
+            selection = androidx.compose.ui.text.TextRange(start + text.length),
+        )
     }
 
     fun loadFaviconFromExplicitUrl(windowId: String, faviconUrl: String, expectedHost: String) {
