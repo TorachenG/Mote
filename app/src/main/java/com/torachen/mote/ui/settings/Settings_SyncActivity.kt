@@ -392,20 +392,26 @@ internal object MoteCloudSyncManager {
         return callFunction(body)
     }
 
-    /** 拉取云端密文，没有数据返回空串；token 过期会自动刷新 */
-    fun pullRemote(prefs: SharedPreferences): Pair<String?, String?> {
+    data class PullResult(val content: String, val updatedAt: Long)
+
+    /** 拉取云端密文与云端更新时间；token 过期会自动刷新 */
+    fun pullRemote(prefs: SharedPreferences): Pair<PullResult?, String?> {
         val (data, err) = callWithRefresh(JSONObject().apply { put("action", "pull") }, prefs)
         if (data == null) return null to err
-        return data.optString("content", "") to null
+        return PullResult(
+            content = data.optString("content", ""),
+            updatedAt = data.optLong("updated_at", 0L),
+        ) to null
     }
 
-    /** 上传密文；token 过期会自动刷新 */
-    fun pushRemote(prefs: SharedPreferences, content: String): Pair<Boolean, String?> {
+    /** 上传密文，返回云端写入时间（毫秒）；token 过期会自动刷新 */
+    fun pushRemote(prefs: SharedPreferences, content: String): Pair<Long?, String?> {
         val (data, err) = callWithRefresh(JSONObject().apply {
             put("action", "push")
             put("content", content)
         }, prefs)
-        return (data != null) to err
+        if (data == null) return null to err
+        return data.optLong("updated_at", 0L) to null
     }
 
     fun downloadFile(config: WebDavConfig): String? {
@@ -619,23 +625,23 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                         val localObj = MoteCloudSyncManager.buildLocalData(prefs)
                         val localJson = localObj.toString()
 
-                        val (remoteContent, pullError) = MoteCloudSyncManager.pullRemote(prefs)
-                        if (remoteContent == null) throw Exception(pullError ?: "拉取云端数据失败")
-                        run {
-                            val encryptedData = remoteContent
-                            if (encryptedData.isNotBlank()) {
-                                val tempDecrypt = MoteCloudSyncManager.decrypt(encryptedData, prefs)
-                                if (tempDecrypt != null) {
-                                    try {
-                                        val obj = JSONObject(tempDecrypt)
-                                        val remoteKey = obj.optString("fallback_key", "")
-                                        if (remoteKey.isNotBlank()) {
-                                            prefs.edit().putString(MoteCloudSyncManager.KEY_FALLBACK_PASS, remoteKey).apply()
-                                        }
-                                    } catch (_: Exception) {}
-                                }
-                                val remoteJson = MoteCloudSyncManager.decrypt(encryptedData, prefs)
-                                if (remoteJson != null && remoteJson != localJson) {
+                        val pulled = MoteCloudSyncManager.pullRemote(prefs)
+                        val remote = pulled.first ?: throw Exception(pulled.second ?: "拉取云端数据失败")
+                        val lastSyncAt = prefs.getLong(MoteCloudSyncManager.KEY_LAST_SYNC, 0L)
+
+                        // 只有「云端在上次同步之后被改过」且「内容确实不同」才判定冲突，
+                        // 避免本地易变字段导致每次同步都弹冲突
+                        if (remote.content.isNotBlank() && remote.updatedAt > lastSyncAt) {
+                            val remoteJson = MoteCloudSyncManager.decrypt(remote.content, prefs)
+                            if (remoteJson != null) {
+                                try {
+                                    val obj = JSONObject(remoteJson)
+                                    val remoteKey = obj.optString("fallback_key", "")
+                                    if (remoteKey.isNotBlank()) {
+                                        prefs.edit().putString(MoteCloudSyncManager.KEY_FALLBACK_PASS, remoteKey).apply()
+                                    }
+                                } catch (_: Exception) {}
+                                if (remoteJson != localJson) {
                                     val remoteObjJson = JSONObject(remoteJson)
                                     withContext(Dispatchers.Main) {
                                         isSyncing = false
@@ -647,14 +653,15 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                         }
 
                         val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                        val ok = MoteCloudSyncManager.pushRemote(prefs, encrypted).first
+                        val pushed = MoteCloudSyncManager.pushRemote(prefs, encrypted)
+                        val pushedAt = pushed.first
                         withContext(Dispatchers.Main) {
                             isSyncing = false
-                            if (ok) {
-                                prefs.edit().putLong(MoteCloudSyncManager.KEY_LAST_SYNC, System.currentTimeMillis()).apply()
+                            if (pushedAt != null) {
+                                prefs.edit().putLong(MoteCloudSyncManager.KEY_LAST_SYNC, pushedAt).apply()
                                 Toast.makeText(context, "同步成功", Toast.LENGTH_SHORT).show()
                             } else {
-                                errorDialogMessage = "同步失败：CloudBase 返回失败响应（可能是鉴权失效或数据库权限问题）"
+                                errorDialogMessage = "同步失败：${pushed.second ?: "未知错误"}"
                             }
                         }
                     } else {
@@ -1166,23 +1173,23 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                         val localObj = MoteCloudSyncManager.buildLocalData(prefs)
                         val localJson = localObj.toString()
 
-                        val (remoteContent, pullError) = MoteCloudSyncManager.pullRemote(prefs)
-                        if (remoteContent == null) throw Exception(pullError ?: "拉取云端数据失败")
-                        run {
-                            val encryptedData = remoteContent
-                            if (encryptedData.isNotBlank()) {
-                                val tempDecrypt = MoteCloudSyncManager.decrypt(encryptedData, prefs)
-                                if (tempDecrypt != null) {
-                                    try {
-                                        val obj = JSONObject(tempDecrypt)
-                                        val remoteKey = obj.optString("fallback_key", "")
-                                        if (remoteKey.isNotBlank()) {
-                                            prefs.edit().putString(MoteCloudSyncManager.KEY_FALLBACK_PASS, remoteKey).apply()
-                                        }
-                                    } catch (_: Exception) {}
-                                }
-                                val remoteJson = MoteCloudSyncManager.decrypt(encryptedData, prefs)
-                                if (remoteJson != null && remoteJson != localJson) {
+                        val pulled = MoteCloudSyncManager.pullRemote(prefs)
+                        val remote = pulled.first ?: throw Exception(pulled.second ?: "拉取云端数据失败")
+                        val lastSyncAt = prefs.getLong(MoteCloudSyncManager.KEY_LAST_SYNC, 0L)
+
+                        // 只有「云端在上次同步之后被改过」且「内容确实不同」才判定冲突，
+                        // 避免本地易变字段导致每次同步都弹冲突
+                        if (remote.content.isNotBlank() && remote.updatedAt > lastSyncAt) {
+                            val remoteJson = MoteCloudSyncManager.decrypt(remote.content, prefs)
+                            if (remoteJson != null) {
+                                try {
+                                    val obj = JSONObject(remoteJson)
+                                    val remoteKey = obj.optString("fallback_key", "")
+                                    if (remoteKey.isNotBlank()) {
+                                        prefs.edit().putString(MoteCloudSyncManager.KEY_FALLBACK_PASS, remoteKey).apply()
+                                    }
+                                } catch (_: Exception) {}
+                                if (remoteJson != localJson) {
                                     val remoteObjJson = JSONObject(remoteJson)
                                     withContext(Dispatchers.Main) {
                                         isSyncing = false
@@ -1194,14 +1201,15 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                         }
 
                         val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                        val ok = MoteCloudSyncManager.pushRemote(prefs, encrypted).first
+                        val pushed = MoteCloudSyncManager.pushRemote(prefs, encrypted)
+                        val pushedAt = pushed.first
                         withContext(Dispatchers.Main) {
                             isSyncing = false
-                            if (ok) {
-                                prefs.edit().putLong(MoteCloudSyncManager.KEY_LAST_SYNC, System.currentTimeMillis()).apply()
+                            if (pushedAt != null) {
+                                prefs.edit().putLong(MoteCloudSyncManager.KEY_LAST_SYNC, pushedAt).apply()
                                 Toast.makeText(context, "同步成功", Toast.LENGTH_SHORT).show()
                             } else {
-                                errorDialogMessage = "同步失败：CloudBase 返回失败响应（可能是鉴权失效或数据库权限问题）"
+                                errorDialogMessage = "同步失败：${pushed.second ?: "未知错误"}"
                             }
                         }
                     } else {

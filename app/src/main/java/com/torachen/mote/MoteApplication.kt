@@ -61,9 +61,11 @@ class MoteApplication : Application() {
                 val userId = prefs.getString("cloudbase_user_id", "") ?: return@launch
                 if (accessToken.isBlank() || userId.isBlank()) return@launch
                 try {
-                    val encryptedData = com.torachen.mote.ui.MoteCloudSyncManager
+                    val remote = com.torachen.mote.ui.MoteCloudSyncManager
                         .pullRemote(prefs).first ?: return@launch
-                    if (encryptedData.isNotBlank()) {
+                    val lastSyncAt = prefs.getLong("sync_last_modified", 0L)
+                    val encryptedData = remote.content
+                    if (encryptedData.isNotBlank() && remote.updatedAt > lastSyncAt) {
                         val remoteJson = com.torachen.mote.ui.MoteCloudSyncManager.decrypt(encryptedData, prefs)
                         val localObj = com.torachen.mote.ui.MoteCloudSyncManager.buildLocalData(prefs)
                         val localJson = localObj.toString()
