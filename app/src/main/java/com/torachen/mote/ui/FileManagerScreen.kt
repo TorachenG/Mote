@@ -14,8 +14,11 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -377,6 +380,17 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
 
+    // 退出多选时用上一次的选择渲染，保证胶囊栏有完整的退出动画
+    var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var barPending by remember { mutableStateOf<PendingOp?>(null) }
+    LaunchedEffect(controller.selected) {
+        if (controller.selected.isNotEmpty()) barItems = controller.selected
+    }
+    LaunchedEffect(controller.pendingOp) {
+        if (controller.pendingOp != null) barPending = controller.pendingOp
+        else if (!controller.selecting) barPending = null
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
             // 固定目录轴：上下间距一致，左间距与标题对齐
@@ -465,10 +479,16 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp),
         ) {
-            if (controller.pendingOp != null) {
+            if (barPending != null) {
                 MiuixPickBar(controller)
-            } else if (controller.selected.isNotEmpty()) {
-                MiuixActionBar(controller)
+            } else if (barItems.isNotEmpty()) {
+                MiuixActionBar(
+                    items = barItems,
+                    onOpen = { one -> controller.open(one); controller.selected = emptyList() },
+                    onCopy = { controller.beginMove(PendingOp.COPY) },
+                    onMove = { controller.beginMove(PendingOp.MOVE) },
+                    onExtract = { one -> controller.extract(one); controller.selected = emptyList() },
+                )
             }
         }
 
@@ -527,14 +547,23 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
         if (controller.pendingOp == null) controller.toggle(entry)
     }
 
-    Box(modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+    ) {
         if (entry.isDir) {
             ArrowPreference(
                 title = entry.file.name,
                 summary = summary,
                 startAction = { EntryThumb(entry) },
                 endActions = {
-                    if (selecting) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = selecting,
+                        enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
+                        exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
+                    ) {
                         Checkbox(
                             state = if (selected) androidx.compose.ui.state.ToggleableState.On
                             else androidx.compose.ui.state.ToggleableState.Off,
@@ -550,9 +579,19 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                 title = entry.file.name,
                 summary = summary,
                 startAction = { EntryThumb(entry) },
-                endActions = if (selecting) {
-                    { Checkbox(state = if (selected) androidx.compose.ui.state.ToggleableState.On else androidx.compose.ui.state.ToggleableState.Off, onClick = null) }
-                } else null,
+                endActions = {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = selecting,
+                        enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
+                        exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
+                    ) {
+                        Checkbox(
+                            state = if (selected) androidx.compose.ui.state.ToggleableState.On
+                            else androidx.compose.ui.state.ToggleableState.Off,
+                            onClick = null,
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
                 onClick = null,
             )
@@ -588,8 +627,13 @@ private fun EntryThumb(entry: FsEntry) {
 }
 
 @Composable
-private fun MiuixActionBar(controller: FileManagerController) {
-    val items = controller.selected
+private fun MiuixActionBar(
+    items: List<FsEntry>,
+    onOpen: (FsEntry) -> Unit,
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
+    onExtract: (FsEntry) -> Unit,
+) {
     val single = items.size == 1
     val one = items.firstOrNull()
 
@@ -601,20 +645,11 @@ private fun MiuixActionBar(controller: FileManagerController) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CapsuleAction(MiuixIcons.FileIcon, "打开", enabled = single) {
-            one?.let { controller.open(it); controller.selected = emptyList() }
-        }
-        CapsuleAction(MiuixIcons.Copy, "复制", enabled = items.isNotEmpty()) {
-            controller.beginMove(PendingOp.COPY)
-        }
-        CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = items.isNotEmpty()) {
-            controller.beginMove(PendingOp.MOVE)
-        }
+        CapsuleAction(MiuixIcons.FileIcon, "打开", enabled = single) { one?.let(onOpen) }
+        CapsuleAction(MiuixIcons.Copy, "复制", enabled = true) { onCopy() }
+        CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = true) { onMove() }
         if (single && one != null && !one.isDir && isArchive(one.file.name)) {
-            CapsuleAction(MiuixIcons.FolderIcon, "解压", enabled = true) {
-                controller.extract(one)
-                controller.selected = emptyList()
-            }
+            CapsuleAction(MiuixIcons.FolderIcon, "解压", enabled = true) { onExtract(one) }
         }
     }
 }
@@ -684,6 +719,16 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
     val surface = M3MaterialTheme.colorScheme.surface
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
+
+    var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var barPending by remember { mutableStateOf<PendingOp?>(null) }
+    LaunchedEffect(controller.selected) {
+        if (controller.selected.isNotEmpty()) barItems = controller.selected
+    }
+    LaunchedEffect(controller.pendingOp) {
+        if (controller.pendingOp != null) barPending = controller.pendingOp
+        else if (!controller.selecting) barPending = null
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
@@ -782,7 +827,7 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                     color = M3MaterialTheme.colorScheme.surfaceContainerHigh,
                     shadowElevation = 8.dp,
                 ) {
-                    if (controller.pendingOp != null) {
+                    if (barPending != null) {
                         Row(
                             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.spacedBy(20.dp),
@@ -797,7 +842,7 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                             )
                         }
                     } else {
-                        val items = controller.selected
+                        val items = barItems
                         val single = items.size == 1
                         val one = items.firstOrNull()
                         Row(
@@ -871,9 +916,14 @@ private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) 
                 )
             }
         }
-        if (controller.selecting) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = controller.selecting,
+            enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
+            exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
+        ) {
             androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = null)
-        } else if (entry.isDir) {
+        }
+        if (!controller.selecting && entry.isDir) {
             M3Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
