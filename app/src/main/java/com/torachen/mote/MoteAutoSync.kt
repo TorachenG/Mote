@@ -62,7 +62,7 @@ object MoteAutoSync {
         val app = context.applicationContext
         stop(app)
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        when (prefs.getInt(KEY_FREQUENCY, FREQ_STARTUP)) {
+        when (prefs.getInt(KEY_FREQUENCY, FREQ_REALTIME)) {
             FREQ_REALTIME -> {
                 val l = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
                     if (key == null || applyingRemote || !isSyncableKey(p, key)) return@OnSharedPreferenceChangeListener

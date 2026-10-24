@@ -559,7 +559,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
     var showE2eeDialog by remember { mutableStateOf(false) }
     var syncFrequencyIndex by remember {
         mutableIntStateOf(
-            prefs.getInt(MoteAutoSync.KEY_FREQUENCY, MoteAutoSync.FREQ_STARTUP)
+            prefs.getInt(MoteAutoSync.KEY_FREQUENCY, MoteAutoSync.FREQ_REALTIME)
                 .coerceIn(0, MoteAutoSync.FREQUENCY_OPTIONS.lastIndex)
         )
     }
@@ -1220,7 +1220,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
     var showE2eeDialog by remember { mutableStateOf(false) }
     var syncFrequencyIndex by remember {
         mutableIntStateOf(
-            prefs.getInt(MoteAutoSync.KEY_FREQUENCY, MoteAutoSync.FREQ_STARTUP)
+            prefs.getInt(MoteAutoSync.KEY_FREQUENCY, MoteAutoSync.FREQ_REALTIME)
                 .coerceIn(0, MoteAutoSync.FREQUENCY_OPTIONS.lastIndex)
         )
     }
