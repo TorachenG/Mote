@@ -3667,7 +3667,7 @@ private fun CropScreenPage(
             if (ok) {
                 context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
                     .edit()
-                    // ★ 修复：自定义背景图索引是 2，不是 1（1 是必应壁纸）
+                    // ★ 修复：自定义背景图索引是 2，不是 1（1 是每日壁纸）
                     .putInt("home_background_content", 2)
                     .apply()
                 WallpaperSavedEventStore.pending = true

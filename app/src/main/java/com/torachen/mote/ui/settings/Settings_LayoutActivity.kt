@@ -181,7 +181,7 @@ private val TAB_ROW_CORNER = 8.dp
 private val SmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
 // ---------------- 界面风格 ----------------
-private val UI_STYLE_OPTIONS = listOf("Xiaomi HyperOS", "Material Design")
+private val UI_STYLE_OPTIONS = listOf("简洁", "质感")
 private const val UI_STYLE_MIUIX = 0
 private const val UI_STYLE_MATERIAL = 1
 private const val KEY_UI_STYLE = "ui_style"
@@ -251,7 +251,7 @@ private const val BANNER_CONTENT_IMAGE_INDEX = 1
 
 private val BACKGROUND_CONTENT_OPTIONS = listOf(
     "默认",
-    "必应壁纸",
+    "每日壁纸",
     "自定义图片",
     "极简白",
     "素雅灰",
@@ -621,7 +621,7 @@ fun SettingsLayoutPage(
                 backgroundContentIndex = index
                 prefs.edit().putInt(KEY_BACKGROUND_CONTENT, index).apply()
                 if (index == BACKGROUND_CONTENT_BING_INDEX) {
-                    checkAndShowControlColorSuggest() // 切换必应壁纸时触发
+                    checkAndShowControlColorSuggest() // 切换每日壁纸时触发
                 }
             }
         },

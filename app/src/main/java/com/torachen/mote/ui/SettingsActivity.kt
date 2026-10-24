@@ -354,10 +354,16 @@ internal data class SearchableEntry(
     val pageTitle: String,
     val itemKey: String,
     val tabIndex: Int? = null,
+    val navigateRoute: String? = null,
 ) {
     val subtitle: String
         get() = if (pageTitle.isBlank()) title else "$pageTitle > $title"
 }
+
+/** 三级页面归属的二级页面：搜索结果里并入同一个卡片展示 */
+internal val SETTINGS_SUB_PAGE_PARENT = mapOf(
+    "settings_password_manager" to "settings_personal_info",
+)
 
 internal object SettingsSearchRegistry {
 
@@ -409,7 +415,15 @@ internal object SettingsSearchRegistry {
                 val (full, initials) = getPinyinForms(entry.title)
                 full.contains(lower) || initials.contains(lower)
             }
-            .sortedBy { it.title }
+            .map { entry ->
+                val parent = SETTINGS_SUB_PAGE_PARENT[entry.pageRoute]
+                if (parent == null) entry else entry.copy(
+                    pageRoute = parent,
+                    navigateRoute = entry.pageRoute,
+                )
+            }
+            // 二级页面自身的选项排在前面，三级页面的选项排在后面
+            .sortedWith(compareBy({ it.navigateRoute != null }, { it.title }))
     }
 
     fun all(): List<SearchableEntry> = mergedAll().toList()
@@ -850,7 +864,7 @@ private fun SettingsMainPageMiuix(
         }
         searchValue = ""
         searchExpanded = false
-        onItemClick(entry.pageRoute)
+        onItemClick(entry.navigateRoute ?: entry.pageRoute)
     }
 
     CompositionLocalProvider(

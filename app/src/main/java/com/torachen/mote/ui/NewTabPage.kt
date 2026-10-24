@@ -264,7 +264,7 @@ internal const val KEY_HOME_CUSTOM_BANNER_PATH = "home_custom_banner_path"
 internal const val CUSTOM_BANNER_FILE_NAME = "home_banner_image.img"
 private const val BANNER_IMAGE_INDEX = 1
 
-// ★ 必应壁纸「前一天/后一天」所需的两个 prefs key
+// ★ 每日壁纸「前一天/后一天」所需的两个 prefs key
 private const val KEY_BING_DAY_OFFSET = "home_bing_day_offset"
 private const val KEY_BING_OFFSET_DATE = "home_bing_offset_date"
 
@@ -328,7 +328,7 @@ private const val SEARCH_FOCUS_BG_MS = 340
 private val BANNER_CONTENT_OPTIONS = listOf("关闭", "图片", "时间", "天气", "问候语")
 
 private val BACKGROUND_CONTENT_OPTIONS = listOf(
-    "默认", "必应壁纸", "自定义图片", "极简白", "素雅灰", "极夜黑",
+    "默认", "每日壁纸", "自定义图片", "极简白", "素雅灰", "极夜黑",
     "浅灰蓝", "极客紫", "嫩芽绿", "咸蛋黄", "蜜桃粉", "元气红",
 )
 
@@ -748,7 +748,7 @@ private suspend fun downloadBingWallpaper(
 }
 
 /**
- * 读取必应壁纸的日期偏移（0=今天，1=昨天，最多 7）。
+ * 读取每日壁纸的日期偏移（0=今天，1=昨天，最多 7）。
  * 若「记录偏移的日期」不是今天，说明已经跨天，把偏移重置为 0 并写回，
  * 实现「切换后当天保持，第二天恢复当天壁纸」。
  */
@@ -767,7 +767,7 @@ private fun loadBingDayOffset(prefs: SharedPreferences): Int {
 }
 
 /**
- * 保存必应壁纸的日期偏移，并记录「设置日期 = 今天」，
+ * 保存每日壁纸的日期偏移，并记录「设置日期 = 今天」，
  * 以便第二天自动重置为 0。
  */
 private fun saveBingDayOffset(prefs: SharedPreferences, offset: Int) {
@@ -1240,13 +1240,13 @@ private fun NewTabPageMiuix(
         if (bannerContent == BANNER_IMAGE_INDEX) loadCustomBanner(context) else null
     }
 
-    // ★ 必应壁纸展示的日期偏移（0=今天，1=昨天，最多 7）。
+    // ★ 每日壁纸展示的日期偏移（0=今天，1=昨天，最多 7）。
     //   在 remember 时读取并检查：若「记录偏移的日期」不是今天，重置为 0，
     //   实现「切换后当天保持，第二天恢复当天壁纸」。
     var bingDayOffset by remember { mutableIntStateOf(loadBingDayOffset(prefs)) }
 
     // ★ 修复：加入 backgroundContent + bingDayOffset 作为 key，
-    //   切到必应壁纸或切换日期时立即从缓存加载；
+    //   切到每日壁纸或切换日期时立即从缓存加载；
     //   否则 remember 不重算、LaunchedEffect 又因「当日缓存已存在」跳过下载，
     //   导致 bingWallpaperBitmap 一直是 null，背景不显示。
     var bingWallpaperBitmap by remember(backgroundContent, bingDayOffset) {
@@ -1257,7 +1257,7 @@ private fun NewTabPageMiuix(
         )
     }
 
-    // ★ 必应壁纸：优先加载低清，随后拉取高清并渐变覆盖（dayOffset 对应必应 API 的 idx）
+    // ★ 每日壁纸：优先加载低清，随后拉取高清并渐变覆盖（dayOffset 对应必应 API 的 idx）
     LaunchedEffect(backgroundContent, bingDayOffset) {
         if (backgroundContent == BACKGROUND_CONTENT_BING_INDEX) {
             val targetDate = java.util.Calendar.getInstance().apply {
@@ -1497,7 +1497,7 @@ private fun NewTabPageMiuix(
 
     val isCustomImageBg = backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX
     val isBingBg = backgroundContent == BACKGROUND_CONTENT_BING_INDEX
-    // ★ 需求 2a：材质风格/颜色仅在自定义背景为必应壁纸或自定义图片时生效，其余时候用 MIUIX 普通灰色材质
+    // ★ 需求 2a：材质风格/颜色仅在自定义背景为每日壁纸或自定义图片时生效，其余时候用 MIUIX 普通灰色材质
     val effectiveMaterialStyle = if (isCustomImageBg || isBingBg) materialStyle else 0
     val blurSupported = isRuntimeShaderSupported()
 
@@ -2340,7 +2340,7 @@ private fun NewTabPageMiuix(
         ) {
             val menuEntries = remember(backgroundContent, bingDayOffset) {
                 buildList {
-                    // ★ 必应壁纸时新增「下载原图」「前一天」「后一天」，
+                    // ★ 每日壁纸时新增「下载原图」「前一天」「后一天」，
                     //   与「定制新标签页」之间由 DropdownEntry 分割线分隔。
                     //   「前一天」「后一天」常驻显示，到达边界时 disabled 变灰。
                     if (backgroundContent == BACKGROUND_CONTENT_BING_INDEX) {
@@ -5649,7 +5649,7 @@ private fun NewTabPageMaterial(
         mutableStateOf(if (backgroundContent == BACKGROUND_CONTENT_BING_INDEX) loadBingWallpaperFromCache(context) else null)
     }
 
-    // ★ 必应壁纸：优先加载低清，随后拉取高清并渐变覆盖
+    // ★ 每日壁纸：优先加载低清，随后拉取高清并渐变覆盖
     LaunchedEffect(backgroundContent) {
         if (backgroundContent == BACKGROUND_CONTENT_BING_INDEX) {
             val dateStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(java.util.Date())
@@ -5719,7 +5719,7 @@ private fun NewTabPageMaterial(
         }
     }
 
-    // ★ 需求 2a：材质颜色仅在自定义背景为必应壁纸或自定义图片时生效，其余时候回落 Material 默认灰色
+    // ★ 需求 2a：材质颜色仅在自定义背景为每日壁纸或自定义图片时生效，其余时候回落 Material 默认灰色
     val effectiveMaterialColorMode = if (
         backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX ||
         backgroundContent == BACKGROUND_CONTENT_BING_INDEX
