@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Mote 书签同步 · 设置</title>
+<style>
+  :root{
+    --text:#4b5563; --muted:#98a0ac; --line:#e6eaf1; --blue:#2f7bf6;
+    --ok:#1f9d55; --danger:#e5484d;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;padding:34px 20px 60px;
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--text);
+    background:
+      radial-gradient(900px 500px at 10% 0%, #ffffff, transparent 60%),
+      linear-gradient(140deg,#f8f9fb,#f3f6fb 45%,#e9eff8);
+    min-height:100vh;
+  }
+  .container{max-width:680px;margin:0 auto}
+  h1{font-size:22px;font-weight:600;margin:0 0 4px;color:#3f4855;letter-spacing:.4px}
+  .lead{color:var(--muted);font-size:13px;margin:0 0 22px}
+  .card{
+    background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;
+    box-shadow:0 10px 30px rgba(80,98,130,.08),0 1px 2px rgba(80,98,130,.05);
+  }
+  .card h2{font-size:14px;font-weight:600;margin:0 0 14px;color:#5d6675;letter-spacing:.4px}
+  label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px;letter-spacing:.3px}
+  input[type=text],input[type=password],input[type=number],select{
+    width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+    font:inherit;color:var(--text);background:#fbfcfe;outline:none;
+    transition:border-color .16s,box-shadow .16s,background .16s;
+  }
+  input:focus,select:focus{border-color:#b7cdf3;background:#fff;box-shadow:0 0 0 3px rgba(47,123,246,.10)}
+  .field{margin-bottom:12px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row > .field{flex:1 1 200px}
+  .radio{display:flex;gap:8px;margin-bottom:14px}
+  .radio label{
+    flex:1;margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+    text-align:center;font-size:13.5px;color:var(--text);cursor:pointer;background:#fbfcfe;
+    transition:all .16s;
+  }
+  .radio input{display:none}
+  .radio input:checked + span{color:var(--blue);font-weight:600}
+  .radio label:has(input:checked){border-color:#b7cdf3;background:#f2f7ff;box-shadow:0 0 0 3px rgba(47,123,246,.08)}
+  button{
+    border:0;border-radius:10px;padding:10px 18px;font:inherit;cursor:pointer;
+    background:#eef2f8;color:var(--text);letter-spacing:.3px;transition:background .16s,transform .12s;
+  }
+  button:hover{background:#e7edf6}
+  button:active{transform:scale(.99)}
+  button.primary{background:var(--blue);color:#fff;box-shadow:0 8px 20px rgba(47,123,246,.18)}
+  button.primary:hover{background:#2a70e4}
+  .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:6px}
+  .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:20px}
+  .status.ok{color:var(--ok)}
+  .status.err{color:var(--danger)}
+  .hint{font-size:12.5px;color:var(--muted);line-height:1.75;margin:10px 0 0}
+  .hidden{display:none}
+  .check{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text)}
+  .check input{width:16px;height:16px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Mote 书签同步</h1>
+  <p class="lead">书签会同步到浏览器的「书签栏 → Mote」文件夹里，其它书签不受影响。</p>
+
+  <div class="card">
+    <h2>同步方式</h2>
+    <div class="radio">
+      <label><input type="radio" name="provider" value="cloud" checked><span>Mote 云同步账号</span></label>
+      <label><input type="radio" name="provider" value="webdav"><span>WebDAV</span></label>
+    </div>
+
+    <div id="cloudBox">
+      <div class="field">
+        <label>云函数地址</label>
+        <input type="text" id="cloudUrl" spellcheck="false">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>用户名</label>
+          <input type="text" id="username" spellcheck="false" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input type="password" id="password" autocomplete="current-password">
+        </div>
+      </div>
+      <div class="actions">
+        <button class="primary" id="loginBtn">登录并保存</button>
+      </div>
+      <p class="hint">密码只保存在本机扩展存储里，用于自动续期和「高级数据保护」的端到端解密。</p>
+    </div>
+
+    <div id="webdavBox" class="hidden">
+      <div class="field">
+        <label>WebDAV 地址</label>
+        <input type="text" id="webdavUrl" spellcheck="false" placeholder="https://dav.example.com/remote.php/dav/files/user/mote_sync.bin">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>用户名</label>
+          <input type="text" id="webdavUser" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>密码</label>
+          <input type="password" id="webdavPass">
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="saveStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>自动同步</h2>
+    <label class="check"><input type="checkbox" id="autoSync"> 自动同步（书签改动后自动推送，并按间隔检查云端）</label>
+    <div class="row" style="margin-top:12px">
+      <div class="field">
+        <label>检查间隔（分钟）</label>
+        <input type="number" id="intervalMinutes" min="1" max="120" step="1">
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="syncBtn">立即同步</button>
+      <button id="saveBtn">保存设置</button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>说明</h2>
+    <p class="hint">
+      · 支持普通加密与「高级数据保护」两种模式，会自动识别。<br>
+      · 删除会同步：一端删除的书签，另一端同步后也会删除。<br>
+      · 同步范围仅限「Mote」文件夹，浏览器里其它书签不会被改动。<br>
+      · 若开启高级数据保护，请使用与手机相同的账号密码。
+    </p>
+  </div>
+</div>
+<script src="options.js"></script>
+</body>
+</html>

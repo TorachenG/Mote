@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Mote 书签同步",
+  "version": "1.0.0",
+  "description": "在 Edge / Chrome 与 Mote 之间双向同步书签（支持普通加密与高级数据保护）。",
+  "permissions": ["bookmarks", "storage", "alarms"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "Mote 书签同步",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
