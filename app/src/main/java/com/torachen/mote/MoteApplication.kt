@@ -2,6 +2,7 @@ package com.torachen.mote
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import android.util.Log
 import com.aptabase.Aptabase
 import com.torachen.mote.ui.MoteAppContextHolder
@@ -20,11 +21,36 @@ class MoteApplication : Application() {
         installCrashHandler()
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        repairLongPrefs(prefs)
         if (prefs.getBoolean(KEY_PRIVACY_AGREED, false)) {
             initAptabase(DEFAULT_APP_KEY)
             tryAutoSync()
             MoteAutoSync.start(this)
         }
+    }
+
+    /**
+     * 早期版本同步时把 long 设置项写成了 int，读取会 ClassCastException。
+     * 启动时统一修一次，避免崩溃。
+     */
+    private fun repairLongPrefs(prefs: SharedPreferences) {
+        val longKeys = listOf(
+            "home_custom_wallpaper_color",
+            "sync_last_modified",
+            "about_last_check_time",
+        )
+        var editor: SharedPreferences.Editor? = null
+        for (key in longKeys) {
+            when (val value = prefs.all[key]) {
+                null -> Unit
+                is Long -> Unit
+                is Number -> editor = (editor ?: prefs.edit()).putLong(key, value.toLong())
+                is String -> value.toLongOrNull()?.let {
+                    editor = (editor ?: prefs.edit()).putLong(key, it)
+                }
+            }
+        }
+        editor?.apply()
     }
 
     fun initAptabase(appKey: String) {

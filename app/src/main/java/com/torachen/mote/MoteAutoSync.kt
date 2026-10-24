@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.torachen.mote.ui.MoteCloudSyncManager
+import com.torachen.mote.ui.MoteSyncMerge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +43,7 @@ object MoteAutoSync {
 
     @Volatile private var syncing = false
     @Volatile private var applyingRemote = false
+    @Volatile private var suppressUntil = 0L
 
     /** 同步项对应的偏好键 */
     private val DATA_KEYS = setOf(
@@ -55,7 +57,8 @@ object MoteAutoSync {
         "app_icon_id", "about_last_check_time", "web_saved_zooms_v2", "mote_download_tasks_v1",
         "cloudbase_access_token", "cloudbase_refresh_token", "cloudbase_user_id",
         "cloudbase_username", "sync_e2ee_enabled", "sync_fallback_pass", "sync_e2ee_derived_key",
-        "sync_frequency", "sync_provider", "sync_auto_on_start", "sync_conflict_pending"
+        "sync_frequency", "sync_provider", "sync_auto_on_start", "sync_conflict_pending",
+        "sync_snapshot_v1"
     )
 
     fun start(context: Context) {
@@ -65,12 +68,14 @@ object MoteAutoSync {
         when (prefs.getInt(KEY_FREQUENCY, FREQ_REALTIME)) {
             FREQ_REALTIME -> {
                 val l = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
-                    if (key == null || applyingRemote || !isSyncableKey(p, key)) return@OnSharedPreferenceChangeListener
+                    if (key == null || applyingRemote) return@OnSharedPreferenceChangeListener
+                    if (System.currentTimeMillis() < suppressUntil) return@OnSharedPreferenceChangeListener
+                    if (!isSyncableKey(p, key)) return@OnSharedPreferenceChangeListener
                     scheduleDebouncedSync(app)
                 }
                 prefs.registerOnSharedPreferenceChangeListener(l)
                 listener = l
-                syncNow(app)
+                scope.launch { syncNow(app) }
             }
 
             FREQ_INTERVAL -> {
@@ -117,6 +122,8 @@ object MoteAutoSync {
         } finally {
             syncing = false
             applyingRemote = false
+            // 同步本身会写回本地数据，短时间内忽略由此产生的事件，避免自我循环
+            suppressUntil = System.currentTimeMillis() + 3000
         }
     }
 
@@ -155,32 +162,44 @@ object MoteAutoSync {
         if (accessToken.isBlank() || userId.isBlank()) return
 
         val remote = MoteCloudSyncManager.pullRemote(prefs).first ?: return
-        val lastSyncAt = prefs.getLong(KEY_LAST_SYNC, 0L)
-        val localJson = MoteCloudSyncManager.buildLocalData(prefs).toString()
+        val localObj = MoteCloudSyncManager.buildLocalData(prefs)
 
-        if (remote.content.isBlank()) {
-            pushLocal(prefs, localJson)
-            return
+        val remoteObj = if (remote.content.isBlank()) {
+            null
+        } else {
+            val plain = MoteCloudSyncManager.decrypt(remote.content, prefs)
+                ?: throw IllegalStateException("无法解密云端数据")
+            JSONObject(plain)
         }
 
-        val remoteJson = MoteCloudSyncManager.decrypt(remote.content, prefs)
-        if (remoteJson == localJson) {
-            markSynced(prefs)
-            return
+        val snapshotObj = try {
+            JSONObject(prefs.getString(MoteSyncMerge.SNAPSHOT_KEY, "") ?: "")
+        } catch (_: Exception) {
+            JSONObject()
         }
 
-        if (remoteJson != null && remote.updatedAt > lastSyncAt) {
+        val merged = if (remoteObj == null) localObj else MoteSyncMerge.merge(localObj, remoteObj, snapshotObj)
+        val mergedJson = merged.toString()
+        val localJson = localObj.toString()
+        val remoteJson = remoteObj?.toString() ?: ""
+
+        if (mergedJson != localJson) {
             applyingRemote = true
             try {
-                MoteCloudSyncManager.applyRemoteData(prefs, JSONObject(remoteJson))
+                MoteCloudSyncManager.applyRemoteData(prefs, merged, markHistoryRemote = false)
             } finally {
                 applyingRemote = false
             }
-            markSynced(prefs)
-            return
         }
 
-        pushLocal(prefs, localJson)
+        if (mergedJson != remoteJson) {
+            pushLocal(prefs, mergedJson)
+        }
+
+        prefs.edit()
+            .putString(MoteSyncMerge.SNAPSHOT_KEY, mergedJson)
+            .putLong(KEY_LAST_SYNC, System.currentTimeMillis())
+            .apply()
     }
 
     private fun pushLocal(prefs: SharedPreferences, localJson: String) {

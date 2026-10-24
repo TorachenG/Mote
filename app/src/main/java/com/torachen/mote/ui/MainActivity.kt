@@ -12477,7 +12477,10 @@ private fun HistoryRow(
         Spacer(Modifier.width(8.dp))
 
         Text(
-            text = formatHistoryTime(entry.timestamp),
+            text = when {
+                entry.isRemote -> "云端 · " + formatHistoryTime(entry.timestamp)
+                else -> formatHistoryTime(entry.timestamp)
+            },
             fontSize = 12.sp,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )

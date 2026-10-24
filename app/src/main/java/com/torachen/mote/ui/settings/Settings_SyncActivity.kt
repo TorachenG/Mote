@@ -325,30 +325,51 @@ internal object MoteCloudSyncManager {
                 "bookmarks_v2", "history", "search_history", "home_quick_urls", "saved_passwords_v1",
                 "app_icon_id", "about_last_check_time", "web_saved_zooms_v2", "mote_download_tasks_v1",
                 "cloudbase_access_token", "cloudbase_refresh_token", "cloudbase_user_id",
-                "sync_e2ee_enabled", "sync_fallback_pass", "sync_e2ee_derived_key"
+                "sync_e2ee_enabled", "sync_fallback_pass", "sync_e2ee_derived_key",
+                "sync_snapshot_v1"
             )
+            val types = JSONObject()
             for ((k, v) in prefs.all) {
-                if (k !in exclude && !k.startsWith("sync_cat_")) settings.put(k, v)
+                if (k !in exclude && !k.startsWith("sync_cat_")) {
+                    settings.put(k, v)
+                    types.put(k, when (v) {
+                        is Long -> "long"
+                        is Int -> "int"
+                        is Boolean -> "boolean"
+                        is Float -> "float"
+                        is String -> "string"
+                        else -> "string"
+                    })
+                }
             }
             root.put("settings", settings)
+            root.put("settings_types", types)
         }
         return root
     }
 
-    fun applyRemoteData(prefs: SharedPreferences, data: JSONObject) {
+    fun applyRemoteData(
+        prefs: SharedPreferences,
+        data: JSONObject,
+        markHistoryRemote: Boolean = true,
+    ) {
         val editor = prefs.edit()
         if (prefs.getBoolean("sync_cat_$CAT_BOOKMARKS", true) && data.has("bookmarks_v2")) editor.putString("bookmarks_v2", data.getString("bookmarks_v2"))
         if (prefs.getBoolean("sync_cat_$CAT_BROWSE_HISTORY", false) && data.has("history")) {
             val rawHistory = data.optString("history", "[]")
-            try {
-                val arr = org.json.JSONArray(rawHistory)
-                for (i in 0 until arr.length()) {
-                    val obj = arr.optJSONObject(i)
-                    obj?.put("isRemote", true)
-                }
-                editor.putString("history", arr.toString())
-            } catch (_: Exception) {
+            if (!markHistoryRemote) {
                 editor.putString("history", rawHistory)
+            } else {
+                try {
+                    val arr = org.json.JSONArray(rawHistory)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i)
+                        obj?.put("isRemote", true)
+                    }
+                    editor.putString("history", arr.toString())
+                } catch (_: Exception) {
+                    editor.putString("history", rawHistory)
+                }
             }
         }
         if (prefs.getBoolean("sync_cat_$CAT_SEARCH_HISTORY", false) && data.has("search_history")) editor.putString("search_history", data.getString("search_history"))
@@ -357,13 +378,51 @@ internal object MoteCloudSyncManager {
 
         if (prefs.getBoolean("sync_cat_$CAT_SETTINGS", true) && data.has("settings")) {
             val settings = data.getJSONObject("settings")
+            val types = data.optJSONObject("settings_types")
             settings.keys().forEach { k ->
-                when (val v = settings.get(k)) {
-                    is Boolean -> editor.putBoolean(k, v)
-                    is Int -> editor.putInt(k, v)
-                    is Long -> editor.putLong(k, v)
-                    is Float -> editor.putFloat(k, v)
-                    is String -> editor.putString(k, v)
+                val v = settings.opt(k)
+                val declared = types?.optString(k, "") ?: ""
+                if (declared.isNotEmpty()) {
+                    when (declared) {
+                        "long" -> editor.putLong(k, (v as? Number)?.toLong() ?: v?.toString()?.toLongOrNull() ?: 0L)
+                        "int" -> editor.putInt(k, (v as? Number)?.toInt() ?: v?.toString()?.toIntOrNull() ?: 0)
+                        "boolean" -> editor.putBoolean(k, v as? Boolean ?: (v?.toString() == "true"))
+                        "float" -> editor.putFloat(k, (v as? Number)?.toFloat() ?: v?.toString()?.toFloatOrNull() ?: 0f)
+                        else -> editor.putString(k, v?.toString() ?: "")
+                    }
+                    return@forEach
+                }
+                // 按本地已有类型写回，避免 long 键被写成 int 导致读取时 ClassCastException
+                when (val existing = prefs.all[k]) {
+                    is Boolean -> editor.putBoolean(k, when (v) {
+                        is Boolean -> v
+                        is String -> v == "true"
+                        else -> existing
+                    })
+                    is Long -> editor.putLong(k, when (v) {
+                        is Number -> v.toLong()
+                        is String -> v.toLongOrNull() ?: existing
+                        else -> existing
+                    })
+                    is Int -> editor.putInt(k, when (v) {
+                        is Number -> v.toInt()
+                        is String -> v.toIntOrNull() ?: existing
+                        else -> existing
+                    })
+                    is Float -> editor.putFloat(k, when (v) {
+                        is Number -> v.toFloat()
+                        is String -> v.toFloatOrNull() ?: existing
+                        else -> existing
+                    })
+                    is String -> editor.putString(k, v?.toString() ?: existing)
+                    null -> when (v) {
+                        is Boolean -> editor.putBoolean(k, v)
+                        is Int -> editor.putInt(k, v)
+                        is Long -> editor.putLong(k, v)
+                        is Double -> editor.putLong(k, v.toLong())
+                        is Float -> editor.putFloat(k, v)
+                        is String -> editor.putString(k, v)
+                    }
                 }
             }
         }
