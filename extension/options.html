@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Mote 书签同步 · 设置</title>
+<title data-i18n="optionsTitle">Mote Bookmark Sync · Settings</title>
 <style>
   :root{
     --text:#4b5563; --muted:#98a0ac; --line:#e6eaf1; --blue:#2f7bf6;
@@ -65,45 +65,45 @@
 </head>
 <body>
 <div class="container">
-  <h1>Mote 书签同步</h1>
-  <p class="lead">书签会同步到浏览器的「书签栏 → Mote」文件夹里，其它书签不受影响。</p>
+  <h1 data-i18n="heading">Mote Bookmark Sync</h1>
+  <p class="lead" data-i18n="lead">Bookmarks live in your browser's “Bookmarks bar → Mote” folder.</p>
 
   <div class="card">
-    <h2>同步方式</h2>
+    <h2 data-i18n="secMethod">Sync method</h2>
     <div class="radio">
-      <label><input type="radio" name="provider" value="cloud" checked><span>默认云同步</span></label>
-      <label><input type="radio" name="provider" value="webdav"><span>WebDAV</span></label>
+      <label><input type="radio" name="provider" value="cloud" checked><span data-i18n="optCloud">Default cloud</span></label>
+      <label><input type="radio" name="provider" value="webdav"><span data-i18n="optWebdav">WebDAV</span></label>
     </div>
 
     <div id="cloudBox">
       <div class="row">
         <div class="field">
-          <label>用户名</label>
+          <label data-i18n="labelUser">Username</label>
           <input type="text" id="username" spellcheck="false" autocomplete="username">
         </div>
         <div class="field">
-          <label>密码</label>
+          <label data-i18n="labelPass">Password</label>
           <input type="password" id="password" autocomplete="current-password">
         </div>
       </div>
       <div class="actions">
-        <button class="primary" id="loginBtn">登录并保存</button>
+        <button class="primary" id="loginBtn" data-i18n="btnLogin">Sign in and save</button>
       </div>
-      <p class="hint">密码只保存在本机扩展存储里，用于自动续期和「高级数据保护」的端到端解密。</p>
+      <p class="hint" data-i18n="hintLogin">The password is kept in local extension storage only.</p>
     </div>
 
     <div id="webdavBox" class="hidden">
       <div class="field">
-        <label>WebDAV 地址</label>
+        <label data-i18n="labelDavUrl">WebDAV URL</label>
         <input type="text" id="webdavUrl" spellcheck="false" placeholder="https://dav.example.com/remote.php/dav/files/user/mote_sync.bin">
       </div>
       <div class="row">
         <div class="field">
-          <label>用户名</label>
+          <label data-i18n="labelUser">Username</label>
           <input type="text" id="webdavUser" spellcheck="false">
         </div>
         <div class="field">
-          <label>密码</label>
+          <label data-i18n="labelPass">Password</label>
           <input type="password" id="webdavPass">
         </div>
       </div>
@@ -113,31 +113,30 @@
   </div>
 
   <div class="card">
-    <h2>自动同步</h2>
-    <label class="check"><input type="checkbox" id="autoSync"> 自动同步（书签改动后自动推送，并按间隔检查云端）</label>
+    <h2 data-i18n="secAuto">Automatic sync</h2>
+    <label class="check"><input type="checkbox" id="autoSync"><span data-i18n="autoLabel">Sync automatically</span></label>
     <div class="row" style="margin-top:12px">
       <div class="field">
-        <label>检查间隔（分钟）</label>
+        <label data-i18n="labelInterval">Interval (minutes)</label>
         <input type="number" id="intervalMinutes" min="1" max="120" step="1">
       </div>
     </div>
     <div class="actions">
-      <button class="primary" id="syncBtn">立即同步</button>
-      <button id="saveBtn">保存设置</button>
+      <button class="primary" id="syncBtn" data-i18n="btnSyncNow">Sync now</button>
+      <button id="saveBtn" data-i18n="btnSave">Save</button>
     </div>
     <div class="status" id="status"></div>
   </div>
 
   <div class="card">
-    <h2>说明</h2>
-    <p class="hint">
-      · 支持普通加密与「高级数据保护」两种模式，会自动识别。<br>
-      · 删除会同步：一端删除的书签，另一端同步后也会删除。<br>
-      · 同步范围仅限「Mote」文件夹，浏览器里其它书签不会被改动。<br>
-      · 若开启高级数据保护，请使用与手机相同的账号密码。
-    </p>
+    <h2 data-i18n="secNotes">Notes</h2>
+    <p class="hint" data-i18n="note1">Supports standard and end-to-end encryption.</p>
+    <p class="hint" data-i18n="note2">Deletions sync too.</p>
+    <p class="hint" data-i18n="note3">Only the “Mote” folder is synced.</p>
+    <p class="hint" data-i18n="note4">Use the same credentials as in Mote when Advanced Data Protection is on.</p>
   </div>
 </div>
+<script src="i18n.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

@@ -1,0 +1,237 @@
+{
+  "extName": {
+    "message": "Mote 书签同步"
+  },
+  "extDesc": {
+    "message": "在 Mote 与 Edge / Chrome 之间双向同步书签。"
+  },
+  "actionTitle": {
+    "message": "Mote 书签同步"
+  },
+  "optionsTitle": {
+    "message": "Mote 书签同步 · 设置"
+  },
+  "heading": {
+    "message": "Mote 书签同步"
+  },
+  "lead": {
+    "message": "书签会同步到浏览器的「书签栏 → Mote」文件夹里，其它书签不受影响。"
+  },
+  "secMethod": {
+    "message": "同步方式"
+  },
+  "optCloud": {
+    "message": "默认云同步"
+  },
+  "optWebdav": {
+    "message": "WebDAV"
+  },
+  "labelUser": {
+    "message": "用户名"
+  },
+  "labelPass": {
+    "message": "密码"
+  },
+  "labelDavUrl": {
+    "message": "WebDAV 地址"
+  },
+  "btnLogin": {
+    "message": "登录并保存"
+  },
+  "hintLogin": {
+    "message": "密码只保存在本机扩展存储里，用于自动续期和「高级数据保护」的端到端解密。"
+  },
+  "secAuto": {
+    "message": "自动同步"
+  },
+  "autoLabel": {
+    "message": "自动同步（书签改动后自动推送，并按间隔检查云端）"
+  },
+  "labelInterval": {
+    "message": "检查间隔（分钟）"
+  },
+  "btnSyncNow": {
+    "message": "立即同步"
+  },
+  "btnSave": {
+    "message": "保存设置"
+  },
+  "secNotes": {
+    "message": "说明"
+  },
+  "note1": {
+    "message": "支持普通加密与「高级数据保护」（端到端加密）两种模式，会自动识别。"
+  },
+  "note2": {
+    "message": "删除会同步：一端删除的书签，另一端同步后也会删除。"
+  },
+  "note3": {
+    "message": "同步范围仅限「Mote」文件夹，浏览器里其它书签不会被改动。"
+  },
+  "note4": {
+    "message": "若开启高级数据保护，请使用与 Mote 相同的账号密码。"
+  },
+  "statusNever": {
+    "message": "从未同步"
+  },
+  "statusLoggedIn": {
+    "message": "已登录：@$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusNotLogged": {
+    "message": "未登录"
+  },
+  "statusKeyReady": {
+    "message": "端到端密钥已就绪"
+  },
+  "statusKeyBasic": {
+    "message": "仅普通加密"
+  },
+  "statusLastSync": {
+    "message": "上次同步：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusLastError": {
+    "message": "最近错误：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msgSaved": {
+    "message": "已保存"
+  },
+  "msgSaveFailed": {
+    "message": "保存失败：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msgNeedCreds": {
+    "message": "请填写用户名和密码"
+  },
+  "msgLoggingIn": {
+    "message": "登录中…"
+  },
+  "msgLoginOk": {
+    "message": "登录成功"
+  },
+  "msgLoginFail": {
+    "message": "登录失败：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msgSyncing": {
+    "message": "同步中…"
+  },
+  "msgSyncFail": {
+    "message": "同步失败"
+  },
+  "msgLoading": {
+    "message": "加载中…"
+  },
+  "pBtnSync": {
+    "message": "立即同步"
+  },
+  "pBtnSettings": {
+    "message": "打开设置"
+  },
+  "pStatusSyncing": {
+    "message": "同步中…"
+  },
+  "pStatusError": {
+    "message": "同步失败"
+  },
+  "pStatusOk": {
+    "message": "同步正常"
+  },
+  "pStatusIdle": {
+    "message": "尚未同步"
+  },
+  "pProviderCloud": {
+    "message": "Mote 账号"
+  },
+  "pProviderDav": {
+    "message": "WebDAV"
+  },
+  "pLastSync": {
+    "message": "上次同步：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pAutoOn": {
+    "message": "自动同步：每 $1$ 分钟",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pAutoOff": {
+    "message": "自动同步：关闭"
+  },
+  "pError": {
+    "message": "错误：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgNotLogged": {
+    "message": "还没有登录 Mote 账号"
+  },
+  "bgNoKey": {
+    "message": "缺少加密密钥：请在设置里重新登录"
+  },
+  "bgDecryptFail": {
+    "message": "无法解密云端数据：请检查是否开启了高级数据保护，或在设置里重新登录"
+  },
+  "bgNeedDav": {
+    "message": "请先在设置里填写 WebDAV 地址"
+  },
+  "bgDavRead": {
+    "message": "WebDAV 读取失败：HTTP $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgDavWrite": {
+    "message": "WebDAV 写入失败：HTTP $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgBadResp": {
+    "message": "接口返回异常：$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgReqFail": {
+    "message": "请求失败"
+  }
+}

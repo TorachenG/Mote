@@ -1,0 +1,237 @@
+{
+  "extName": {
+    "message": "Mote Bookmark Sync"
+  },
+  "extDesc": {
+    "message": "Two-way bookmark sync between Mote and Edge / Chrome."
+  },
+  "actionTitle": {
+    "message": "Mote Bookmark Sync"
+  },
+  "optionsTitle": {
+    "message": "Mote Bookmark Sync · Settings"
+  },
+  "heading": {
+    "message": "Mote Bookmark Sync"
+  },
+  "lead": {
+    "message": "Bookmarks live in your browser's “Bookmarks bar → Mote” folder. Other bookmarks are not touched."
+  },
+  "secMethod": {
+    "message": "Sync method"
+  },
+  "optCloud": {
+    "message": "Default cloud"
+  },
+  "optWebdav": {
+    "message": "WebDAV"
+  },
+  "labelUser": {
+    "message": "Username"
+  },
+  "labelPass": {
+    "message": "Password"
+  },
+  "labelDavUrl": {
+    "message": "WebDAV URL"
+  },
+  "btnLogin": {
+    "message": "Sign in and save"
+  },
+  "hintLogin": {
+    "message": "The password is kept in local extension storage only, used for token refresh and for decrypting Advanced Data Protection data."
+  },
+  "secAuto": {
+    "message": "Automatic sync"
+  },
+  "autoLabel": {
+    "message": "Sync automatically (push bookmark changes and check the cloud on an interval)"
+  },
+  "labelInterval": {
+    "message": "Interval (minutes)"
+  },
+  "btnSyncNow": {
+    "message": "Sync now"
+  },
+  "btnSave": {
+    "message": "Save"
+  },
+  "secNotes": {
+    "message": "Notes"
+  },
+  "note1": {
+    "message": "Supports both standard encryption and Advanced Data Protection (end-to-end); the mode is detected automatically."
+  },
+  "note2": {
+    "message": "Deletions sync too: an item removed on one side is removed on the other."
+  },
+  "note3": {
+    "message": "Only the “Mote” folder is synced; other bookmarks are never modified."
+  },
+  "note4": {
+    "message": "If Advanced Data Protection is enabled, sign in with the same username and password you use in Mote."
+  },
+  "statusNever": {
+    "message": "never synced"
+  },
+  "statusLoggedIn": {
+    "message": "Signed in: @$1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusNotLogged": {
+    "message": "Not signed in"
+  },
+  "statusKeyReady": {
+    "message": "end-to-end key ready"
+  },
+  "statusKeyBasic": {
+    "message": "standard encryption only"
+  },
+  "statusLastSync": {
+    "message": "Last sync: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "statusLastError": {
+    "message": "Last error: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msgSaved": {
+    "message": "Saved"
+  },
+  "msgSaveFailed": {
+    "message": "Save failed: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msgNeedCreds": {
+    "message": "Enter your username and password"
+  },
+  "msgLoggingIn": {
+    "message": "Signing in…"
+  },
+  "msgLoginOk": {
+    "message": "Signed in"
+  },
+  "msgLoginFail": {
+    "message": "Sign-in failed: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "msgSyncing": {
+    "message": "Syncing…"
+  },
+  "msgSyncFail": {
+    "message": "Sync failed"
+  },
+  "msgLoading": {
+    "message": "Loading…"
+  },
+  "pBtnSync": {
+    "message": "Sync now"
+  },
+  "pBtnSettings": {
+    "message": "Open settings"
+  },
+  "pStatusSyncing": {
+    "message": "Syncing…"
+  },
+  "pStatusError": {
+    "message": "Sync failed"
+  },
+  "pStatusOk": {
+    "message": "Up to date"
+  },
+  "pStatusIdle": {
+    "message": "Not synced yet"
+  },
+  "pProviderCloud": {
+    "message": "Mote account"
+  },
+  "pProviderDav": {
+    "message": "WebDAV"
+  },
+  "pLastSync": {
+    "message": "Last sync: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pAutoOn": {
+    "message": "Auto sync: every $1$ min",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "pAutoOff": {
+    "message": "Auto sync: off"
+  },
+  "pError": {
+    "message": "Error: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgNotLogged": {
+    "message": "Not signed in to a Mote account"
+  },
+  "bgNoKey": {
+    "message": "Missing encryption key: sign in again in settings"
+  },
+  "bgDecryptFail": {
+    "message": "Could not decrypt cloud data: check whether Advanced Data Protection is enabled, or sign in again in settings"
+  },
+  "bgNeedDav": {
+    "message": "Fill in the WebDAV URL in settings first"
+  },
+  "bgDavRead": {
+    "message": "WebDAV read failed: HTTP $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgDavWrite": {
+    "message": "WebDAV write failed: HTTP $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgBadResp": {
+    "message": "Unexpected response: $1$",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "bgReqFail": {
+    "message": "Request failed"
+  }
+}

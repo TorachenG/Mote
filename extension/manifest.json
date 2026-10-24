@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Mote 书签同步",
+  "default_locale": "en",
+  "name": "__MSG_extName__",
   "version": "1.0.0",
-  "description": "在 Edge / Chrome 与 Mote 之间双向同步书签（支持普通加密与高级数据保护）。",
+  "description": "__MSG_extDesc__",
   "permissions": ["bookmarks", "storage", "alarms"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "background": { "service_worker": "background.js" },
   "action": {
-    "default_title": "Mote 书签同步",
+    "default_title": "__MSG_actionTitle__",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

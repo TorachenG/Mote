@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const t = (k, subs) => (window.t ? window.t(k, subs) : k);
 
 function send(msg) {
   return new Promise((resolve) => {
@@ -7,7 +8,7 @@ function send(msg) {
 }
 
 function fmtTime(ms) {
-  if (!ms) return "从未同步";
+  if (!ms) return t("statusNever");
   const d = new Date(ms);
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -21,28 +22,28 @@ async function refresh() {
   dot.className = "dot";
   if (s.lastStatus === "syncing") {
     dot.classList.add("syncing");
-    text.textContent = "同步中…";
+    text.textContent = t("pStatusSyncing");
   } else if (s.lastStatus === "error") {
     dot.classList.add("err");
-    text.textContent = "同步失败";
+    text.textContent = t("pStatusError");
   } else if (s.lastStatus === "ok") {
     dot.classList.add("ok");
-    text.textContent = "同步正常";
+    text.textContent = t("pStatusOk");
   } else {
-    text.textContent = "尚未同步";
+    text.textContent = t("pStatusIdle");
   }
 
   const lines = [];
-  lines.push(s.provider === "webdav" ? "WebDAV" : "Mote 账号" + (s.username ? " · @" + s.username : ""));
-  lines.push("上次同步：" + fmtTime(s.lastSyncAt));
-  lines.push(s.autoSync ? "自动同步：每 " + (s.intervalMinutes || 5) + " 分钟" : "自动同步：关闭");
-  if (s.lastStatus === "error" && s.lastError) lines.push("错误：" + s.lastError);
+  lines.push(s.provider === "webdav" ? t("pProviderDav") : t("pProviderCloud") + (s.username ? " · @" + s.username : ""));
+  lines.push(t("pLastSync", [fmtTime(s.lastSyncAt)]));
+  lines.push(s.autoSync ? t("pAutoOn", [String(s.intervalMinutes || 5)]) : t("pAutoOff"));
+  if (s.lastStatus === "error" && s.lastError) lines.push(t("pError", [s.lastError]));
   $("meta").textContent = lines.join("\n");
 }
 
 $("sync").addEventListener("click", async () => {
   $("sync").disabled = true;
-  $("stateText").textContent = "同步中…";
+  $("stateText").textContent = t("pStatusSyncing");
   $("dot").className = "dot syncing";
   await send({ type: "sync-now" });
   await refresh();

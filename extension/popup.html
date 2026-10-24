@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Mote 书签同步</title>
+<title data-i18n="extName">Mote Bookmark Sync</title>
 <style>
   :root{--text:#4b5563;--muted:#98a0ac;--blue:#2f7bf6;--ok:#1f9d55;--danger:#e5484d;color-scheme:light}
   *{box-sizing:border-box}
@@ -31,11 +31,12 @@
 </style>
 </head>
 <body>
-  <p class="title">Mote 书签同步</p>
-  <div class="state"><span class="dot" id="dot"></span><span id="stateText">未同步</span></div>
+  <p class="title" data-i18n="extName">Mote Bookmark Sync</p>
+  <div class="state"><span class="dot" id="dot"></span><span id="stateText" data-i18n="pStatusIdle">Not synced yet</span></div>
   <div class="meta" id="meta">—</div>
-  <button class="primary" id="sync">立即同步</button>
-  <button id="options">打开设置</button>
+  <button class="primary" id="sync" data-i18n="pBtnSync">Sync now</button>
+  <button id="options" data-i18n="pBtnSettings">Open settings</button>
+  <script src="i18n.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -1,6 +1,8 @@
 // Mote 书签同步 · 后台服务
 // 与 Mote App 使用同一套协议：云函数 auth + AES-256-GCM 整包加密
 
+const t = (k, subs) => { try { return chrome.i18n.getMessage(k, subs) || k; } catch (e) { return k; } };
+
 const CLOUD_DEFAULT_URL =
   "https://mote-sync-d9geb238o1c1ea40e-1515028654.ap-shanghai.app.tcloudbase.com/moteauth";
 
@@ -142,7 +144,7 @@ async function encryptAny(plainText) {
   const s = await getSettings();
   const keys = await buildKeys(s);
   const preferred = keys.find((k) => k.kind === "e2ee") || keys.find((k) => k.kind === "normal");
-  if (!preferred) throw new Error("缺少加密密钥：请先在设置里登录账号并输入密码");
+  if (!preferred) throw new Error(t("bgNoKey"));
   return encryptWith(preferred.key, plainText);
 }
 
@@ -161,9 +163,9 @@ async function apiCall(body) {
   try {
     json = JSON.parse(text);
   } catch (e) {
-    throw new Error("接口返回异常：" + text.slice(0, 120));
+    throw new Error(t("bgBadResp", [text.slice(0, 120)]));
   }
-  if (json.code !== 0) throw new Error(json.message || "请求失败");
+  if (json.code !== 0) throw new Error(json.message || t("bgReqFail"));
   return json.data || {};
 }
 
@@ -226,13 +228,13 @@ async function callWithAuth(body) {
 async function readRemote() {
   const s = await getSettings();
   if (s.provider === "webdav") {
-    if (!s.webdavUrl) throw new Error("请先在设置里填写 WebDAV 地址");
+    if (!s.webdavUrl) throw new Error(t("bgNeedDav"));
     const resp = await fetch(s.webdavUrl, {
       method: "GET",
       headers: { Authorization: "Basic " + btoa(`${s.webdavUser}:${s.webdavPass}`) }
     });
     if (resp.status === 404) return { content: "", updatedAt: 0 };
-    if (!resp.ok) throw new Error("WebDAV 读取失败：HTTP " + resp.status);
+    if (!resp.ok) throw new Error(t("bgDavRead", [String(resp.status)]));
     return { content: (await resp.text()).trim(), updatedAt: 0 };
   }
   const data = await callWithAuth({ action: "pull" });
@@ -250,7 +252,7 @@ async function writeRemote(cipher) {
       },
       body: cipher
     });
-    if (!resp.ok) throw new Error("WebDAV 写入失败：HTTP " + resp.status);
+    if (!resp.ok) throw new Error(t("bgDavWrite", [String(resp.status)]));
     return;
   }
   await callWithAuth({ action: "push", content: cipher });
@@ -475,7 +477,7 @@ async function sync(reason) {
   try {
     const s = await getSettings();
     if (s.provider === "cloud" && (!s.accessToken || !s.uid)) {
-      throw new Error("还没有登录 Mote 账号");
+      throw new Error(t("bgNotLogged"));
     }
 
     const remote = await readRemote();
@@ -487,7 +489,7 @@ async function sync(reason) {
     if (remote.content) {
       const decoded = await decryptAny(remote.content);
       if (!decoded) {
-        throw new Error("无法解密云端数据：请检查是否开启了高级数据保护，或在设置里重新登录以获取密钥");
+        throw new Error(t("bgDecryptFail"));
       }
       remoteData = JSON.parse(decoded.plain);
       try {

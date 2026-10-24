@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const t = (k, subs) => (window.t ? window.t(k, subs) : k);
 
 function send(msg) {
   return new Promise((resolve) => {
@@ -7,7 +8,7 @@ function send(msg) {
 }
 
 function fmtTime(ms) {
-  if (!ms) return "从未同步";
+  if (!ms) return t("statusNever");
   const d = new Date(ms);
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -31,14 +32,15 @@ function updateProviderUI() {
 
 function renderStatus(s) {
   const parts = [];
-  parts.push(s.uid ? "已登录：@" + (s.username || "未知") : "未登录");
-  parts.push(s.hasKey ? "端到端密钥已就绪" : "仅普通加密");
-  parts.push("上次同步：" + fmtTime(s.lastSyncAt));
-  if (s.lastStatus === "error" && s.lastError) parts.push("最近错误：" + s.lastError);
+  parts.push(s.uid ? t("statusLoggedIn", [s.username || "-"]) : t("statusNotLogged"));
+  parts.push(s.hasKey ? t("statusKeyReady") : t("statusKeyBasic"));
+  parts.push(t("statusLastSync", [fmtTime(s.lastSyncAt)]));
+  if (s.lastStatus === "error" && s.lastError) parts.push(t("statusLastError", [s.lastError]));
   setStatus($("status"), parts.join(" · "), s.lastStatus === "error" ? "err" : "");
 }
 
 async function load() {
+  document.title = t("optionsTitle");
   const s = await send({ type: "get-settings" });
   $("username").value = s.username || "";
   $("webdavUrl").value = s.webdavUrl || "";
@@ -71,10 +73,10 @@ async function saveSettings() {
   };
   const r = await send({ type: "save-settings", patch });
   if (r.ok) {
-    setStatus($("saveStatus"), "已保存", "ok");
+    setStatus($("saveStatus"), t("msgSaved"), "ok");
     setTimeout(() => setStatus($("saveStatus"), ""), 1800);
   } else {
-    setStatus($("saveStatus"), "保存失败：" + (r.error || ""), "err");
+    setStatus($("saveStatus"), t("msgSaveFailed", [r.error || ""]), "err");
   }
 }
 
@@ -82,19 +84,19 @@ $("loginBtn").addEventListener("click", async () => {
   const username = $("username").value.trim();
   const password = $("password").value;
   if (!username || !password) {
-    setStatus($("saveStatus"), "请填写用户名和密码", "err");
+    setStatus($("saveStatus"), t("msgNeedCreds"), "err");
     return;
   }
   $("loginBtn").disabled = true;
-  setStatus($("saveStatus"), "登录中…");
+  setStatus($("saveStatus"), t("msgLoggingIn"));
   try {
     const r = await send({ type: "login", username, password });
     if (r.ok) {
-      setStatus($("saveStatus"), "登录成功", "ok");
+      setStatus($("saveStatus"), t("msgLoginOk"), "ok");
       $("password").value = "";
       await load();
     } else {
-      setStatus($("saveStatus"), "登录失败：" + (r.error || ""), "err");
+      setStatus($("saveStatus"), t("msgLoginFail", [r.error || ""]), "err");
     }
   } finally {
     $("loginBtn").disabled = false;
@@ -105,12 +107,12 @@ $("saveBtn").addEventListener("click", saveSettings);
 
 $("syncBtn").addEventListener("click", async () => {
   $("syncBtn").disabled = true;
-  setStatus($("status"), "同步中…");
+  setStatus($("status"), t("msgSyncing"));
   await saveSettings();
   const r = await send({ type: "sync-now" });
   await load();
   $("syncBtn").disabled = false;
-  if (!r.ok) setStatus($("status"), "同步失败", "err");
+  if (!r.ok) setStatus($("status"), t("msgSyncFail"), "err");
 });
 
 document.querySelectorAll('input[name="provider"]').forEach((input) => {
