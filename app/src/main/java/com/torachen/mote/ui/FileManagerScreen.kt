@@ -458,12 +458,13 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
         else if (!controller.selecting) barPending = null
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(surface)) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(surface)
+            .then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = controller.currentDir,
                 modifier = Modifier.fillMaxSize(),
@@ -507,10 +508,10 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
 
 
         // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
-        // 标题栏范围内保持满强度模糊，只在最下方一小段做渐变淡出
-        val fadeBand = 28.dp
-        val blurTotalHeight = topPadding + fadeBand
-        val headerFraction = (topPadding / blurTotalHeight).coerceIn(0f, 0.95f)
+        // 整段标题栏满强度模糊，渐变带收在标题栏底部之内，避免糊到第一条选项
+        val fadeBand = 24.dp
+        val blurTotalHeight = topPadding
+        val headerFraction = ((topPadding - fadeBand) / topPadding).coerceIn(0f, 0.95f)
         if (blurSupported && backdrop != null && materialStyle != 0) {
             Box(
                 modifier = Modifier
