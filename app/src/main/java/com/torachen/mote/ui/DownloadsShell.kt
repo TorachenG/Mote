@@ -8,11 +8,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,6 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import top.yukonga.miuix.kmp.basic.NavigationBar
+import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBar
 import top.yukonga.miuix.kmp.basic.FloatingNavigationBarItem
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
@@ -136,28 +143,52 @@ private fun DownloadsShellMiuix(
             visible = navBarVisible,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 12.dp,
+                ),
         ) {
-            FloatingNavigationBar(
-                modifier = if (backdrop != null) {
-                    Modifier.textureBlur(
-                        backdrop = backdrop,
-                        shape = shape,
-                        blurRadius = 25f,
-                        colors = BlurDefaults.blurColors(
-                            blendColors = listOf(
-                                BlendColorEntry(color = MiuixTheme.colorScheme.surfaceContainer.copy(0.6f)),
-                            ),
-                        ),
-                    )
-                } else {
-                    Modifier
-                },
-                color = MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.6f),
-                cornerRadius = 28.dp,
+            Box(
+                modifier = Modifier
+                    .width(300.dp)
+                    .clip(shape)
+                    .then(
+                        if (backdrop != null) {
+                            Modifier.textureBlur(
+                                backdrop = backdrop,
+                                shape = shape,
+                                blurRadius = 25f,
+                                colors = BlurDefaults.blurColors(
+                                    blendColors = listOf(
+                                        BlendColorEntry(color = MiuixTheme.colorScheme.surfaceContainer.copy(0.35f)),
+                                    ),
+                                ),
+                            )
+                        } else {
+                            Modifier.background(MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.9f))
+                        }
+                    ),
             ) {
-                NavItem(selected = tab == 0, icon = MiuixIcons.Download, label = "下载") { onTabChange(0) }
-                NavItem(selected = tab == 1, icon = MiuixIcons.Folder, label = "文件") { onTabChange(1) }
+                NavigationBar(
+                    color = Color.Transparent,
+                    showDivider = false,
+                    defaultWindowInsetsPadding = false,
+                    mode = NavigationBarDisplayMode.IconAndText,
+                ) {
+                    NavigationBarItem(
+                        selected = tab == 0,
+                        onClick = { onTabChange(0) },
+                        icon = MiuixIcons.Download,
+                        label = "下载",
+                    )
+                    NavigationBarItem(
+                        selected = tab == 1,
+                        onClick = { onTabChange(1) },
+                        icon = MiuixIcons.Folder,
+                        label = "文件",
+                    )
+                }
             }
         }
     }
@@ -214,36 +245,5 @@ private fun DownloadsShellMaterial(
                 )
             }
         }
-    }
-}
-
-/** 图标在上、文字在下的导航项，容器仍使用原生 FloatingNavigationBar */
-@Composable
-private fun NavItem(
-    selected: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-) {
-    val tint = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurfaceVariantSummary
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 22.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        top.yukonga.miuix.kmp.basic.Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = tint,
-            modifier = Modifier.size(22.dp),
-        )
-        Spacer(Modifier.height(2.dp))
-        top.yukonga.miuix.kmp.basic.Text(
-            label,
-            fontSize = 11.sp,
-            color = tint,
-        )
     }
 }
