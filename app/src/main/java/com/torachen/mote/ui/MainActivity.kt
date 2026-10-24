@@ -4086,7 +4086,7 @@ fun BrowserScreen(
     }
 
     var dynamicToolIndex by remember {
-        mutableIntStateOf(prefs.getInt("web_dynamic_tool", 1).coerceIn(0, 7))
+        mutableIntStateOf(prefs.getInt("web_dynamic_tool", 1).coerceIn(0, 9))
     }
     var dynamicToolSuggestEnabled by remember {
         mutableStateOf(prefs.getBoolean("web_dynamic_tool_suggest", true))
@@ -4382,7 +4382,7 @@ fun BrowserScreen(
                     swipeNavEnabled = prefs.getBoolean(key, true)
                 }
                 "web_dynamic_tool" -> {
-                    dynamicToolIndex = prefs.getInt(key, 1).coerceIn(0, 7)
+                    dynamicToolIndex = prefs.getInt(key, 1).coerceIn(0, 9)
                 }
                 "web_dynamic_tool_suggest" -> {
                     dynamicToolSuggestEnabled = prefs.getBoolean(key, true)
@@ -7175,6 +7175,11 @@ fun BrowserScreen(
             val canGoForward = canNavigateForward()
             val dynamicTool = effectiveDynamicTool?.let { tid ->
                 defaultTools().find { it.id == tid }
+                    ?: if (tid == "add_bookmark") {
+                        ToolDef("add_bookmark", "添加书签", MiuixIcons.Favorites)
+                    } else {
+                        null
+                    }
             }
 
             val disabledInNewTab = setOf("translate", "zoom", "find_in_page", "tts", "sniff", "save_page", "print", "share", "play_in_player")
