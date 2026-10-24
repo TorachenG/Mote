@@ -8,6 +8,7 @@
 <link rel="icon" href="assets/mote_logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <style>
+  .stats-bar{display:flex;gap:18px;flex-wrap:wrap;align-items:center;justify-content:space-between}
   .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:flex-end}
   .toolbar .spacer{flex:1}
   .stats{display:flex;gap:38px;flex-wrap:wrap}
@@ -94,18 +95,17 @@
     <!-- 管理面板 -->
     <section id="dashView" class="hidden">
       <div class="card">
-        <div class="toolbar">
-          <button id="refresh">刷新状态</button>
-          <button id="logout">退出登录</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="stats">
-          <div class="stat"><b id="statTotal">-</b><span>账号总数</span></div>
-          <div class="stat"><b id="statSynced">-</b><span>有云端数据</span></div>
-          <div class="stat"><b id="statSize">-</b><span>数据总量</span></div>
-          <div class="stat"><b id="statDisabled">-</b><span>已停用</span></div>
+        <div class="stats-bar">
+          <div class="stats">
+            <div class="stat"><b id="statTotal">-</b><span>账号总数</span></div>
+            <div class="stat"><b id="statSynced">-</b><span>有云端数据</span></div>
+            <div class="stat"><b id="statSize">-</b><span>数据总量</span></div>
+            <div class="stat"><b id="statDisabled">-</b><span>已停用</span></div>
+          </div>
+          <div class="toolbar">
+            <button id="refresh">刷新状态</button>
+            <button id="logout">退出登录</button>
+          </div>
         </div>
       </div>
 
