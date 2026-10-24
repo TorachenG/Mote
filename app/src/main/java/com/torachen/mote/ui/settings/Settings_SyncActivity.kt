@@ -539,6 +539,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
     var catSettings by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", true)) }
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
     var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
+    var showE2eeDialog by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
     var conflictData by remember { mutableStateOf<Pair<MoteCloudSyncManager.SyncData, MoteCloudSyncManager.SyncData>?>(null) }
 
@@ -815,7 +816,14 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                     title = "高级数据保护",
                                     summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
                                     checked = e2eeEnabled,
-                                    onCheckedChange = { e2eeEnabled = it }
+                                    onCheckedChange = { checked ->
+                                        if (checked) {
+                                            showE2eeDialog = true
+                                        } else {
+                                            e2eeEnabled = false
+                                            prefs.edit().putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false).apply()
+                                        }
+                                    }
                                 )
                             }
 
@@ -989,6 +997,41 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
         }
     }
 
+    if (showE2eeDialog) {
+        WindowDialog(
+            show = true,
+            title = "开启高级数据保护",
+            onDismissRequest = { showE2eeDialog = false }
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(text = "开启后，同步数据只有用你的账号密码才能解开，云端（包括我们在内）都看不到内容。\n\n但有三点要注意：\n\n一、忘记密码就真的找不回来了，重置密码也没用，云端的数据会变成一堆解不开的乱码。\n\n二、以后如果改了密码，之前同步上去的数据会解不开，需要重新同步一次。\n\n三、密码越简单越容易被暴力破解，请用足够复杂的密码。", color = MiuixTheme.colorScheme.onSurface)
+                Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { showE2eeDialog = false },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.secondaryContainer,
+                            contentColor = MiuixTheme.colorScheme.onSurface
+                        ),
+                    ) { Text("取消") }
+                    Button(
+                        onClick = {
+                            e2eeEnabled = true
+                            prefs.edit().putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, true).apply()
+                            showE2eeDialog = false
+                            Toast.makeText(context, "已开启高级数据保护", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.primary,
+                            contentColor = Color.White
+                        ),
+                    ) { Text("开启") }
+                }
+            }
+        }
+    }
+
     // 错误详情弹窗
     if (errorDialogMessage != null) {
         WindowDialog(
@@ -1089,6 +1132,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
     var catSettings by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", true)) }
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
     var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
+    var showE2eeDialog by remember { mutableStateOf(false) }
     var isSyncing by remember { mutableStateOf(false) }
     var conflictData by remember { mutableStateOf<Pair<MoteCloudSyncManager.SyncData, MoteCloudSyncManager.SyncData>?>(null) }
 
@@ -1388,7 +1432,14 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                 title = "高级数据保护",
                                                 summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
                                                 checked = e2eeEnabled,
-                                                onCheckedChange = { e2eeEnabled = it }
+                                                onCheckedChange = { checked ->
+                                                    if (checked) {
+                                                        showE2eeDialog = true
+                                                    } else {
+                                                        e2eeEnabled = false
+                                                        prefs.edit().putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false).apply()
+                                                    }
+                                                }
                                             )
                                         }
                                     }
@@ -1506,6 +1557,29 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                     onClick = { if (!isLoggingIn) showLoginDialog = false },
                     enabled = !isLoggingIn
                 ) { M3Text("取消") }
+            }
+        )
+    }
+
+    if (showE2eeDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showE2eeDialog = false },
+            title = { M3Text("开启高级数据保护") },
+            text = {
+                Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    M3Text("开启后，同步数据只有用你的账号密码才能解开，云端（包括我们在内）都看不到内容。\n\n但有三点要注意：\n\n一、忘记密码就真的找不回来了，重置密码也没用，云端的数据会变成一堆解不开的乱码。\n\n二、以后如果改了密码，之前同步上去的数据会解不开，需要重新同步一次。\n\n三、密码越简单越容易被暴力破解，请用足够复杂的密码。", style = M3MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = {
+                M3TextButton(onClick = {
+                    e2eeEnabled = true
+                    prefs.edit().putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, true).apply()
+                    showE2eeDialog = false
+                    Toast.makeText(context, "已开启高级数据保护", Toast.LENGTH_SHORT).show()
+                }) { M3Text("开启") }
+            },
+            dismissButton = {
+                M3TextButton(onClick = { showE2eeDialog = false }) { M3Text("取消") }
             }
         )
     }
