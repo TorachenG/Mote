@@ -129,6 +129,41 @@ class BaselineProfileGenerator {
                 }
             }
 
+            // 4. 书签列表 / 历史记录 / 下载与文件管理：把这些界面的首帧与滚动路径也收进 profile
+            step("bookmarks") {
+                if (openToolSheet(device)) {
+                    tapAny(device, TAP_TIMEOUT_MS, By.textContains("书签列表"), By.descContains("书签列表"))
+                    device.waitForIdle(SHEET_IDLE_MS)
+                    swipeUpDown(device, 2)
+                    device.pressBack()
+                    sleep(BACK_SETTLE_MS)
+                }
+            }
+            step("history") {
+                if (openToolSheet(device)) {
+                    tapAny(device, TAP_TIMEOUT_MS, By.textContains("历史记录"), By.descContains("历史记录"))
+                    device.waitForIdle(SHEET_IDLE_MS)
+                    swipeUpDown(device, 2)
+                    device.pressBack()
+                    sleep(BACK_SETTLE_MS)
+                }
+            }
+            step("downloads-and-files") {
+                if (openToolSheet(device)) {
+                    tapAny(device, TAP_TIMEOUT_MS, By.textContains("下载管理"), By.descContains("下载管理"))
+                    device.waitForIdle(SHEET_IDLE_MS)
+                    sleep(800)
+                    swipeUpDown(device, 2)
+                    // 切到文件页签
+                    tapAny(device, TAP_TIMEOUT_MS, By.textContains("文件"), By.descContains("文件"))
+                    device.waitForIdle(SHEET_IDLE_MS)
+                    sleep(800)
+                    swipeUpDown(device, 3)
+                    device.pressBack()
+                    sleep(BACK_SETTLE_MS)
+                }
+            }
+
             device.waitForIdle(SHEET_IDLE_MS)
             log("=== generate() round=${round} done (toolSheet=$toolSheetOpened settings=$settingsOpened) ===")
         }
@@ -178,6 +213,38 @@ class BaselineProfileGenerator {
      * 轮询多个选择器，任一命中就点，返回是否点成功。
      * 用轮询而不是 findObject 立即点，避免 HyperOS 上首帧未稳定时的 StaleObjectException。
      */
+    /** 打开工具弹窗，返回是否成功 */
+    private fun openToolSheet(device: UiDevice): Boolean {
+        val opened = tapAny(
+            device, TAP_TIMEOUT_MS,
+            By.descContains("工具"),
+            By.textContains("工具"),
+        )
+        if (opened) {
+            device.waitForIdle(SHEET_IDLE_MS)
+            sleep(600)
+        }
+        return opened
+    }
+
+    /** 上下往返滑动，覆盖反向滚动路径 */
+    private fun swipeUpDown(device: UiDevice, times: Int) {
+        repeat(times) {
+            device.swipe(
+                device.displayWidth / 2, (device.displayHeight * 0.75f).toInt(),
+                device.displayWidth / 2, (device.displayHeight * 0.35f).toInt(),
+                SWIPE_STEPS,
+            )
+            sleep(SWIPE_SETTLE_MS)
+        }
+        device.swipe(
+            device.displayWidth / 2, (device.displayHeight * 0.35f).toInt(),
+            device.displayWidth / 2, (device.displayHeight * 0.75f).toInt(),
+            SWIPE_STEPS,
+        )
+        sleep(SWIPE_SETTLE_MS)
+    }
+
     private fun tapAny(device: UiDevice, timeoutMs: Long, vararg selectors: BySelector): Boolean {
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < deadline) {
