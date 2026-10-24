@@ -576,7 +576,7 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                     }
                 },
             )
-            MiuixBreadcrumb(controller, controller.currentDir)
+            MiuixBreadcrumb(controller, controller.currentDir, 26.dp)
             }
         }
 
@@ -608,7 +608,11 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
 }
 
 @Composable
-private fun MiuixBreadcrumb(controller: FileManagerController, dir: java.io.File) {
+private fun MiuixBreadcrumb(
+    controller: FileManagerController,
+    dir: java.io.File,
+    startPadding: androidx.compose.ui.unit.Dp,
+) {
     val segments = remember(dir) { controller.segmentsOf(dir) }
     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         BreadcrumbBar(
@@ -624,7 +628,7 @@ private fun MiuixBreadcrumb(controller: FileManagerController, dir: java.io.File
                     if (controller.pendingOp != null) controller.pickDir = it else controller.enter(it)
                 }
             },
-            insideMargin = PaddingValues(start = 16.dp, end = 16.dp),
+            insideMargin = PaddingValues(start = startPadding, end = 16.dp),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -839,7 +843,7 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            MiuixBreadcrumb(controller, controller.currentDir)
+            MiuixBreadcrumb(controller, controller.currentDir, 16.dp)
 
             AnimatedContent(
                 targetState = controller.currentDir,
