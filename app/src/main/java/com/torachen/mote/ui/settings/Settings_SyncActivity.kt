@@ -1240,40 +1240,52 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
     WindowDialog(show = conflictData != null, title = "同步冲突", onDismissRequest = { conflictData = null }) {
         if (conflictData != null) {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("本地数据与云端数据不一致，请选择保留哪一侧：", color = MiuixTheme.colorScheme.onSurface)
+                Text("本地数据与云端数据不一致，请选择处理方式：", color = MiuixTheme.colorScheme.onSurface)
                 Button(
                     onClick = {
-                        if (!useWebDav) {
-                            scope.launch(Dispatchers.IO) {
-                                val accessToken = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, "") ?: return@launch
-                                val userId = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: return@launch
-                                val localJson = conflictData!!.first.payload.toString()
-                                val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                                MoteCloudSyncManager.pushRemote(prefs, encrypted)
-                                withContext(Dispatchers.Main) { Toast.makeText(context, "已上传本地数据", Toast.LENGTH_SHORT).show(); conflictData = null }
+                        val localObj = conflictData!!.first.payload
+                        val remoteObj = conflictData!!.second.payload
+                        scope.launch(Dispatchers.IO) {
+                            val snapshotObj = try {
+                                org.json.JSONObject(prefs.getString(MoteSyncMerge.SNAPSHOT_KEY, "") ?: "")
+                            } catch (_: Exception) {
+                                org.json.JSONObject()
                             }
-                        } else {
-                            val config = MoteCloudSyncManager.getWebDavConfig(prefs) ?: return@Button
-                            scope.launch(Dispatchers.IO) {
-                                val localJson = conflictData!!.first.payload.toString()
-                                val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                                MoteCloudSyncManager.uploadFile(config, encrypted)
-                                withContext(Dispatchers.Main) { Toast.makeText(context, "已上传本地数据", Toast.LENGTH_SHORT).show(); conflictData = null }
+                            val merged = MoteSyncMerge.merge(localObj, remoteObj, snapshotObj)
+                            val mergedJson = merged.toString()
+                            withContext(Dispatchers.Main) {
+                                MoteCloudSyncManager.applyRemoteData(prefs, merged)
+                                prefs.edit().putString(MoteSyncMerge.SNAPSHOT_KEY, mergedJson).apply()
+                            }
+                            val encrypted = MoteCloudSyncManager.encrypt(mergedJson, prefs)
+                            if (!useWebDav) {
+                                MoteCloudSyncManager.pushRemote(prefs, encrypted)
+                            } else {
+                                val config = MoteCloudSyncManager.getWebDavConfig(prefs)
+                                if (config != null) MoteCloudSyncManager.uploadFile(config, encrypted)
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "已合并本地与云端数据并同步", Toast.LENGTH_SHORT).show()
+                                conflictData = null
                             }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary, contentColor = Color.White)
-                ) { Text("保留本地并覆盖云端") }
+                ) { Text("合并本地数据并同步") }
                 Button(
                     onClick = {
-                        MoteCloudSyncManager.applyRemoteData(prefs, conflictData!!.second.payload)
-                        Toast.makeText(context, "已应用云端数据，部分设置需重启生效", Toast.LENGTH_LONG).show()
+                        val remoteObj = conflictData!!.second.payload
+                        MoteCloudSyncManager.applyRemoteData(prefs, remoteObj)
+                        prefs.edit()
+                            .putString(MoteSyncMerge.SNAPSHOT_KEY, remoteObj.toString())
+                            .apply()
+                        Toast.makeText(context, "已用云端数据覆盖本地，部分设置需重启生效", Toast.LENGTH_LONG).show()
                         conflictData = null
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.secondaryContainer, contentColor = MiuixTheme.colorScheme.onSurface)
-                ) { Text("保留云端并覆盖本地") }
+                ) { Text("覆盖本地数据") }
             }
         }
     }
@@ -1847,37 +1859,49 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { conflictData = null },
             title = { M3Text("同步冲突") },
-            text = { M3Text("本地数据与云端数据不一致，请选择保留哪一侧：") },
+            text = { M3Text("本地数据与云端数据不一致，请选择处理方式：") },
             confirmButton = {
                 M3TextButton(
                     onClick = {
-                        if (!useWebDav) {
-                            scope.launch(Dispatchers.IO) {
-                                val accessToken = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, "") ?: return@launch
-                                val userId = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: return@launch
-                                val localJson = conflictData!!.first.payload.toString()
-                                val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                                MoteCloudSyncManager.pushRemote(prefs, encrypted)
-                                withContext(Dispatchers.Main) { Toast.makeText(context, "已上传本地数据", Toast.LENGTH_SHORT).show(); conflictData = null }
+                        val localObj = conflictData!!.first.payload
+                        val remoteObj = conflictData!!.second.payload
+                        scope.launch(Dispatchers.IO) {
+                            val snapshotObj = try {
+                                org.json.JSONObject(prefs.getString(MoteSyncMerge.SNAPSHOT_KEY, "") ?: "")
+                            } catch (_: Exception) {
+                                org.json.JSONObject()
                             }
-                        } else {
-                            val config = MoteCloudSyncManager.getWebDavConfig(prefs) ?: return@M3TextButton
-                            scope.launch(Dispatchers.IO) {
-                                val localJson = conflictData!!.first.payload.toString()
-                                val encrypted = MoteCloudSyncManager.encrypt(localJson, prefs)
-                                MoteCloudSyncManager.uploadFile(config, encrypted)
-                                withContext(Dispatchers.Main) { Toast.makeText(context, "已上传本地数据", Toast.LENGTH_SHORT).show(); conflictData = null }
+                            val merged = MoteSyncMerge.merge(localObj, remoteObj, snapshotObj)
+                            val mergedJson = merged.toString()
+                            withContext(Dispatchers.Main) {
+                                MoteCloudSyncManager.applyRemoteData(prefs, merged)
+                                prefs.edit().putString(MoteSyncMerge.SNAPSHOT_KEY, mergedJson).apply()
+                            }
+                            val encrypted = MoteCloudSyncManager.encrypt(mergedJson, prefs)
+                            if (!useWebDav) {
+                                MoteCloudSyncManager.pushRemote(prefs, encrypted)
+                            } else {
+                                val config = MoteCloudSyncManager.getWebDavConfig(prefs)
+                                if (config != null) MoteCloudSyncManager.uploadFile(config, encrypted)
+                            }
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "已合并本地与云端数据并同步", Toast.LENGTH_SHORT).show()
+                                conflictData = null
                             }
                         }
                     }
-                ) { M3Text("保留本地") }
+                ) { M3Text("合并本地数据并同步") }
             },
             dismissButton = {
                 M3TextButton(onClick = {
-                    MoteCloudSyncManager.applyRemoteData(prefs, conflictData!!.second.payload)
-                    Toast.makeText(context, "已应用云端数据，部分设置需重启生效", Toast.LENGTH_LONG).show()
-                    conflictData = null
-                }) { M3Text("保留云端") }
+                        val remoteObj = conflictData!!.second.payload
+                        MoteCloudSyncManager.applyRemoteData(prefs, remoteObj)
+                        prefs.edit()
+                            .putString(MoteSyncMerge.SNAPSHOT_KEY, remoteObj.toString())
+                            .apply()
+                        Toast.makeText(context, "已用云端数据覆盖本地，部分设置需重启生效", Toast.LENGTH_LONG).show()
+                        conflictData = null
+                }) { M3Text("覆盖本地数据") }
             }
         )
     }
