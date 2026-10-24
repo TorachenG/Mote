@@ -997,12 +997,11 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
         }
     }
 
-    if (showE2eeDialog) {
-        WindowDialog(
-            show = true,
-            title = "开启高级数据保护",
-            onDismissRequest = { showE2eeDialog = false }
-        ) {
+    WindowDialog(
+        show = showE2eeDialog,
+        title = "开启高级数据保护",
+        onDismissRequest = { showE2eeDialog = false }
+    ) {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(text = "开启后，同步数据仅能由你的账号密码解密，服务端无法读取内容。\n\n需注意：\n1. 忘记密码将无法恢复数据，重置密码同样无效。\n2. 修改密码后，已同步的数据需重新同步一次。\n3. 建议使用足够复杂的密码，避免被暴力破解。", color = MiuixTheme.colorScheme.onSurface)
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1030,7 +1029,6 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                 }
             }
         }
-    }
 
     // 错误详情弹窗
     if (errorDialogMessage != null) {
