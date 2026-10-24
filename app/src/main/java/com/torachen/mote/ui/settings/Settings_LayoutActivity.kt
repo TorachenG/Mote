@@ -659,7 +659,6 @@ fun SettingsLayoutPage(
     }
 
     // ---------------- 控件颜色建议弹窗 ----------------
-    if (showControlColorSuggestDialog) {
         val dialogNavOwner = rememberNavigationEventDispatcherOwner()
         CompositionLocalProvider(
             LocalNavigationEventDispatcherOwner provides dialogNavOwner
@@ -667,7 +666,7 @@ fun SettingsLayoutPage(
             when (LocalUiMode.current) {
                 UiMode.Miuix -> {
                     WindowDialog(
-                        show = true,
+                        show = showControlColorSuggestDialog,
                         title = "更改控件颜色",
                         onDismissRequest = {
                             showControlColorSuggestDialog = false
@@ -763,6 +762,7 @@ fun SettingsLayoutPage(
                 }
 
                 UiMode.Material -> {
+                    if (showControlColorSuggestDialog) {
                     M3AlertDialog(
                         onDismissRequest = {
                             showControlColorSuggestDialog = false
@@ -822,11 +822,11 @@ fun SettingsLayoutPage(
                             ) { M3Text("取消") }
                         },
                     )
-                }
+                
+                    }}
             }
         }
     }
-}
 
 // ============================================================
 // MIUIX 版实现

@@ -377,12 +377,15 @@ fun ScriptsPage(
 
             // 重命名
             val renaming = renameTarget
-            if (renaming != null) {
-                WindowDialog(
-                    show = true,
-                    title = "重命名",
-                    onDismissRequest = { renameTarget = null },
-                ) {
+            var lastRenaming by remember { mutableStateOf(renaming) }
+            if (renaming != null) lastRenaming = renaming
+            WindowDialog(
+                show = renaming != null,
+                title = "重命名",
+                onDismissRequest = { renameTarget = null },
+            ) {
+                val script = lastRenaming
+                if (script != null) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -411,7 +414,7 @@ fun ScriptsPage(
                                 onClick = {
                                     val newName = renameText.trim()
                                     if (newName.isNotBlank()) {
-                                        UserScriptStore.rename(context, renaming.id, newName)
+                                        UserScriptStore.rename(context, script.id, newName)
                                         reload()
                                     }
                                     renameTarget = null
@@ -429,12 +432,15 @@ fun ScriptsPage(
 
             // 删除确认
             val deleting = deleteTarget
-            if (deleting != null) {
-                WindowDialog(
-                    show = true,
-                    title = "删除脚本",
-                    onDismissRequest = { deleteTarget = null },
-                ) {
+            var lastDeleting by remember { mutableStateOf(deleting) }
+            if (deleting != null) lastDeleting = deleting
+            WindowDialog(
+                show = deleting != null,
+                title = "删除脚本",
+                onDismissRequest = { deleteTarget = null },
+            ) {
+                val script = lastDeleting
+                if (script != null) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -442,7 +448,7 @@ fun ScriptsPage(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            text = "确定删除「${deleting.name}」吗？",
+                            text = "确定删除「${script.name}」吗？",
                             fontSize = 15.sp,
                             color = MiuixTheme.colorScheme.onSurface,
                         )
@@ -460,7 +466,7 @@ fun ScriptsPage(
                             ) { Text("取消") }
                             Button(
                                 onClick = {
-                                    UserScriptStore.delete(context, deleting.id)
+                                    UserScriptStore.delete(context, script.id)
                                     deleteTarget = null
                                     reload()
                                 },

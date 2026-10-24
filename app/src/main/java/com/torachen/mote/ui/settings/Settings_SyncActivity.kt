@@ -1031,12 +1031,12 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
         }
 
     // 错误详情弹窗
-    if (errorDialogMessage != null) {
-        WindowDialog(
-            show = true,
-            title = "错误详情",
-            onDismissRequest = { errorDialogMessage = null }
-        ) {
+    WindowDialog(
+        show = errorDialogMessage != null,
+        title = "错误详情",
+        onDismissRequest = { errorDialogMessage = null }
+    ) {
+        if (errorDialogMessage != null) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1064,8 +1064,8 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
         }
     }
 
-    if (conflictData != null) {
-        WindowDialog(show = true, title = "同步冲突", onDismissRequest = { conflictData = null }) {
+    WindowDialog(show = conflictData != null, title = "同步冲突", onDismissRequest = { conflictData = null }) {
+        if (conflictData != null) {
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("本地数据与云端数据不一致，请选择保留哪一侧：", color = MiuixTheme.colorScheme.onSurface)
                 Button(
