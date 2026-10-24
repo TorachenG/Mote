@@ -407,6 +407,7 @@ fun FileManagerPage(
     }
 
     var infoItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var showInfoDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     val requestDelete: () -> Unit = {
@@ -414,12 +415,11 @@ fun FileManagerPage(
     }
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> FileManagerMiuix(controller, onInfo = { infoItems = it }, onDelete = requestDelete)
-        UiMode.Material -> FileManagerMaterial(controller, onInfo = { infoItems = it }, onDelete = requestDelete)
+        UiMode.Miuix -> FileManagerMiuix(controller, onInfo = { infoItems = it; showInfoDialog = true }, onDelete = requestDelete)
+        UiMode.Material -> FileManagerMaterial(controller, onInfo = { infoItems = it; showInfoDialog = true }, onDelete = requestDelete)
     }
 
-    if (showDeleteDialog) {
-        WindowDialog(show = true, title = "删除", onDismissRequest = { showDeleteDialog = false }) {
+    WindowDialog(show = showDeleteDialog, title = "删除", onDismissRequest = { showDeleteDialog = false }) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -452,17 +452,17 @@ fun FileManagerPage(
                 }
             }
         }
-    }
 
     if (infoItems.isNotEmpty()) {
         FileInfoDialog(
             items = infoItems,
+            show = showInfoDialog,
             onJump = { target ->
                 controller.enter(target)
                 controller.selected = emptyList()
-                infoItems = emptyList()
+                showInfoDialog = false
             },
-            onDismiss = { infoItems = emptyList() },
+            onDismiss = { showInfoDialog = false },
         )
     }
 }
@@ -1204,6 +1204,7 @@ private fun typeLabel(file: java.io.File, isDir: Boolean): String {
 @Composable
 private fun FileInfoDialog(
     items: List<FsEntry>,
+    show: Boolean,
     onJump: (java.io.File) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1224,7 +1225,7 @@ private fun FileInfoDialog(
         }
     }
 
-    WindowDialog(show = true, title = title, onDismissRequest = onDismiss) {
+    WindowDialog(show = show, title = title, onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
