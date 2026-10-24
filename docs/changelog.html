@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>更新日志 · Mote</title>
+<meta name="theme-color" content="#f4f7fb">
+<link rel="icon" href="assets/mote_logo.png">
+<link rel="stylesheet" href="assets/site.css">
+<style>
+  .release + .release{margin-top:var(--gap)}
+  .release-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .release-tag{font-size:17px;font-weight:600;color:var(--text);letter-spacing:.4px}
+  .release-date{color:var(--muted);font-size:13px}
+  .release-badge{
+    font-size:12px;padding:2px 9px;border-radius:999px;
+    background:#eef3fb;color:#5c7eb8;letter-spacing:.4px;
+  }
+  .release .doc{font-size:14.5px}
+  .release .doc h2{font-size:15.5px;margin:18px 0 8px}
+  .release .doc h3{font-size:14.5px;margin:16px 0 6px}
+  .release .doc p{margin:8px 0}
+  .state{padding:28px 0;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+
+  <div class="top">
+    <a class="brand" href="./" aria-label="回到首页">
+      <div class="org">[ TORACHEN ]</div>
+      <div class="name">MOTE</div>
+    </a>
+    <nav>
+      <a href="./">首页</a><i>|</i>
+      <a href="https://gitee.com/TorachenG/Mote" target="_blank" rel="noopener">Gitee</a><i>|</i>
+      <a href="https://github.com/TorachenG/Mote" target="_blank" rel="noopener">Github</a><i>|</i>
+      <a href="changelog.html" class="active">更新日志</a><i>|</i>
+      <div class="nav-item">
+        <a class="nav-link" href="javascript:void(0)">用户协议</a>
+        <div class="dropdown">
+          <a href="legal/user-agreement.html">用户协议</a>
+          <a href="legal/privacy-policy.html">隐私政策</a>
+        </div>
+      </div><i>|</i>
+      <a href="developer.html">开发者入口</a>
+    </nav>
+  </div>
+
+  <div class="wrap" style="padding-top:12px">
+    <div class="page-head">
+      <h1>更新日志</h1>
+      <p class="sub">按发布时间倒序，内容来自 GitHub Releases</p>
+    </div>
+
+    <div id="list">
+      <div class="card"><div class="state">加载中…</div></div>
+    </div>
+  </div>
+
+  <footer>
+    完整发布页：<a href="https://github.com/TorachenG/Mote/releases" target="_blank" rel="noopener">GitHub Releases</a>
+  </footer>
+
+  <script src="assets/nav.js"></script>
+  <script src="assets/doc.js"></script>
+  <script>
+  (function () {
+    const list = document.getElementById('list');
+    const p = (n) => String(n).padStart(2, '0');
+
+    function card(r) {
+      const tag = (r.tag_name || '').replace(/^v/i, '') || '未命名版本';
+      const d = r.published_at ? new Date(r.published_at) : null;
+      const date = d ? d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) : '';
+      const body = window.renderMarkdown(r.body || '') || '<p>该版本没有附加说明。</p>';
+      const badge = r.prerelease ? '<span class="release-badge">预发布</span>' : '';
+      return '<div class="card release">' +
+        '<div class="release-head">' +
+          '<span class="release-tag">v' + tag + '</span>' +
+          badge +
+          '<span class="release-date">' + date + '</span>' +
+        '</div>' +
+        '<article class="doc">' + body + '</article>' +
+      '</div>';
+    }
+
+    fetch('https://api.github.com/repos/TorachenG/Mote/releases?per_page=30', {
+      headers: { Accept: 'application/vnd.github+json' }
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json();
+      })
+      .then(function (items) {
+        if (!Array.isArray(items) || !items.length) {
+          list.innerHTML = '<div class="card"><div class="state">还没有发布记录。</div></div>';
+          return;
+        }
+        list.innerHTML = items.map(card).join('');
+      })
+      .catch(function () {
+        list.innerHTML = '<div class="card"><div class="state">' +
+          '加载失败，请前往 <a href="https://github.com/TorachenG/Mote/releases" target="_blank" rel="noopener">GitHub Releases</a> 查看。' +
+          '</div></div>';
+      });
+  })();
+  </script>
+</body>
+</html>
