@@ -3219,18 +3219,6 @@ fun AppRoot() {
         }
     }
 
-    /** 直接回到最底层页面（浏览器主页），用于从设置页跳回主页打开链接 */
-    fun popToRoot() {
-        if (pageStack.size <= 1) return
-        animJob?.cancel()
-        animJob = null
-        val rootId = pageStack.first().id
-        pageStack.removeAll { it.id != rootId }
-        exitingPageId = null
-        backInFlight = false
-        progress = 1f
-    }
-
     fun popPage() {
         if (pageStack.size <= 1) return
         // ★ backInFlight 和 exitingPageId 一起当守卫：手势 pop 进行中也算"在飞"
@@ -3345,6 +3333,18 @@ fun AppRoot() {
     }
 
     BackHandler(enabled = pageStack.size > 1 && exitingPageId != null) {
+    }
+
+    /** 回到最底层页面（浏览器主页）：保留正常退场动画，退场期间把中间层直接去掉 */
+    fun popToRoot() {
+        if (pageStack.size <= 1) return
+        if (exitingPageId != null || backInFlight) return
+        val topId = pageStack.last().id
+        val rootId = pageStack.first().id
+        if (topId == rootId) return
+        popPage()
+        // 退场动画只针对最上面那一页，其余中间页此时不可见，直接移除
+        pageStack.removeAll { it.id != rootId && it.id != topId }
     }
 
     val openSettings: () -> Unit = remember { { pushPage("settings_main") } }

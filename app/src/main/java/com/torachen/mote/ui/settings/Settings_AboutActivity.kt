@@ -886,7 +886,6 @@ private fun SettingsAboutMiuix(
                                     )
                                     ArrowPreference(
                                         title = "官方网站",
-                                        summary = "toracheng.github.io/Mote",
                                         onClick = { actions.onOpenWebsite() },
                                     )
                                 }
@@ -1112,7 +1111,6 @@ private fun SettingsAboutMaterial(
                                 {
                                     M3SegmentItem(
                                         headline = { M3Text("官方网站") },
-                                        supporting = { M3Text("toracheng.github.io/Mote", color = M3MaterialTheme.colorScheme.onSurfaceVariant) },
                                         onClick = { actions.onOpenWebsite() },
                                     )
                                 },
@@ -1163,11 +1161,6 @@ private fun ContactBottomSheet(
                         title = "Gitee Issues",
                         summary = "国内访问更稳定",
                         onClick = onOpenGitee,
-                    )
-                    ArrowPreference(
-                        title = "官方网站",
-                        summary = "toracheng.github.io/Mote",
-                        onClick = onOpenWebsite,
                     )
                 }
             }
