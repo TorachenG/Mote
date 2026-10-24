@@ -5691,7 +5691,15 @@ fun BrowserScreen(
         }
         if (activeWindowId != null) {
             delay(100)
-            try { createWindow(url) } catch (_: Exception) {}
+            try {
+                val current = windows.firstOrNull { it.id == activeWindowId }
+                if (current != null && (current.url.isBlank() || isHomeUrl(current.url))) {
+                    // 当前窗口还是空白页时直接复用，避免多出一个新标签页历史
+                    navigateToUrl(current.id, url)
+                } else {
+                    createWindow(url)
+                }
+            } catch (_: Exception) {}
         }
         PendingOpenInNewWindowStore.pending = null
     }

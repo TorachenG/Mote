@@ -53,6 +53,7 @@ class FileOpService : Service() {
                     ACTION_COPY -> copyAll(sources, destDir, move = false)
                     ACTION_MOVE -> copyAll(sources, destDir, move = true)
                     ACTION_EXTRACT -> extractArchive(File(archive), File(destDir))
+                    ACTION_DELETE -> deleteAll(sources)
                     else -> false
                 }
             } catch (e: Exception) {
@@ -64,6 +65,7 @@ class FileOpService : Service() {
                 val text = when (action) {
                     ACTION_COPY -> "复制完成"
                     ACTION_MOVE -> "移动完成"
+                    ACTION_DELETE -> "删除完成"
                     else -> "解压完成"
                 }
                 FileOpState.message.value = text
@@ -141,6 +143,23 @@ class FileOpService : Service() {
             val src = File(path)
             if (!src.exists()) return@forEach
             copyNode(src, File(destRoot, src.name))
+        }
+        return true
+    }
+
+    private fun deleteAll(paths: List<String>): Boolean {
+        var lastNotify = 0L
+        paths.forEach { path ->
+            val target = File(path)
+            if (target.exists()) target.deleteRecursively()
+            val now = System.currentTimeMillis()
+            if (now - lastNotify > 250) {
+                lastNotify = now
+                notificationManager()?.notify(
+                    NOTIFICATION_ID,
+                    buildNotification("正在删除：${target.name}", 0, 0, true)
+                )
+            }
         }
         return true
     }
@@ -310,6 +329,7 @@ class FileOpService : Service() {
         const val ACTION_COPY = "copy"
         const val ACTION_MOVE = "move"
         const val ACTION_EXTRACT = "extract"
+        const val ACTION_DELETE = "delete"
 
         private const val EXTRA_ACTION = "action"
         private const val EXTRA_SOURCES = "sources"
@@ -324,6 +344,9 @@ class FileOpService : Service() {
 
         fun extract(context: Context, archive: String, dest: String) =
             start(context, ACTION_EXTRACT, emptyList(), dest, archive)
+
+        fun delete(context: Context, paths: List<String>) =
+            start(context, ACTION_DELETE, paths, "", null)
 
         private fun start(context: Context, action: String, sources: List<String>, dest: String, archive: String?) {
             val intent = Intent(context, FileOpService::class.java).apply {

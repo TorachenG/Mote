@@ -53,6 +53,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.SelectAll
@@ -118,7 +119,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Copy
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.File as FileIcon
 import top.yukonga.miuix.kmp.icon.extended.Folder as FolderIcon
 import top.yukonga.miuix.kmp.icon.extended.Info
@@ -244,6 +247,13 @@ private class FileManagerController(
         }
         pendingOp = null
         pickDir = null
+        selected = emptyList()
+    }
+
+    fun deleteSelected() {
+        val items = selected
+        if (items.isEmpty()) return
+        FileOpService.delete(context, items.map { it.file.absolutePath })
         selected = emptyList()
     }
 
@@ -660,6 +670,7 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?, 
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
                     onExtract = { one -> controller.extract(one); controller.selected = emptyList() },
+                    onDelete = { controller.deleteSelected() },
                     onInfo = { onInfo(controller.selected.ifEmpty { barItems }) },
                 )
             }
@@ -724,53 +735,52 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
         if (controller.pendingOp == null) controller.toggle(entry)
     }
 
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (entry.isDir) {
-            ArrowPreference(
-                title = entry.file.name,
-                summary = summary,
-                startAction = { EntryThumb(entry) },
-                endActions = {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = selecting,
-                        enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
-                        exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
-                    ) {
-                        Checkbox(
-                            state = if (selected) androidx.compose.ui.state.ToggleableState.On
-                            else androidx.compose.ui.state.ToggleableState.Off,
-                            onClick = null,
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                onClick = null,
+        EntryThumb(entry)
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                entry.file.name,
+                style = MiuixTheme.textStyles.body1,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
-        } else {
-            BasicComponent(
-                title = entry.file.name,
-                summary = summary,
-                startAction = { EntryThumb(entry) },
-                endActions = {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = selecting,
-                        enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
-                        exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
-                    ) {
-                        Checkbox(
-                            state = if (selected) androidx.compose.ui.state.ToggleableState.On
-                            else androidx.compose.ui.state.ToggleableState.Off,
-                            onClick = null,
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                onClick = null,
+            if (summary.isNotBlank()) {
+                Text(
+                    summary,
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+        }
+        if (selecting) {
+            Spacer(Modifier.width(8.dp))
+            androidx.compose.animation.AnimatedVisibility(
+                visible = selecting,
+                enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
+                exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
+            ) {
+                Checkbox(
+                    state = if (selected) androidx.compose.ui.state.ToggleableState.On
+                    else androidx.compose.ui.state.ToggleableState.Off,
+                    onClick = null,
+                )
+            }
+        } else if (entry.isDir) {
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                imageVector = MiuixIcons.ChevronForward,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -810,6 +820,7 @@ private fun MiuixActionBar(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onExtract: (FsEntry) -> Unit,
+    onDelete: () -> Unit,
     onInfo: () -> Unit,
 ) {
     val single = items.size == 1
@@ -826,6 +837,7 @@ private fun MiuixActionBar(
         CapsuleAction(MiuixIcons.FileIcon, "打开", enabled = single) { one?.let(onOpen) }
         CapsuleAction(MiuixIcons.Copy, "复制", enabled = true) { onCopy() }
         CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = true) { onMove() }
+        CapsuleAction(MiuixIcons.Delete, "删除", enabled = true) { onDelete() }
         if (single && one != null && !one.isDir && isArchive(one.file.name)) {
             CapsuleAction(MiuixIcons.FolderIcon, "解压", enabled = true) { onExtract(one) }
         }
@@ -1040,6 +1052,7 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                             }
                             M3CapsuleAction(Icons.Filled.Folder, "复制", true) { controller.beginMove(PendingOp.COPY) }
                             M3CapsuleAction(Icons.Filled.Folder, "移动", true) { controller.beginMove(PendingOp.MOVE) }
+                            M3CapsuleAction(Icons.Filled.Delete, "删除", true) { controller.deleteSelected() }
                             if (single && one != null && !one.isDir && isArchive(one.file.name)) {
                                 M3CapsuleAction(Icons.Filled.Folder, "解压", true) {
                                     controller.extract(one)
