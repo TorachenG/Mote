@@ -811,6 +811,12 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                         )
                                     }
                                 }
+                                SwitchPreference(
+                                    title = "高级数据保护",
+                                    summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
+                                    checked = e2eeEnabled,
+                                    onCheckedChange = { e2eeEnabled = it }
+                                )
                             }
 
                             SmallTitle("同步项")
@@ -1377,32 +1383,15 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                 }
                                             }
                                         }
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    item(key = "e2ee_content") {
-                        Column(modifier = Modifier.padding(top = 8.dp)) {
-                            M3Text(
-                                "安全",
-                                color = M3MaterialTheme.colorScheme.primary,
-                                style = M3MaterialTheme.typography.titleSmall,
-                                modifier = Modifier.padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
-                            )
-                            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = M3_SEGMENT_GROUP_GAP)) {
-                                MoteSegmentedColumn(
-                                    content = listOf(
-                                        {
+                                        add {
                                             M3SegmentSwitchItem(
                                                 title = "高级数据保护",
-                                                summary = "开启：端到端加密，密钥由账号密码派生，云端无法解密；关闭：普通加密，云端可解密，两者都能换设备恢复",
+                                                summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
                                                 checked = e2eeEnabled,
-                                                onCheckedChange = { e2eeEnabled = it },
+                                                onCheckedChange = { e2eeEnabled = it }
                                             )
-                                        },
-                                    )
+                                        }
+                                    }
                                 )
                             }
                         }
