@@ -5313,6 +5313,8 @@ fun BrowserScreen(
                             bmp.width * bmp.height > existing.width * existing.height
                         ) {
                             faviconCache[expectedHost] = bmp
+                            // 持久化，供书签列表 / 历史记录使用
+                            FaviconStore.save(context, expectedHost, bmp)
                             updateWindow(windowId) { it.favicon = bmp }
                         }
                     }
@@ -9770,6 +9772,8 @@ private fun WebViewLayer(
                                         bmp.width * bmp.height > existingFav.width * existingFav.height
                                     ) {
                                         faviconCache[host] = bmp
+                                        // 持久化，供书签列表 / 历史记录使用
+                                        FaviconStore.save(context, host, bmp)
                                         onUpdateWindow(id) { it.favicon = bmp }
                                     }
                                 }
@@ -12994,7 +12998,11 @@ private fun BookmarkSheet(
                                     LaunchedEffect(faviconReload, host) {
                                         if (host.isNotBlank() && favicon == null) {
                                             favicon = FaviconStore.get(context, host)
-                                                ?: FaviconStore.fetchFromHost(context, host)
+                                                ?: FaviconStore.fetchFromUrl(
+                                                    context,
+                                                    entry.url ?: "https://$host/",
+                                                    host,
+                                                )
                                         }
                                     }
 

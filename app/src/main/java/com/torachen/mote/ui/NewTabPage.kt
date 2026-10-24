@@ -835,7 +835,7 @@ internal object FaviconStore {
 
     private const val DIR_NAME = "favicons"
     private const val MAX_DIM = 192
-    private const val MIN_ACCEPTABLE_DIM = 32
+    private const val MIN_ACCEPTABLE_DIM = 16
     private const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
@@ -947,6 +947,10 @@ internal object FaviconStore {
                         break
                     }
                 }
+                if (best == null) {
+                    // 站点根目录没有常见图标文件时，解析首页 <link rel="icon"> 再下载
+                    best = fetchFromPageHtml("https://$host/", host)
+                }
                 if (best != null) save(context, host, best)
                 best
             } catch (e: Exception) {
@@ -956,6 +960,103 @@ internal object FaviconStore {
                 pendingFetches.remove(host)
             }
         }
+
+    /**
+     * 用书签的完整网址去抓图标：先看缓存，再读该页面的 <link rel="icon">，
+     * 最后才退回站点根目录的通用图标文件。命中后仍按 host 缓存。
+     */
+    suspend fun fetchFromUrl(context: Context, pageUrl: String, host: String): Bitmap? =
+        withContext(Dispatchers.IO) {
+            if (host.isBlank()) return@withContext null
+            memoryCache[host]?.let { return@withContext it }
+            if (has(context, host)) return@withContext get(context, host)
+            if (pendingFetches.putIfAbsent(host, true) != null) return@withContext null
+            try {
+                var found = fetchFromPageHtml(pageUrl, host)?.let { it }
+                if (found == null) {
+                    for (url in listOf(
+                        "https://$host/apple-touch-icon.png",
+                        "https://$host/apple-touch-icon-precomposed.png",
+                        "https://$host/favicon.ico",
+                    )) {
+                        val bmp = downloadBitmap(url) ?: continue
+                        if (bmp.width >= MIN_ACCEPTABLE_DIM && bmp.height >= MIN_ACCEPTABLE_DIM) {
+                            found = bmp
+                            break
+                        }
+                    }
+                }
+                if (found != null) save(context, host, found)
+                found
+            } catch (e: Exception) {
+                Log.w("FaviconStore", "fetchFromUrl [$pageUrl] fail: ${e.message}")
+                null
+            } finally {
+                pendingFetches.remove(host)
+            }
+        }
+
+    private fun downloadBitmap(url: String): Bitmap? = try {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 5000
+        conn.readTimeout = 5000
+        conn.instanceFollowRedirects = true
+        conn.setRequestProperty("User-Agent", USER_AGENT)
+        conn.connect()
+        val result = if (conn.responseCode !in 200..299) {
+            null
+        } else {
+            BitmapFactory.decodeStream(conn.inputStream)
+        }
+        conn.disconnect()
+        result
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun readPageHtml(url: String): String? = try {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 5000
+        conn.readTimeout = 5000
+        conn.instanceFollowRedirects = true
+        conn.setRequestProperty("User-Agent", USER_AGENT)
+        conn.connect()
+        val text = if (conn.responseCode !in 200..299) {
+            null
+        } else {
+            conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        }
+        conn.disconnect()
+        text?.take(300_000)
+    } catch (_: Exception) {
+        null
+    }
+
+    /** 从首页 HTML 的 <link rel="...icon..."> 里找图标地址 */
+    private fun fetchFromPageHtml(pageUrl: String, host: String): Bitmap? {
+        val html = readPageHtml(pageUrl) ?: return null
+        val tags = Regex("<link\\b[^>]*>", RegexOption.IGNORE_CASE).findAll(html)
+        val hrefs = mutableListOf<String>()
+        for (match in tags) {
+            val tag = match.value
+            val rel = Regex("rel\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+                .find(tag)?.groupValues?.getOrNull(1)?.lowercase() ?: continue
+            if (!rel.contains("icon")) continue
+            val href = Regex("href\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+                .find(tag)?.groupValues?.getOrNull(1) ?: continue
+            hrefs.add(href)
+        }
+        for (href in hrefs.take(4)) {
+            val abs = try {
+                java.net.URI(pageUrl).resolve(href).toString()
+            } catch (_: Exception) {
+                continue
+            }
+            val bmp = downloadBitmap(abs) ?: continue
+            if (bmp.width >= MIN_ACCEPTABLE_DIM && bmp.height >= MIN_ACCEPTABLE_DIM) return bmp
+        }
+        return null
+    }
 
     fun clear(context: Context) {
         memoryCache.clear()
