@@ -46,7 +46,8 @@ $("sync").addEventListener("click", async () => {
   $("stateText").textContent = t("pStatusSyncing");
   $("dot").className = "dot syncing";
   await send({ type: "sync-now" });
-  await refresh();
+  await send({ type: "warmup" });
+refresh();
   $("sync").disabled = false;
 });
 

@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -450,6 +451,14 @@ internal object MoteCloudSyncManager {
         }
     }
 
+    /** 预热云函数，减少首次同步的冷启动等待（结果忽略） */
+    fun warmUp() {
+        try {
+            callFunction(JSONObject().apply { put("action", "warmup") })
+        } catch (_: Exception) {
+        }
+    }
+
     /** 注册账号（用户名+密码），成功后返回 true */
     fun registerAccount(username: String, password: String): Pair<Boolean, String?> {
         val (data, err) = callFunction(JSONObject().apply {
@@ -563,6 +572,10 @@ fun SettingsSyncPage(onBack: () -> Unit) {
 // ============================================================
 @Composable
 private fun SettingsSyncMiuix(onBack: () -> Unit) {
+    LaunchedEffect(Unit) {
+        // 提前预热云函数，减少首次同步的冷启动等待
+        withContext(Dispatchers.IO) { MoteCloudSyncManager.warmUp() }
+    }
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
@@ -1262,6 +1275,10 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsSyncMaterial(onBack: () -> Unit) {
+    LaunchedEffect(Unit) {
+        // 提前预热云函数，减少首次同步的冷启动等待
+        withContext(Dispatchers.IO) { MoteCloudSyncManager.warmUp() }
+    }
     val navOwner = rememberNavigationEventDispatcherOwner()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

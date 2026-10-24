@@ -8,7 +8,7 @@ const CLOUD_DEFAULT_URL =
 
 const FOLDER_NAME = "Mote";
 const ALARM_NAME = "mote-sync";
-const DEBOUNCE_MS = 6000;
+const DEBOUNCE_MS = 2500;
 const SALT_NORMAL = "MoteNormalSalt";
 const SALT_E2EE = "MoteE2EESalt";
 const PBKDF2_ITER = 10000;
@@ -486,12 +486,11 @@ async function syncChildren(parentId, desired) {
   const existing = await chrome.bookmarks.getChildren(parentId);
   const desiredKeys = new Set(desired.map(nodeKeyOf));
 
-  for (const child of existing) {
+  const toRemove = existing.filter((child) => {
     const key = child.url ? "U:" + child.url : "F:" + (child.title || "");
-    if (!desiredKeys.has(key)) {
-      await chrome.bookmarks.removeTree(child.id);
-    }
-  }
+    return !desiredKeys.has(key);
+  });
+  await Promise.all(toRemove.map((child) => chrome.bookmarks.removeTree(child.id)));
 
   const remaining = await chrome.bookmarks.getChildren(parentId);
   const byKey = new Map();
@@ -500,7 +499,7 @@ async function syncChildren(parentId, desired) {
     if (!byKey.has(key)) byKey.set(key, child);
   }
 
-  for (const node of desired) {
+  await Promise.all(desired.map(async (node) => {
     const key = nodeKeyOf(node);
     const found = byKey.get(key);
     if (found) {
@@ -510,13 +509,28 @@ async function syncChildren(parentId, desired) {
       if (node.folder) {
         await syncChildren(found.id, node.children || []);
       }
-    } else if (node.folder) {
+      return;
+    }
+    if (node.folder) {
       const created = await chrome.bookmarks.create({ parentId, title: node.title || "Mote" });
       await syncChildren(created.id, node.children || []);
     } else if (node.url) {
       await chrome.bookmarks.create({ parentId, title: node.title || node.url, url: node.url });
     }
-  }
+  }));
+}
+
+async function warmUpCloud() {
+  try {
+    const s = await getSettings();
+    const url = (s.cloudUrl || CLOUD_DEFAULT_URL).trim();
+    if (!url) return;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "warmup" })
+    });
+  } catch (e) { /* ignore */ }
 }
 
 /* ---------------- 同步主流程 ---------------- */
@@ -648,6 +662,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     loginCloud(msg.username || "", msg.password || "")
       .then((r) => sendResponse({ ok: true, result: r }))
       .catch((e) => sendResponse({ ok: false, error: e.message || String(e) }));
+    return true;
+  }
+  if (msg && msg.type === "warmup") {
+    warmUpCloud();
+    sendResponse({ ok: true });
     return true;
   }
   if (msg && msg.type === "logout") {

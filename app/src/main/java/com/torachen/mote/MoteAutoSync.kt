@@ -33,7 +33,7 @@ object MoteAutoSync {
     private const val TAG = "MoteAutoSync"
     private const val PREFS = "mote_prefs"
     private const val KEY_LAST_SYNC = "sync_last_modified"
-    private const val DEBOUNCE_MS = 1200L
+    private const val DEBOUNCE_MS = 800L
     private const val INTERVAL_MS = 60_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -44,6 +44,7 @@ object MoteAutoSync {
     @Volatile private var syncing = false
     @Volatile private var applyingRemote = false
     @Volatile private var suppressUntil = 0L
+    @Volatile private var lastRequestAt = 0L
 
     /** 同步项对应的偏好键 */
     private val DATA_KEYS = setOf(
@@ -111,6 +112,10 @@ object MoteAutoSync {
 
     /** 请求一次后台同步（不等结果），用于打开书签/历史等界面时刷新数据 */
     fun requestSync(context: Context) {
+        val now = System.currentTimeMillis()
+        // 4 秒内重复请求直接忽略，避免打开书签/历史两个页面时连发两次
+        if (now - lastRequestAt < 4000L) return
+        lastRequestAt = now
         val app = context.applicationContext
         scope.launch { syncNow(app) }
     }
