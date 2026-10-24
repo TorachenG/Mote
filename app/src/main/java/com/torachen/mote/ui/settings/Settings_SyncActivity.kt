@@ -96,6 +96,8 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+import com.torachen.mote.MoteAutoSync
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -555,6 +557,29 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
     var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var showE2eeDialog by remember { mutableStateOf(false) }
+    var syncFrequencyIndex by remember {
+        mutableIntStateOf(
+            prefs.getInt(MoteAutoSync.KEY_FREQUENCY, MoteAutoSync.FREQ_STARTUP)
+                .coerceIn(0, MoteAutoSync.FREQUENCY_OPTIONS.lastIndex)
+        )
+    }
+    val syncFrequencyEntries = remember(syncFrequencyIndex) {
+        listOf(
+            DropdownEntry(
+                items = MoteAutoSync.FREQUENCY_OPTIONS.mapIndexed { index, label ->
+                    DropdownItem(
+                        text = label,
+                        selected = syncFrequencyIndex == index,
+                        onClick = {
+                            syncFrequencyIndex = index
+                            prefs.edit().putInt(MoteAutoSync.KEY_FREQUENCY, index).apply()
+                            MoteAutoSync.restart(context)
+                        },
+                    )
+                },
+            )
+        )
+    }
     var isSyncing by remember { mutableStateOf(false) }
     var conflictData by remember { mutableStateOf<Pair<MoteCloudSyncManager.SyncData, MoteCloudSyncManager.SyncData>?>(null) }
 
@@ -847,6 +872,11 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                         )
                                     }
                                 }
+                                WindowDropdownPreference(
+                                    title = "同步频率",
+                                    entries = syncFrequencyEntries,
+                                    collapseOnSelection = true,
+                                )
                                 SwitchPreference(
                                     title = "高级数据保护",
                                     summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
@@ -1188,6 +1218,12 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
     var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var showE2eeDialog by remember { mutableStateOf(false) }
+    var syncFrequencyIndex by remember {
+        mutableIntStateOf(
+            prefs.getInt(MoteAutoSync.KEY_FREQUENCY, MoteAutoSync.FREQ_STARTUP)
+                .coerceIn(0, MoteAutoSync.FREQUENCY_OPTIONS.lastIndex)
+        )
+    }
     var isSyncing by remember { mutableStateOf(false) }
     var conflictData by remember { mutableStateOf<Pair<MoteCloudSyncManager.SyncData, MoteCloudSyncManager.SyncData>?>(null) }
 
@@ -1502,6 +1538,19 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                     )
                                                 }
                                             }
+                                        }
+                                        add {
+                                            M3SegmentDropdownItem(
+                                                title = "同步频率",
+                                                summary = null,
+                                                options = MoteAutoSync.FREQUENCY_OPTIONS,
+                                                selectedIndex = syncFrequencyIndex,
+                                                onSelected = { index ->
+                                                    syncFrequencyIndex = index
+                                                    prefs.edit().putInt(MoteAutoSync.KEY_FREQUENCY, index).apply()
+                                                    MoteAutoSync.restart(context)
+                                                },
+                                            )
                                         }
                                         add {
                                             M3SegmentSwitchItem(

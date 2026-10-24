@@ -23,6 +23,7 @@ class MoteApplication : Application() {
         if (prefs.getBoolean(KEY_PRIVACY_AGREED, false)) {
             initAptabase(DEFAULT_APP_KEY)
             tryAutoSync()
+            MoteAutoSync.start(this)
         }
     }
 
@@ -51,9 +52,6 @@ class MoteApplication : Application() {
         if (!prefs.getBoolean("sync_auto_on_start", true)) return
 
         val provider = prefs.getString("sync_provider", "cloudbase") ?: "cloudbase"
-
-        val lastSync = prefs.getLong("sync_last_modified", 0L)
-        if (System.currentTimeMillis() - lastSync < 10 * 60 * 1000L) return
 
         CoroutineScope(Dispatchers.IO).launch {
             if (provider == "cloudbase") {
