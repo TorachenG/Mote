@@ -55,6 +55,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton as M3IconButton
@@ -122,6 +123,7 @@ import top.yukonga.miuix.kmp.icon.extended.File as FileIcon
 import top.yukonga.miuix.kmp.icon.extended.Folder as FolderIcon
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
+import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -195,6 +197,18 @@ private class FileManagerController(
         selected = emptyList()
         pickDir = parent
         return true
+    }
+
+    fun allEntries(): List<FsEntry> = entriesOf(currentDir)
+
+    fun allSelected(): Boolean {
+        val all = allEntries()
+        return all.isNotEmpty() && selected.size >= all.size
+    }
+
+    fun toggleSelectAll() {
+        val all = allEntries()
+        selected = if (allSelected()) emptyList() else all
     }
 
     fun toggle(entry: FsEntry) {
@@ -278,7 +292,8 @@ private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (Str
     val name = file.name.lowercase()
     val uri = try {
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "无法读取文件：${e.message ?: "路径不受支持"}", android.widget.Toast.LENGTH_SHORT).show()
         return
     }
 
@@ -305,7 +320,8 @@ private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (Str
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(Intent.createChooser(intent, "打开文件").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "没有可以打开该文件的应用", android.widget.Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -607,6 +623,20 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?, 
                             backCardAlpha = backCardAlpha,
                             backCardMaterialModifier = backCardMaterialModifier,
                             iconTint = MiuixTheme.colorScheme.onSurface,
+                        )
+                    }
+                },
+                actions = {
+                    if (controller.selecting) {
+                        val allSelected = controller.allSelected()
+                        SettingsTopBarAction(
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardMaterialModifier,
+                            onClick = { controller.toggleSelectAll() },
+                            contentDescription = "全选",
+                            icon = MiuixIcons.SelectAll,
+                            tint = if (allSelected) MiuixTheme.colorScheme.primary
+                            else MiuixTheme.colorScheme.onSurface,
                         )
                     }
                 },
@@ -955,6 +985,13 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                         }
                     }) {
                         M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    if (controller.selecting) {
+                        M3IconButton(onClick = { controller.toggleSelectAll() }) {
+                            M3Icon(Icons.Filled.SelectAll, contentDescription = "全选")
+                        }
                     }
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
