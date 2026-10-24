@@ -1884,117 +1884,337 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
 }
 
 /**
- * 与其它浏览器同步：图文教程页，沿用设置页同一套骨架。
+ * 与其它浏览器同步：图文教程页，完全沿用设置页骨架。
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSyncBrowsersPage(
     onBack: () -> Unit,
     onOpenUrl: (String) -> Unit,
 ) {
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> SettingsSyncBrowsersMiuix(onBack, onOpenUrl)
+        UiMode.Material -> SettingsSyncBrowsersMaterial(onBack, onOpenUrl)
+    }
+}
+
+private const val BROWSER_SYNC_STORE_URL =
+    "https://microsoftedge.microsoft.com/addons/detail/gknjcogfnimdkgnefmiajfcfopgbfpcg"
+
+@Composable
+private fun SettingsSyncBrowsersMiuix(
+    onBack: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+) {
+    val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
-    val surface = MiuixTheme.colorScheme.surface
+
+    val surfaceColor = MiuixTheme.colorScheme.surface
+    val blurSupported = isRuntimeShaderSupported()
+    val backdrop = if (blurSupported) {
+        rememberLayerBackdrop {
+            drawRect(surfaceColor)
+            drawContent()
+        }
+    } else null
+
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var progressiveTitleBlur by remember {
+        mutableStateOf(prefs.getBoolean(KEY_PROGRESSIVE_TITLE_BLUR, true))
+    }
+    var materialStyle by remember {
+        mutableIntStateOf(prefs.getInt("ui_material_style", 2))
+    }
+    DisposableEffect(Unit) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                KEY_PROGRESSIVE_TITLE_BLUR -> progressiveTitleBlur = prefs.getBoolean(key, true)
+                "ui_material_style" -> materialStyle = prefs.getInt(key, 2)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
+    val listState = rememberLazyListState()
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                    listState.firstVisibleItemScrollOffset == 0 &&
+                    !listState.isScrollInProgress
+        }
+    }
+    val themeIsDark = surfaceColor.luminance() < 0.5f
+    val backCardAlpha by animateFloatAsState(
+        targetValue = if (isAtTop || !progressiveTitleBlur) 0f else 1f,
+        animationSpec = tween(400, easing = SmoothEase),
+        label = "settingsBackCardAlpha",
+    )
+    val backCardMaterialModifier = if (progressiveTitleBlur) {
+        buildBackCardMaterialModifier(materialStyle, blurSupported, backdrop, themeIsDark)
+    } else {
+        Modifier
+    }
+    val titleBarBlendColorEntries = remember(surfaceColor) {
+        listOf(BlendColorEntry(color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)))
+    }
+
     val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    var topBarBottomPx by remember { mutableIntStateOf(0) }
-    val contentTopPadding = if (topBarBottomPx > 0) {
-        with(density) { topBarBottomPx.toDp() }
-    } else {
-        statusBarHeight + 128.dp
-    }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
-    Box(modifier = Modifier.fillMaxSize().background(surface)) {
-        LazyColumn(
-            state = listState,
+    var topBarBottomPx by remember { mutableIntStateOf(0) }
+    val measuredTop = with(density) { topBarBottomPx.toDp() }
+    val contentTopPadding = if (topBarBottomPx > 0) measuredTop else statusBarHeight + TOP_BAR_FALLBACK_HEIGHT
+
+    CompositionLocalProvider(
+        LocalNavigationEventDispatcherOwner provides navOwner
+    ) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .overScrollVertical(),
-            contentPadding = PaddingValues(top = contentTopPadding, bottom = 24.dp),
-            overscrollEffect = null,
+                .background(surfaceColor)
         ) {
-            item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp)) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                        Text(
-                            "在电脑浏览器里同步 Mote 的书签",
-                            style = MiuixTheme.textStyles.title4,
-                            color = MiuixTheme.colorScheme.onSurface,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "安装 Mote 书签同步扩展，用与手机相同的账号登录，即可双向同步书签。",
-                            style = MiuixTheme.textStyles.body2,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Image(
-                            painter = painterResource(id = com.torachen.mote.R.drawable.sync_browsers_store),
-                            contentDescription = null,
-                            contentScale = ContentScale.FillWidth,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    onOpenUrl("https://microsoftedge.microsoft.com/addons/detail/gknjcogfnimdkgnefmiajfcfopgbfpcg")
-                                },
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        StepText("1. 打开扩展商店，点击「获取」安装「Mote 书签同步」。")
-                        StepText("2. 安装完成后，在浏览器工具栏点击 Mote 图标，选择「打开设置」。")
-                        StepText("3. 用与 Mote 相同的账号和密码登录，等待首次同步完成。")
-                        StepText("4. 之后在浏览器新增、修改或删除书签，都会与 Mote 双向同步。")
-                        Spacer(Modifier.height(12.dp))
-                        Button(
-                            onClick = {
-                                onOpenUrl("https://microsoftedge.microsoft.com/addons/detail/gknjcogfnimdkgnefmiajfcfopgbfpcg")
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("前往扩展商店") }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (blurSupported && backdrop != null) {
+                            Modifier.layerBackdrop(backdrop)
+                        } else Modifier
+                    )
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .scrollEndHaptic()
+                        .overScrollVertical(),
+                    contentPadding = PaddingValues(top = contentTopPadding + 4.dp),
+                    overscrollEffect = null,
+                ) {
+                    item(key = "content") {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                    Text(
+                                        "在电脑浏览器里同步 Mote 的书签",
+                                        style = MiuixTheme.textStyles.title4,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "安装 Mote 书签同步扩展，用与手机相同的账号登录，即可双向同步书签。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    Image(
+                                        painter = painterResource(id = com.torachen.mote.R.drawable.sync_browsers_store),
+                                        contentDescription = "扩展商店",
+                                        contentScale = ContentScale.FillWidth,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { onOpenUrl(BROWSER_SYNC_STORE_URL) },
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    Text(
+                                        "1. 打开扩展商店，点击「获取」安装「Mote 书签同步」。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "2. 安装完成后，在浏览器工具栏点击 Mote 图标，选择「打开设置」。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "3. 用与 Mote 相同的账号和密码登录，等待首次同步完成。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "4. 之后在浏览器新增、修改或删除书签，都会与 Mote 双向同步。",
+                                        style = MiuixTheme.textStyles.body2,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    ArrowPreference(
+                                        title = "前往扩展商店",
+                                        onClick = { onOpenUrl(BROWSER_SYNC_STORE_URL) },
+                                    )
+                                }
+                            }
+
+                            Spacer(
+                                modifier = Modifier.height(
+                                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+                                )
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .background(surface)
-                .statusBarsPadding()
-                .onGloballyPositioned { coords ->
-                    val bottom = coords.boundsInWindow().bottom.toInt()
-                    if (bottom != topBarBottomPx) topBarBottomPx = bottom
-                },
-        ) {
-            TopAppBar(
-                title = "与其它浏览器同步",
-                largeTitle = "与其它浏览器同步",
-                scrollBehavior = scrollBehavior,
-                color = Color.Transparent,
-                defaultWindowInsetsPadding = false,
-                navigationIcon = {
-                    SettingsBackButton(
-                        onBack = onBack,
-                        progressiveTitleBlur = false,
-                        backCardAlpha = 0f,
-                        backCardMaterialModifier = Modifier,
-                        iconTint = MiuixTheme.colorScheme.onSurface,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .then(
+                        if (blurSupported && backdrop != null && materialStyle != 0) {
+                            if (progressiveTitleBlur) {
+                                Modifier.progressiveTextureBlur(
+                                    backdrop = backdrop,
+                                    shape = RectangleShape,
+                                    blurRadius = TOP_BAR_BLUR_RADIUS,
+                                    gradient = ProgressiveBlur.Top,
+                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                )
+                            } else {
+                                Modifier.textureBlur(
+                                    backdrop = backdrop,
+                                    shape = RectangleShape,
+                                    blurRadius = TOP_BAR_BLUR_RADIUS,
+                                    noiseCoefficient = BlurDefaults.NoiseCoefficient,
+                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                )
+                            }
+                        } else {
+                            Modifier.background(surfaceColor)
+                        }
                     )
-                },
-            )
+                    .statusBarsPadding()
+                    .onGloballyPositioned { coords ->
+                        val bottomPx = coords.boundsInWindow().bottom.toInt()
+                        if (bottomPx != topBarBottomPx) {
+                            topBarBottomPx = bottomPx
+                        }
+                    }
+            ) {
+                TopAppBar(
+                    title = "与其它浏览器同步",
+                    largeTitle = "与其它浏览器同步",
+                    scrollBehavior = scrollBehavior,
+                    color = Color.Transparent,
+                    defaultWindowInsetsPadding = false,
+                    navigationIcon = {
+                        SettingsBackButton(
+                            onBack = onBack,
+                            progressiveTitleBlur = progressiveTitleBlur,
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardMaterialModifier,
+                            iconTint = MiuixTheme.colorScheme.onSurface,
+                        )
+                    }
+                )
+            }
         }
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun StepText(text: String) {
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
-        Text(
-            text,
-            style = MiuixTheme.textStyles.body2,
-            color = MiuixTheme.colorScheme.onSurface,
-        )
+private fun SettingsSyncBrowsersMaterial(
+    onBack: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+) {
+    val navOwner = rememberNavigationEventDispatcherOwner()
+    val pageBg = M3MaterialTheme.colorScheme.surface
+
+    CompositionLocalProvider(
+        LocalNavigationEventDispatcherOwner provides navOwner
+    ) {
+        M3Scaffold(
+            containerColor = pageBg,
+            contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.captionBar),
+            topBar = {
+                M3TopAppBar(
+                    title = { M3Text("与其它浏览器同步") },
+                    navigationIcon = {
+                        M3IconButton(onClick = onBack) {
+                            M3Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    colors = M3TopAppBarDefaults.topAppBarColors(containerColor = pageBg),
+                )
+            },
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
+                item(key = "content") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        M3Surface(
+                            shape = androidx.compose.material3.MaterialTheme.shapes.large,
+                            color = M3MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                M3Text(
+                                    "在电脑浏览器里同步 Mote 的书签",
+                                    style = M3MaterialTheme.typography.titleMedium,
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                M3Text(
+                                    "安装 Mote 书签同步扩展，用与手机相同的账号登录，即可双向同步书签。",
+                                    style = M3MaterialTheme.typography.bodyMedium,
+                                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                Image(
+                                    painter = painterResource(id = com.torachen.mote.R.drawable.sync_browsers_store),
+                                    contentDescription = "扩展商店",
+                                    contentScale = ContentScale.FillWidth,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { onOpenUrl(BROWSER_SYNC_STORE_URL) },
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                M3Text(
+                                    "1. 打开扩展商店，点击「获取」安装「Mote 书签同步」。\n" +
+                                            "2. 安装完成后，在浏览器工具栏点击 Mote 图标，选择「打开设置」。\n" +
+                                            "3. 用与 Mote 相同的账号和密码登录，等待首次同步完成。\n" +
+                                            "4. 之后在浏览器新增、修改或删除书签，都会与 Mote 双向同步。",
+                                    style = M3MaterialTheme.typography.bodyMedium,
+                                )
+                                Spacer(Modifier.height(16.dp))
+                                M3Text(
+                                    "前往扩展商店",
+                                    style = M3MaterialTheme.typography.bodyLarge,
+                                    color = M3MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenUrl(BROWSER_SYNC_STORE_URL) }
+                                        .padding(vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
