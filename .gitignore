@@ -23,3 +23,7 @@ local.properties
 /baselineprofile/build
 /app/src/release/generated
 cloudbase/admin/
+
+# build outputs
+*.apk
+*.aab
