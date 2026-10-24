@@ -1004,7 +1004,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
             onDismissRequest = { showE2eeDialog = false }
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(text = "开启后，同步数据只有用你的账号密码才能解开，云端（包括我们在内）都看不到内容。\n\n但有三点要注意：\n\n一、忘记密码就真的找不回来了，重置密码也没用，云端的数据会变成一堆解不开的乱码。\n\n二、以后如果改了密码，之前同步上去的数据会解不开，需要重新同步一次。\n\n三、密码越简单越容易被暴力破解，请用足够复杂的密码。", color = MiuixTheme.colorScheme.onSurface)
+                Text(text = "开启后，同步数据仅能由你的账号密码解密，服务端无法读取内容。\n\n需注意：\n1. 忘记密码将无法恢复数据，重置密码同样无效。\n2. 修改密码后，已同步的数据需重新同步一次。\n3. 建议使用足够复杂的密码，避免被暴力破解。", color = MiuixTheme.colorScheme.onSurface)
                 Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { showE2eeDialog = false },
@@ -1567,7 +1567,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
             title = { M3Text("开启高级数据保护") },
             text = {
                 Box(modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    M3Text("开启后，同步数据只有用你的账号密码才能解开，云端（包括我们在内）都看不到内容。\n\n但有三点要注意：\n\n一、忘记密码就真的找不回来了，重置密码也没用，云端的数据会变成一堆解不开的乱码。\n\n二、以后如果改了密码，之前同步上去的数据会解不开，需要重新同步一次。\n\n三、密码越简单越容易被暴力破解，请用足够复杂的密码。", style = M3MaterialTheme.typography.bodyMedium)
+                    M3Text("开启后，同步数据仅能由你的账号密码解密，服务端无法读取内容。\n\n需注意：\n1. 忘记密码将无法恢复数据，重置密码同样无效。\n2. 修改密码后，已同步的数据需重新同步一次。\n3. 建议使用足够复杂的密码，避免被暴力破解。", style = M3MaterialTheme.typography.bodyMedium)
                 }
             },
             confirmButton = {
