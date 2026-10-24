@@ -65,6 +65,7 @@ import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -119,8 +120,10 @@ import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.File as FileIcon
 import top.yukonga.miuix.kmp.icon.extended.Folder as FolderIcon
+import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
@@ -175,8 +178,7 @@ private class FileManagerController(
         }
         dirEntries = dirEntries + (dir.absolutePath to list)
         val path = dir.absolutePath
-        needsAllFiles = !hasAllFiles(context) &&
-            (path.contains("/Android/data") || path.contains("/Android/obb"))
+        needsAllFiles = !hasAllFiles(context)
     }
 
     fun enter(dir: java.io.File) {
@@ -376,18 +378,31 @@ fun FileManagerPage(
         }
     }
 
+    var infoItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     val toastText = toast ?: if (running) "正在处理…" else null
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> FileManagerMiuix(controller, toastText)
-        UiMode.Material -> FileManagerMaterial(controller, toastText)
+        UiMode.Miuix -> FileManagerMiuix(controller, toastText, onInfo = { infoItems = it })
+        UiMode.Material -> FileManagerMaterial(controller, toastText, onInfo = { infoItems = it })
+    }
+
+    if (infoItems.isNotEmpty()) {
+        FileInfoDialog(
+            items = infoItems,
+            onJump = { target ->
+                controller.enter(target)
+                controller.selected = emptyList()
+                infoItems = emptyList()
+            },
+            onDismiss = { infoItems = emptyList() },
+        )
     }
 }
 
 /* ---------------- MIUIX ---------------- */
 
 @Composable
-private fun FileManagerMiuix(controller: FileManagerController, toast: String?) {
+private fun FileManagerMiuix(controller: FileManagerController, toast: String?, onInfo: (List<FsEntry>) -> Unit) {
     val scrollBehavior = MiuixScrollBehavior()
     val density = LocalDensity.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -497,7 +512,7 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                     if (controller.needsAllFiles) {
                         item {
                             BasicComponent(
-                                title = "需要「所有文件访问权限」才能浏览 Android/data",
+                                title = "需要「所有文件访问权限」才能显示全部文件（含未知格式）",
                                 summary = "点击去授权",
                                 onClick = { requestAllFiles(controller.context) },
                             )
@@ -615,6 +630,7 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
                     onExtract = { one -> controller.extract(one); controller.selected = emptyList() },
+                    onInfo = { onInfo(controller.selected.ifEmpty { barItems }) },
                 )
             }
         }
@@ -764,6 +780,7 @@ private fun MiuixActionBar(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onExtract: (FsEntry) -> Unit,
+    onInfo: () -> Unit,
 ) {
     val single = items.size == 1
     val one = items.firstOrNull()
@@ -782,6 +799,7 @@ private fun MiuixActionBar(
         if (single && one != null && !one.isDir && isArchive(one.file.name)) {
             CapsuleAction(MiuixIcons.FolderIcon, "解压", enabled = true) { onExtract(one) }
         }
+        CapsuleAction(MiuixIcons.Info, "关于", enabled = true) { onInfo() }
     }
 }
 
@@ -841,7 +859,7 @@ private fun MiuixPickBar(controller: FileManagerController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FileManagerMaterial(controller: FileManagerController, toast: String?) {
+private fun FileManagerMaterial(controller: FileManagerController, toast: String?, onInfo: (List<FsEntry>) -> Unit) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
@@ -991,6 +1009,9 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                                     controller.selected = emptyList()
                                 }
                             }
+                            M3CapsuleAction(Icons.Filled.Folder, "关于", true) {
+                                onInfo(controller.selected.ifEmpty { barItems })
+                            }
                         }
                     }
                 }
@@ -1094,5 +1115,67 @@ private fun ToastText(text: String) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Text(text, fontSize = 13.sp, color = Color.White)
+    }
+}
+
+@Composable
+private fun FileInfoDialog(
+    items: List<FsEntry>,
+    onJump: (java.io.File) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val single = items.size == 1
+    val one = items.firstOrNull()
+    val title = if (single && one != null) one.file.name else {
+        val first = one?.file?.name ?: ""
+        "$first 等 ${items.size} 个文件"
+    }
+    val totalSize = items.sumOf { if (it.isDir) 0L else it.size }
+
+    WindowDialog(show = true, title = title, onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (single && one != null) {
+                InfoRow("位置") {
+                    Column {
+                        Text(
+                            one.file.absolutePath,
+                            fontSize = 13.sp,
+                            color = MiuixTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { onJump(one.file.parentFile ?: one.file) },
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                        )
+                    }
+                }
+                InfoRow("大小") { Text(if (one.isDir) "文件夹" else fmFormatSize(one.size), fontSize = 13.sp) }
+                InfoRow("时间") { Text(fmFormatTime(one.modified), fontSize = 13.sp) }
+                InfoRow("可读") { Text(if (one.file.canRead()) "是" else "否", fontSize = 13.sp) }
+                InfoRow("可写") { Text(if (one.file.canWrite()) "是" else "否", fontSize = 13.sp) }
+                InfoRow("隐藏") { Text(if (one.file.isHidden) "是" else "否", fontSize = 13.sp) }
+            } else {
+                InfoRow("总计大小") { Text(fmFormatSize(totalSize), fontSize = 13.sp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: @Composable () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(
+            label,
+            fontSize = 14.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.width(88.dp),
+        )
+        Box(modifier = Modifier.weight(1f)) { value() }
     }
 }
