@@ -29,6 +29,15 @@ function updateProviderUI() {
   $("webdavBox").classList.toggle("hidden", isCloud);
 }
 
+function renderStatus(s) {
+  const parts = [];
+  parts.push(s.uid ? "已登录：@" + (s.username || "未知") : "未登录");
+  parts.push(s.hasKey ? "端到端密钥已就绪" : "仅普通加密");
+  parts.push("上次同步：" + fmtTime(s.lastSyncAt));
+  if (s.lastStatus === "error" && s.lastError) parts.push("最近错误：" + s.lastError);
+  setStatus($("status"), parts.join(" · "), s.lastStatus === "error" ? "err" : "");
+}
+
 async function load() {
   const s = await send({ type: "get-settings" });
   $("username").value = s.username || "";
@@ -42,13 +51,13 @@ async function load() {
     input.checked = input.value === (s.provider || "cloud");
   });
   updateProviderUI();
+  renderStatus(s);
+}
 
-  const parts = [];
-  parts.push(s.uid ? "已登录：@" + (s.username || "未知") : "未登录");
-  parts.push(s.hasKey ? "端到端密钥已就绪" : "仅普通加密");
-  parts.push("上次同步：" + fmtTime(s.lastSyncAt));
-  if (s.lastStatus === "error" && s.lastError) parts.push("最近错误：" + s.lastError);
-  setStatus($("status"), parts.join(" · "), s.lastStatus === "error" ? "err" : "");
+/** 定时只刷新状态文字，不回填输入框，避免打断正在输入的内容 */
+async function refreshStatusOnly() {
+  const s = await send({ type: "get-settings" });
+  renderStatus(s);
 }
 
 async function saveSettings() {
@@ -115,4 +124,4 @@ $("autoSync").addEventListener("change", saveSettings);
 $("intervalMinutes").addEventListener("change", saveSettings);
 
 load();
-setInterval(load, 4000);
+setInterval(refreshStatusOnly, 5000);
