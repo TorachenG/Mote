@@ -2049,12 +2049,19 @@ private fun SettingsSyncBrowsersMiuix(
                                         style = MiuixTheme.textStyles.body2,
                                         color = MiuixTheme.colorScheme.onSurface,
                                     )
-                                    Spacer(Modifier.height(16.dp))
-                                    ArrowPreference(
-                                        title = "前往扩展商店",
-                                        onClick = { onOpenUrl(BROWSER_SYNC_STORE_URL) },
-                                    )
                                 }
+                            }
+
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                ArrowPreference(
+                                    title = "前往扩展商店",
+                                    summary = "在 Edge 加载项商店安装 Mote 书签同步",
+                                    onClick = { onOpenUrl(BROWSER_SYNC_STORE_URL) },
+                                )
                             }
 
                             Spacer(
@@ -2200,18 +2207,21 @@ private fun SettingsSyncBrowsersMaterial(
                                             "4. 之后在浏览器新增、修改或删除书签，都会与 Mote 双向同步。",
                                     style = M3MaterialTheme.typography.bodyMedium,
                                 )
-                                Spacer(Modifier.height(16.dp))
-                                M3Text(
-                                    "前往扩展商店",
-                                    style = M3MaterialTheme.typography.bodyLarge,
-                                    color = M3MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onOpenUrl(BROWSER_SYNC_STORE_URL) }
-                                        .padding(vertical = 8.dp),
-                                )
                             }
                         }
+
+                        Spacer(Modifier.height(M3_SEGMENT_GROUP_GAP))
+
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentArrowItem(
+                                        title = "前往扩展商店",
+                                        onClick = { onOpenUrl(BROWSER_SYNC_STORE_URL) },
+                                    )
+                                }
+                            )
+                        )
                     }
                 }
             }
