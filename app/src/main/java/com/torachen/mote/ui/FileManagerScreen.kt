@@ -1170,7 +1170,6 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
             "$label：",
             style = MiuixTheme.textStyles.body1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier.width(96.dp),
         )
         Box(modifier = Modifier.weight(1f)) { value() }
     }
