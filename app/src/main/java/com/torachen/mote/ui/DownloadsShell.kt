@@ -60,8 +60,8 @@ import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Folder
+import top.yukonga.miuix.kmp.icon.extended.FileDownloads
+import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -190,7 +190,7 @@ private fun DownloadsShellMiuix(
                         modifier = Modifier.defaultMinSize(minWidth = 76.dp),
                     ) {
                         top.yukonga.miuix.kmp.basic.Icon(
-                            imageVector = MiuixIcons.Download,
+                            imageVector = MiuixIcons.FileDownloads,
                             contentDescription = "下载",
                             tint = if (tab == 0) MiuixTheme.colorScheme.primary
                             else MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -212,7 +212,7 @@ private fun DownloadsShellMiuix(
                         modifier = Modifier.defaultMinSize(minWidth = 76.dp),
                     ) {
                         top.yukonga.miuix.kmp.basic.Icon(
-                            imageVector = MiuixIcons.Folder,
+                            imageVector = MiuixIcons.FolderFill,
                             contentDescription = "文件",
                             tint = if (tab == 1) MiuixTheme.colorScheme.primary
                             else MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -239,13 +239,13 @@ private fun DownloadsShellMiuix(
                     NavigationBarItem(
                         selected = tab == 0,
                         onClick = { onTabChange(0) },
-                        icon = MiuixIcons.Download,
+                        icon = MiuixIcons.FileDownloads,
                         label = "下载",
                     )
                     NavigationBarItem(
                         selected = tab == 1,
                         onClick = { onTabChange(1) },
-                        icon = MiuixIcons.Folder,
+                        icon = MiuixIcons.FolderFill,
                         label = "文件",
                     )
                 }
@@ -296,7 +296,7 @@ private fun DownloadsShellMaterial(
                 M3NavigationBarItem(
                     selected = tab == 0,
                     onClick = { onTabChange(0) },
-                    icon = { M3Icon(MiuixIcons.Download, contentDescription = "下载") },
+                    icon = { M3Icon(MiuixIcons.FileDownloads, contentDescription = "下载") },
                     label = { M3Text("下载") },
                 )
                 M3NavigationBarItem(

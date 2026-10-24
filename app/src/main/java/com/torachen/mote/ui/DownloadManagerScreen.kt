@@ -163,7 +163,7 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.More
@@ -1089,7 +1089,7 @@ private fun DownloadManagerScreenMiuix(
                                 Card(modifier = Modifier.padding(horizontal = 12.dp).padding(top = 12.dp, bottom = 12.dp)) {
                                     Box(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), contentAlignment = Alignment.Center) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(imageVector = MiuixIcons.Download, contentDescription = null, tint = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.size(48.dp))
+                                            Icon(imageVector = MiuixIcons.FileDownloads, contentDescription = null, tint = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.size(48.dp))
                                             Spacer(Modifier.height(12.dp))
                                             Text(text = "下载列表为空", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                                         }
@@ -2566,7 +2566,7 @@ private fun M3DownloadEmptyState() {
         M3Surface(shape = RoundedCornerShape(DOWNLOAD_SEG_BIG_CORNER), color = downloadItemSurfaceColor(), contentColor = M3MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth()) {
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    M3Icon(imageVector = MiuixIcons.Download, contentDescription = null, tint = M3MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
+                    M3Icon(imageVector = MiuixIcons.FileDownloads, contentDescription = null, tint = M3MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
                     M3Text(text = "下载列表为空", style = M3MaterialTheme.typography.bodyMedium, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
                 }

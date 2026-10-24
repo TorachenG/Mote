@@ -139,7 +139,7 @@ import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.File as FileIcon
-import top.yukonga.miuix.kmp.icon.extended.Folder as FolderIcon
+import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
@@ -956,7 +956,7 @@ private fun EntryThumb(entry: FsEntry) {
             )
         } else {
             Icon(
-                imageVector = if (entry.isDir || isArchive(entry.file.name)) MiuixIcons.FolderIcon
+                imageVector = if (entry.isDir || isArchive(entry.file.name)) MiuixIcons.FolderFill
                 else MiuixIcons.FileIcon,
                 contentDescription = null,
                 tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
