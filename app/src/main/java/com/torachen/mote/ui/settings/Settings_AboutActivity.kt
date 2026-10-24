@@ -217,6 +217,8 @@ private data class AboutPageActions(
     val onCheckUpdate: () -> Unit,
     val onAutoCheckUpdateChange: (Int) -> Unit,
     val onDownloadSourceChange: (Int) -> Unit,
+    val onOpenContact: () -> Unit,
+    val onOpenWebsite: () -> Unit,
 )
 
 // ============================================================
@@ -275,6 +277,7 @@ private fun MoteStarCanvas(modifier: Modifier = Modifier) {
 @Composable
 fun SettingsAboutPage(
     onBack: () -> Unit,
+    onOpenUrl: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -303,6 +306,14 @@ fun SettingsAboutPage(
     var updateState by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var isDownloading by remember { mutableStateOf(false) }
+    var showContactSheet by remember { mutableStateOf(false) }
+
+    fun openInMote(url: String) {
+        try {
+            onOpenUrl(url)
+        } catch (_: Exception) {
+        }
+    }
 
     fun performCheck() {
         if (updateState is UpdateState.Checking) return
@@ -352,6 +363,8 @@ fun SettingsAboutPage(
             prefs.edit().putInt(KEY_DOWNLOAD_SOURCE, index).apply()
             updateState = UpdateState.Idle
         },
+        onOpenContact = { showContactSheet = true },
+        onOpenWebsite = { openInMote("https://toracheng.github.io/Mote") },
     )
 
     when (LocalUiMode.current) {
@@ -365,6 +378,23 @@ fun SettingsAboutPage(
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides dialogNavOwner
     ) {
+        ContactBottomSheet(
+            show = showContactSheet,
+            onDismiss = { showContactSheet = false },
+            onOpenGithub = {
+                showContactSheet = false
+                openInMote("https://github.com/TorachenG/Mote/issues")
+            },
+            onOpenGitee = {
+                showContactSheet = false
+                openInMote("https://gitee.com/TorachenG/Mote/issues")
+            },
+            onOpenWebsite = {
+                showContactSheet = false
+                openInMote("https://toracheng.github.io/Mote")
+            },
+        )
+
         UpdateDialog(
             show = showUpdateDialog && updateInfo != null,
             info = updateInfo,
@@ -852,7 +882,12 @@ private fun SettingsAboutMiuix(
                                 ) {
                                     ArrowPreference(
                                         title = "联系与反馈",
-                                        onClick = {},
+                                        onClick = { actions.onOpenContact() },
+                                    )
+                                    ArrowPreference(
+                                        title = "官方网站",
+                                        summary = "toracheng.github.io/Mote",
+                                        onClick = { actions.onOpenWebsite() },
                                     )
                                 }
 
@@ -1071,7 +1106,14 @@ private fun SettingsAboutMaterial(
                                 {
                                     M3SegmentItem(
                                         headline = { M3Text("联系与反馈") },
-                                        onClick = { },
+                                        onClick = { actions.onOpenContact() },
+                                    )
+                                },
+                                {
+                                    M3SegmentItem(
+                                        headline = { M3Text("官方网站") },
+                                        supporting = { M3Text("toracheng.github.io/Mote", color = M3MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        onClick = { actions.onOpenWebsite() },
                                     )
                                 },
                             )
@@ -1086,6 +1128,57 @@ private fun SettingsAboutMaterial(
 // ============================================================
 // 更新弹窗
 // ============================================================
+
+@Composable
+private fun ContactBottomSheet(
+    show: Boolean,
+    onDismiss: () -> Unit,
+    onOpenGithub: () -> Unit,
+    onOpenGitee: () -> Unit,
+    onOpenWebsite: () -> Unit,
+) {
+    WindowBottomSheet(
+        show = show,
+        onDismissRequest = onDismiss,
+        title = "联系与反馈",
+        backgroundColor = MiuixTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    ArrowPreference(
+                        title = "GitHub Issues",
+                        summary = "提交问题、提出建议",
+                        onClick = onOpenGithub,
+                    )
+                    ArrowPreference(
+                        title = "Gitee Issues",
+                        summary = "国内访问更稳定",
+                        onClick = onOpenGitee,
+                    )
+                    ArrowPreference(
+                        title = "官方网站",
+                        summary = "toracheng.github.io/Mote",
+                        onClick = onOpenWebsite,
+                    )
+                }
+            }
+
+            top.yukonga.miuix.kmp.basic.Button(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("关闭") }
+        }
+    }
+}
 
 @Composable
 internal fun UpdateDialog(

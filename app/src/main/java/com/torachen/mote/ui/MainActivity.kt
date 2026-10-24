@@ -3219,6 +3219,18 @@ fun AppRoot() {
         }
     }
 
+    /** 直接回到最底层页面（浏览器主页），用于从设置页跳回主页打开链接 */
+    fun popToRoot() {
+        if (pageStack.size <= 1) return
+        animJob?.cancel()
+        animJob = null
+        val rootId = pageStack.first().id
+        pageStack.removeAll { it.id != rootId }
+        exitingPageId = null
+        backInFlight = false
+        progress = 1f
+    }
+
     fun popPage() {
         if (pageStack.size <= 1) return
         // ★ backInFlight 和 exitingPageId 一起当守卫：手势 pop 进行中也算"在飞"
@@ -3338,6 +3350,7 @@ fun AppRoot() {
     val openSettings: () -> Unit = remember { { pushPage("settings_main") } }
     val openScanner: () -> Unit = remember { { pushPage("scanner") } }
     val handlePop: () -> Unit = remember { { popPage() } }
+    val handlePopRoot: () -> Unit = remember { { popToRoot() } }
     val handlePush: (String) -> Unit = remember { { r -> pushPage(r) } }
 
     CompositionLocalProvider(
@@ -3433,6 +3446,7 @@ fun AppRoot() {
                                 openScanner = openScanner,
                                 onPop = handlePop,
                                 onPush = handlePush,
+                                onPopToRoot = handlePopRoot,
                             )
                         }
 
@@ -3477,6 +3491,7 @@ private fun RenderPageContent(
     openScanner: () -> Unit,
     onPop: () -> Unit,
     onPush: (String) -> Unit,
+    onPopToRoot: () -> Unit,
 ) {
     PageSurface(
         isSettled = surfaceIsSettled,
@@ -3584,7 +3599,13 @@ private fun RenderPageContent(
                 onOpenCacheSettings = { onPush("settings_cache_settings") }
             )
             "settings_cache_settings" -> CacheSettingsPage(onBack = { onPop() })
-            "settings_about" -> SettingsAboutPage(onBack = { onPop() })
+            "settings_about" -> SettingsAboutPage(
+                onBack = { onPop() },
+                onOpenUrl = { url ->
+                    PendingOpenInNewWindowStore.pending = url
+                    onPopToRoot()
+                },
+            )
             else -> SettingsSubPage(
                 title = routeTitle(entry.route),
                 onBack = { onPop() },
