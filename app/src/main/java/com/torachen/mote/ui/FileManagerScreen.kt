@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.widget.Toast
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -88,6 +89,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -111,6 +113,8 @@ import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
@@ -388,12 +392,10 @@ fun FileManagerPage(
 
     LaunchedEffect(controller.currentDir) { controller.reload() }
 
-    val running by FileOpState.running.collectAsState()
     val message by FileOpState.message.collectAsState()
-    var toast by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(message) {
         val msg = message ?: return@LaunchedEffect
-        toast = msg
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         controller.reload()
     }
 
@@ -405,11 +407,51 @@ fun FileManagerPage(
     }
 
     var infoItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
-    val toastText = toast ?: if (running) "正在处理…" else null
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    val requestDelete: () -> Unit = {
+        if (controller.selected.isNotEmpty()) showDeleteDialog = true
+    }
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> FileManagerMiuix(controller, toastText, onInfo = { infoItems = it })
-        UiMode.Material -> FileManagerMaterial(controller, toastText, onInfo = { infoItems = it })
+        UiMode.Miuix -> FileManagerMiuix(controller, onInfo = { infoItems = it }, onDelete = requestDelete)
+        UiMode.Material -> FileManagerMaterial(controller, onInfo = { infoItems = it }, onDelete = requestDelete)
+    }
+
+    if (showDeleteDialog) {
+        WindowDialog(show = true, title = "删除", onDismissRequest = { showDeleteDialog = false }) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    "确定删除 ${controller.selected.size} 个文件？删除后无法找回。",
+                    style = MiuixTheme.textStyles.body1,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { showDeleteDialog = false },
+                        modifier = Modifier.weight(1f),
+                        colors = MiuixButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.secondaryContainer,
+                            contentColor = MiuixTheme.colorScheme.onSurface,
+                        ),
+                    ) { Text("取消") }
+                    Button(
+                        onClick = {
+                            showDeleteDialog = false
+                            controller.deleteSelected()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = MiuixButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.secondaryContainer,
+                            contentColor = Color(0xFFE5484D),
+                        ),
+                    ) { Text("删除", color = Color(0xFFE5484D)) }
+                }
+            }
+        }
     }
 
     if (infoItems.isNotEmpty()) {
@@ -428,7 +470,7 @@ fun FileManagerPage(
 /* ---------------- MIUIX ---------------- */
 
 @Composable
-private fun FileManagerMiuix(controller: FileManagerController, toast: String?, onInfo: (List<FsEntry>) -> Unit) {
+private fun FileManagerMiuix(controller: FileManagerController, onInfo: (List<FsEntry>) -> Unit, onDelete: () -> Unit) {
     val scrollBehavior = MiuixScrollBehavior()
     val density = LocalDensity.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -670,17 +712,12 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?, 
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
                     onExtract = { one -> controller.extract(one); controller.selected = emptyList() },
-                    onDelete = { controller.deleteSelected() },
+                    onDelete = onDelete,
                     onInfo = { onInfo(controller.selected.ifEmpty { barItems }) },
                 )
             }
         }
 
-        if (toast != null) {
-            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 96.dp)) {
-                ToastText(toast)
-            }
-        }
     }
 }
 
@@ -901,7 +938,7 @@ private fun MiuixPickBar(controller: FileManagerController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FileManagerMaterial(controller: FileManagerController, toast: String?, onInfo: (List<FsEntry>) -> Unit) {
+private fun FileManagerMaterial(controller: FileManagerController, onInfo: (List<FsEntry>) -> Unit, onDelete: () -> Unit) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
@@ -1052,7 +1089,7 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
                             }
                             M3CapsuleAction(Icons.Filled.Folder, "复制", true) { controller.beginMove(PendingOp.COPY) }
                             M3CapsuleAction(Icons.Filled.Folder, "移动", true) { controller.beginMove(PendingOp.MOVE) }
-                            M3CapsuleAction(Icons.Filled.Delete, "删除", true) { controller.deleteSelected() }
+                            M3CapsuleAction(Icons.Filled.Delete, "删除", true) { onDelete() }
                             if (single && one != null && !one.isDir && isArchive(one.file.name)) {
                                 M3CapsuleAction(Icons.Filled.Folder, "解压", true) {
                                     controller.extract(one)
@@ -1068,11 +1105,6 @@ private fun FileManagerMaterial(controller: FileManagerController, toast: String
             }
         }
 
-        if (toast != null) {
-            Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 96.dp)) {
-                ToastText(toast)
-            }
-        }
     }
 }
 
@@ -1156,18 +1188,6 @@ private fun M3CapsuleAction(
     }
 }
 
-@Composable
-private fun ToastText(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xCC2B2B2B))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Text(text, fontSize = 13.sp, color = Color.White)
-    }
-}
-
 private fun dirSize(file: java.io.File): Long {
     if (file.isFile) return file.length()
     var total = 0L
@@ -1218,15 +1238,9 @@ private fun FileInfoDialog(
                         modifier = Modifier.clickable { onJump(one.file.parentFile ?: one.file) },
                     )
                 }
-                InfoRow("类型") {
-                    Text(typeLabel(one.file, one.isDir), style = MiuixTheme.textStyles.body1)
-                }
+                InfoRow("类型") { Text(typeLabel(one.file, one.isDir), style = MiuixTheme.textStyles.body1) }
                 InfoRow("大小") {
-                    val size = when {
-                        !one.isDir -> one.size
-                        totalSize >= 0 -> totalSize
-                        else -> -1L
-                    }
+                    val size = if (!one.isDir) one.size else totalSize
                     Text(
                         if (size < 0) "计算中…" else fmFormatSize(size).ifBlank { "0 B" },
                         style = MiuixTheme.textStyles.body1,
