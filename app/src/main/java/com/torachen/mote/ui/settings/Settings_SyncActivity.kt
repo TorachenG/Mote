@@ -784,21 +784,30 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                                 // 可选：点击查看账号详情或空操作
                                             },
                                             endActions = {
-                                                Text(
-                                                    text = "退出登录",
-                                                    color = Color(0xFFFF3B30),
-                                                    fontSize = 14.sp,
-                                                    modifier = Modifier.clickable {
-                                                        prefs.edit()
-                                                            .remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN)
-                                                            .remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN)
-                                                            .remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID)
-                                                            .apply()
-                                                        isLoggedIn = false
-                                                        usernameInput = ""
-                                                        passwordInput = ""
-                                                    }.padding(8.dp)
-                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .height(32.dp)
+                                                        .clip(RoundedCornerShape(16.dp))
+                                                        .background(MiuixTheme.colorScheme.secondaryContainer)
+                                                        .clickable {
+                                                            prefs.edit()
+                                                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN)
+                                                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN)
+                                                                .remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID)
+                                                                .apply()
+                                                            isLoggedIn = false
+                                                            usernameInput = ""
+                                                            passwordInput = ""
+                                                        }
+                                                        .padding(horizontal = 16.dp),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Text(
+                                                        text = "退出登录",
+                                                        style = MiuixTheme.textStyles.body2,
+                                                        color = MiuixTheme.colorScheme.onSurface,
+                                                    )
+                                                }
                                             }
                                         )
                                     } else {
@@ -1406,10 +1415,19 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                         headline = { M3Text("账号") },
                                                         supporting = { M3Text(currentUserEmail, color = M3MaterialTheme.colorScheme.onSurfaceVariant) },
                                                         trailing = {
-                                                            M3TextButton(onClick = {
-                                                                prefs.edit().remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID).apply()
-                                                                isLoggedIn = false; usernameInput = ""; passwordInput = ""
-                                                            }) { M3Text("退出登录", color = M3MaterialTheme.colorScheme.error) }
+                                                            M3Surface(
+                                                                onClick = {
+                                                                    prefs.edit().remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID).apply()
+                                                                    isLoggedIn = false; usernameInput = ""; passwordInput = ""
+                                                                },
+                                                                shape = RoundedCornerShape(16.dp),
+                                                                color = M3MaterialTheme.colorScheme.secondaryContainer,
+                                                                contentColor = M3MaterialTheme.colorScheme.onSecondaryContainer,
+                                                            ) {
+                                                                Box(modifier = Modifier.height(32.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                                                                    M3Text("退出登录", style = M3MaterialTheme.typography.bodyMedium)
+                                                                }
+                                                            }
                                                         },
                                                         onClick = null
                                                     )
