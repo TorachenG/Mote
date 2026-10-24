@@ -471,21 +471,48 @@ async function applyChromeTree(tree) {
   applying = true;
   try {
     const rootId = (await ensureMoteFolder()).id;
-    const children = await chrome.bookmarks.getChildren(rootId);
-    for (const child of children) {
-      await chrome.bookmarks.removeTree(child.id);
-    }
-    await createNodes(rootId, tree);
+    await syncChildren(rootId, tree || []);
   } finally {
     setTimeout(() => { applying = false; }, 1200);
   }
 }
 
-async function createNodes(parentId, nodes) {
-  for (const node of nodes || []) {
-    if (node.folder) {
-      const created = await chrome.bookmarks.create({ parentId, title: node.title });
-      await createNodes(created.id, node.children || []);
+function nodeKeyOf(node) {
+  return node.folder ? "F:" + (node.title || "") : "U:" + (node.url || "");
+}
+
+/** 只同步差异：删除多余项、更新标题、创建新增项，避免每次清空重建整个文件夹 */
+async function syncChildren(parentId, desired) {
+  const existing = await chrome.bookmarks.getChildren(parentId);
+  const desiredKeys = new Set(desired.map(nodeKeyOf));
+
+  for (const child of existing) {
+    const key = child.url ? "U:" + child.url : "F:" + (child.title || "");
+    if (!desiredKeys.has(key)) {
+      await chrome.bookmarks.removeTree(child.id);
+    }
+  }
+
+  const remaining = await chrome.bookmarks.getChildren(parentId);
+  const byKey = new Map();
+  for (const child of remaining) {
+    const key = child.url ? "U:" + child.url : "F:" + (child.title || "");
+    if (!byKey.has(key)) byKey.set(key, child);
+  }
+
+  for (const node of desired) {
+    const key = nodeKeyOf(node);
+    const found = byKey.get(key);
+    if (found) {
+      if (!node.folder && (found.title || "") !== (node.title || "")) {
+        await chrome.bookmarks.update(found.id, { title: node.title || node.url || "" });
+      }
+      if (node.folder) {
+        await syncChildren(found.id, node.children || []);
+      }
+    } else if (node.folder) {
+      const created = await chrome.bookmarks.create({ parentId, title: node.title || "Mote" });
+      await syncChildren(created.id, node.children || []);
     } else if (node.url) {
       await chrome.bookmarks.create({ parentId, title: node.title || node.url, url: node.url });
     }
