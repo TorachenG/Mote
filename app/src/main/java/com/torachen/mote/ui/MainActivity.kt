@@ -323,6 +323,7 @@ import top.yukonga.miuix.kmp.icon.extended.AppRecording
 import top.yukonga.miuix.kmp.icon.extended.Close2
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.File
+import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Weeks
 import top.yukonga.miuix.kmp.icon.extended.Notes
@@ -3862,6 +3863,7 @@ fun BrowserScreen(
     var bookmarkTitleInput by remember { mutableStateOf("") }
     var bookmarkUrlInput by remember { mutableStateOf("") }
     var bookmarkTargetFolderId by remember { mutableStateOf<String?>(null) }
+    var editingBookmarkId by remember { mutableStateOf<String?>(null) }
     var showAddFolderDialog by remember { mutableStateOf(false) }
     var folderTitleInput by remember { mutableStateOf("") }
 
@@ -4760,6 +4762,26 @@ fun BrowserScreen(
             if (item.id == id) return item
             if (item.isFolder) {
                 findBookmarkById(item.children, id)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    fun findParentList(items: MutableList<BookmarkItem>, id: String): MutableList<BookmarkItem>? {
+        if (items.any { it.id == id }) return items
+        for (item in items) {
+            if (item.isFolder) {
+                findParentList(item.children, id)?.let { return it }
+            }
+        }
+        return null
+    }
+
+    fun findParentFolderId(items: List<BookmarkItem>, id: String, parentId: String? = null): String? {
+        for (item in items) {
+            if (item.id == id) return parentId
+            if (item.isFolder) {
+                findParentFolderId(item.children, id, item.id)?.let { return it }
             }
         }
         return null
@@ -8253,6 +8275,23 @@ fun BrowserScreen(
             }
         },
         onMoveSelected = { showMoveBookmarksDialog = true },
+        onEditSelected = { id ->
+            val item = findBookmarkById(bookmarks, id)
+            if (item != null) {
+                editingBookmarkId = id
+                bookmarkTitleInput = item.title
+                bookmarkUrlInput = item.url ?: ""
+                bookmarkTargetFolderId = findParentFolderId(bookmarks, id)
+                addFromBookmarkSheet = true
+                showBookmarkSheet = false
+                bookmarkMultiSelect = false
+                bookmarkSelected.clear()
+                scope.launch {
+                    delay(280)
+                    showAddBookmarkDialog = true
+                }
+            }
+        },
         canMove = collectAllFolders(bookmarks).isNotEmpty(),
         faviconReload = bookmarkFaviconReload,
         onAddBookmark = {
@@ -8445,9 +8484,10 @@ fun BrowserScreen(
 
     WindowDialog(
         show = showAddBookmarkDialog,
-        title = "添加书签",
+        title = if (editingBookmarkId != null) "编辑书签" else "添加书签",
         onDismissRequest = {
             showAddBookmarkDialog = false
+            editingBookmarkId = null
             bookmarkTitleInput = ""
             bookmarkUrlInput = ""
             bookmarkTargetFolderId = null
@@ -8583,6 +8623,50 @@ fun BrowserScreen(
                 ) { Text("取消") }
                 Button(
                     onClick = {
+                        val editId = editingBookmarkId
+                        if (editId != null) {
+                            val url = bookmarkUrlInput.trim()
+                            if (url.isBlank()) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "请输入网址",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                                return@Button
+                            }
+                            val title = bookmarkTitleInput.ifBlank { url }
+                            val item = findBookmarkById(bookmarks, editId)
+                            if (item != null) {
+                                val target = getTargetFolderItems()
+                                val parent = findParentList(bookmarks, editId)
+                                val updated = item.copy(
+                                    title = title,
+                                    url = url,
+                                    timestamp = System.currentTimeMillis(),
+                                )
+                                if (parent != null && parent === target) {
+                                    val idx = parent.indexOfFirst { it.id == editId }
+                                    if (idx >= 0) parent[idx] = updated
+                                } else {
+                                    removeBookmarkById(bookmarks, editId)
+                                    target.add(0, updated)
+                                }
+                                saveBookmarks()
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "书签已保存",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                            }
+                            showAddBookmarkDialog = false
+                            editingBookmarkId = null
+                            bookmarkTitleInput = ""
+                            bookmarkUrlInput = ""
+                            bookmarkTargetFolderId = null
+                            return@Button
+                        }
                         val url = bookmarkUrlInput.trim()
                         if (url.isBlank()) {
                             scope.launch {
@@ -8657,7 +8741,7 @@ fun BrowserScreen(
                         color = MiuixTheme.colorScheme.primary,
                         contentColor = Color.White,
                     ),
-                ) { Text("添加") }
+                ) { Text(if (editingBookmarkId != null) "保存" else "添加") }
             }
         }
     }
@@ -12753,6 +12837,7 @@ private fun BookmarkSheet(
     onDeleteSelected: () -> Unit,
     onShareSelected: (List<String>) -> Unit,
     onMoveSelected: () -> Unit,
+    onEditSelected: (String) -> Unit,
     canMove: Boolean,
     faviconReload: Int,
     onAddBookmark: () -> Unit,
@@ -13179,6 +13264,16 @@ private fun BookmarkSheet(
                                 modifier = Modifier.size(22.dp),
                             )
                         }
+                        IconButton(onClick = {
+                            selectedIds.firstOrNull()?.let { onEditSelected(it) }
+                        }) {
+                            Icon(
+                                imageVector = MiuixIcons.Edit,
+                                contentDescription = "编辑",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
                         IconButton(
                             onClick = { if (selectedIds.isNotEmpty() && canMove) onMoveSelected() },
                             enabled = canMove,
@@ -13443,13 +13538,17 @@ private fun BrowserToolSheet(
                         .size(44.dp)
                         .clip(CircleShape)
                         .background(MiuixTheme.colorScheme.surfaceContainer)
-                        .clickable(enabled = bookmarkButtonEnabled) {
-                            if (isBookmarked) {
-                                showDeleteBookmarkDialog = true
-                            } else {
-                                onAddBookmark()
-                            }
-                        },
+                        .combinedClickable(
+                            enabled = bookmarkButtonEnabled,
+                            onClick = {
+                                if (isBookmarked) {
+                                    showDeleteBookmarkDialog = true
+                                } else {
+                                    onAddBookmark()
+                                }
+                            },
+                            onLongClick = { onAddBookmark() },
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
