@@ -507,11 +507,15 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
 
 
         // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
+        // 标题栏范围内保持满强度模糊，只在最下方一小段做渐变淡出
+        val fadeBand = 28.dp
+        val blurTotalHeight = topPadding + fadeBand
+        val headerFraction = (topPadding / blurTotalHeight).coerceIn(0f, 0.95f)
         if (blurSupported && backdrop != null && materialStyle != 0) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(topPadding + 48.dp)
+                    .height(blurTotalHeight)
                     .align(Alignment.TopCenter)
                     .then(
                         if (progressiveTitleBlur) {
@@ -519,7 +523,11 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                                 backdrop = backdrop,
                                 shape = RectangleShape,
                                 blurRadius = FM_BLUR_RADIUS,
-                                gradient = ProgressiveBlur.Top,
+                                gradient = ProgressiveBlur(
+                                    angle = 90f,
+                                    startFraction = headerFraction,
+                                    endFraction = 1f,
+                                ),
                                 colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                             )
                         } else {
