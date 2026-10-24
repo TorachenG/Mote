@@ -202,70 +202,55 @@ internal object MoteCloudSyncManager {
     }
 
     fun encrypt(plainText: String, prefs: SharedPreferences): String {
-        val isE2EE = prefs.getBoolean(KEY_E2EE_ENABLED, false)
-        return if (isE2EE) {
-            val keyBase64 = prefs.getString(KEY_E2EE_DERIVED_KEY, "") ?: ""
-            if (keyBase64.isBlank()) throw Exception("请先重新登录以生成加密密钥")
-            val secretKey = SecretKeySpec(Base64.decode(keyBase64, Base64.NO_WRAP), "AES")
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-            val iv = cipher.iv
-            val cipherText = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
-            val combined = ByteArray(iv.size + cipherText.size)
-            System.arraycopy(iv, 0, combined, 0, iv.size)
-            System.arraycopy(cipherText, 0, combined, iv.size, cipherText.size)
-            Base64.encodeToString(combined, Base64.NO_WRAP)
-        } else {
-            val pass = getLocalPass(prefs)
-            val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-            val spec = PBEKeySpec(pass.toCharArray(), salt, 10000, 256)
-            val secretKey = SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
-
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-            val cipherText = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
-
-            val combined = ByteArray(salt.size + iv.size + cipherText.size)
-            System.arraycopy(salt, 0, combined, 0, salt.size)
-            System.arraycopy(iv, 0, combined, salt.size, iv.size)
-            System.arraycopy(cipherText, 0, combined, salt.size + iv.size, cipherText.size)
-            Base64.encodeToString(combined, Base64.NO_WRAP)
-        }
+        // 始终使用「用户名+密码」派生的密钥，保证换设备后仍能解密
+        val keyBase64 = prefs.getString(KEY_E2EE_DERIVED_KEY, "") ?: ""
+        if (keyBase64.isBlank()) throw Exception("请重新登录以生成加密密钥")
+        val secretKey = SecretKeySpec(Base64.decode(keyBase64, Base64.NO_WRAP), "AES")
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+        val iv = cipher.iv
+        val cipherText = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
+        val combined = ByteArray(iv.size + cipherText.size)
+        System.arraycopy(iv, 0, combined, 0, iv.size)
+        System.arraycopy(cipherText, 0, combined, iv.size, cipherText.size)
+        return Base64.encodeToString(combined, Base64.NO_WRAP)
     }
 
     fun decrypt(encryptedBase64: String, prefs: SharedPreferences): String? {
-        val isE2EE = prefs.getBoolean(KEY_E2EE_ENABLED, false)
-        return try {
-            if (isE2EE) {
-                val keyBase64 = prefs.getString(KEY_E2EE_DERIVED_KEY, "") ?: ""
-                if (keyBase64.isBlank()) return null
+        val keyBase64 = prefs.getString(KEY_E2EE_DERIVED_KEY, "") ?: ""
+        if (keyBase64.isNotBlank()) {
+            try {
                 val secretKey = SecretKeySpec(Base64.decode(keyBase64, Base64.NO_WRAP), "AES")
                 val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-                if (combined.size < 12) return null
-                val iv = combined.copyOfRange(0, 12)
-                val cipherText = combined.copyOfRange(12, combined.size)
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-                String(cipher.doFinal(cipherText), Charsets.UTF_8)
-            } else {
-                val pass = getLocalPass(prefs)
-                val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-                if (combined.size < 28) return null
-                val salt = combined.copyOfRange(0, 16)
-                val iv = combined.copyOfRange(16, 28)
-                val cipherText = combined.copyOfRange(28, combined.size)
-
-                val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-                val spec = PBEKeySpec(pass.toCharArray(), salt, 10000, 256)
-                val secretKey = SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
-
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-                cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
-                String(cipher.doFinal(cipherText), Charsets.UTF_8)
+                if (combined.size >= 12) {
+                    val iv = combined.copyOfRange(0, 12)
+                    val cipherText = combined.copyOfRange(12, combined.size)
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                    cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
+                    return String(cipher.doFinal(cipherText), Charsets.UTF_8)
+                }
+            } catch (_: Exception) {
+                // 落到下面的旧格式兼容分支
             }
-        } catch (e: Exception) { null }
+        }
+
+        // 兼容旧版本：用本机随机口令 + salt 加密的历史数据
+        return try {
+            val pass = getLocalPass(prefs)
+            val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            if (combined.size < 28) return null
+            val salt = combined.copyOfRange(0, 16)
+            val iv = combined.copyOfRange(16, 28)
+            val cipherText = combined.copyOfRange(28, combined.size)
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val spec = PBEKeySpec(pass.toCharArray(), salt, 10000, 256)
+            val secretKey = SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(128, iv))
+            String(cipher.doFinal(cipherText), Charsets.UTF_8)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun buildLocalData(prefs: SharedPreferences): JSONObject {
@@ -510,7 +495,6 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
     var showLoginDialog by remember { mutableStateOf(false) }
     var errorDialogMessage by remember { mutableStateOf<String?>(null) }
 
-    var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var catBookmarks by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_BOOKMARKS}", true)) }
     var catBrowseHistory by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_BROWSE_HISTORY}", false)) }
     var catSearchHistory by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SEARCH_HISTORY}", false)) }
@@ -531,7 +515,6 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
 
     fun saveConfig() {
         prefs.edit()
-            .putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, e2eeEnabled)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_BOOKMARKS}", catBookmarks)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_BROWSE_HISTORY}", catBrowseHistory)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_SEARCH_HISTORY}", catSearchHistory)
@@ -789,12 +772,6 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                         )
                                     }
                                 }
-                                SwitchPreference(
-                                    title = "高级数据保护",
-                                    summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
-                                    checked = e2eeEnabled,
-                                    onCheckedChange = { e2eeEnabled = it }
-                                )
                             }
 
                             SmallTitle("同步项")
@@ -1060,7 +1037,6 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
     var showLoginDialog by remember { mutableStateOf(false) }
     var errorDialogMessage by remember { mutableStateOf<String?>(null) }
 
-    var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var catBookmarks by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_BOOKMARKS}", true)) }
     var catBrowseHistory by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_BROWSE_HISTORY}", false)) }
     var catSearchHistory by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SEARCH_HISTORY}", false)) }
@@ -1081,7 +1057,6 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
 
     fun saveConfig() {
         prefs.edit()
-            .putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, e2eeEnabled)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_BOOKMARKS}", catBookmarks)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_BROWSE_HISTORY}", catBrowseHistory)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_SEARCH_HISTORY}", catSearchHistory)
@@ -1360,14 +1335,6 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                     )
                                                 }
                                             }
-                                        }
-                                        add {
-                                            M3SegmentSwitchItem(
-                                                title = "高级数据保护",
-                                                summary = "开启后将采用端到端加密技术，确保您的同步数据只能在可信设备上解密",
-                                                checked = e2eeEnabled,
-                                                onCheckedChange = { e2eeEnabled = it }
-                                            )
                                         }
                                     }
                                 )
