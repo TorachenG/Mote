@@ -51,6 +51,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.Unarchive
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -76,6 +79,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,7 +94,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.compose.animation.core.animateFloatAsState
@@ -108,7 +115,9 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import com.torachen.mote.service.FileOpService
 import com.torachen.mote.service.FileOpState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
@@ -254,6 +263,17 @@ private class FileManagerController(
         selected = emptyList()
     }
 
+    fun compressSelected(): java.io.File? {
+        val items = selected
+        if (items.isEmpty()) return null
+        val baseDir = items.first().file.parentFile ?: currentDir
+        val name = if (items.size == 1) items.first().file.name + ".zip" else "压缩包.zip"
+        val zip = java.io.File(baseDir, name)
+        FileOpService.compress(context, items.map { it.file.absolutePath }, zip.absolutePath)
+        selected = emptyList()
+        return zip
+    }
+
     fun deleteSelected() {
         val items = selected
         if (items.isEmpty()) return
@@ -395,6 +415,7 @@ fun FileManagerPage(
     val message by FileOpState.message.collectAsState()
     LaunchedEffect(message) {
         val msg = message ?: return@LaunchedEffect
+        FileOpState.message.value = null
         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         controller.reload()
     }
@@ -409,14 +430,43 @@ fun FileManagerPage(
     var infoItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var shareItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var showZipShareDialog by remember { mutableStateOf(false) }
+    var confirmTitle by remember { mutableStateOf("") }
+    var confirmText by remember { mutableStateOf("") }
+    var confirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val uiScope = rememberCoroutineScope()
 
+    val requestCompress: () -> Unit = {
+        confirmTitle = "压缩"
+        confirmText = "确定将选中的 ${controller.selected.size} 项压缩为 zip？"
+        confirmAction = { controller.compressSelected() }
+    }
+    val requestExtract: (FsEntry) -> Unit = { one ->
+        confirmTitle = "解压"
+        confirmText = "确定解压「${one.file.name}」到当前目录？"
+        confirmAction = { controller.extract(one); controller.selected = emptyList() }
+    }
     val requestDelete: () -> Unit = {
         if (controller.selected.isNotEmpty()) showDeleteDialog = true
     }
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> FileManagerMiuix(controller, onInfo = { infoItems = it; showInfoDialog = true }, onDelete = requestDelete)
-        UiMode.Material -> FileManagerMaterial(controller, onInfo = { infoItems = it; showInfoDialog = true }, onDelete = requestDelete)
+        UiMode.Miuix -> FileManagerMiuix(
+            controller = controller,
+            onInfo = { showMoreMenu = true },
+            onDelete = requestDelete,
+            onCompress = requestCompress,
+            onExtract = requestExtract,
+        )
+        UiMode.Material -> FileManagerMaterial(
+            controller = controller,
+            onInfo = { showMoreMenu = true },
+            onDelete = requestDelete,
+            onCompress = requestCompress,
+            onExtract = requestExtract,
+        )
     }
 
     WindowDialog(show = showDeleteDialog, title = "删除", onDismissRequest = { showDeleteDialog = false }) {
@@ -453,6 +503,106 @@ fun FileManagerPage(
             }
         }
 
+    val selectedNow = controller.selected
+
+    fun doShare(items: List<FsEntry>) {
+        if (items.isEmpty()) return
+        uiScope.launch {
+            Toast.makeText(context, "正在压缩…", Toast.LENGTH_SHORT).show()
+            val zip = withContext(Dispatchers.IO) { zipForShare(context, items) }
+            if (zip == null) {
+                Toast.makeText(context, "压缩失败", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            shareFile(context, zip)
+            controller.selected = emptyList()
+            delay(60000)
+            withContext(Dispatchers.IO) { zip.delete() }
+        }
+    }
+
+    if (showMoreMenu) {
+        Popup(
+            onDismissRequest = { showMoreMenu = false },
+            offset = IntOffset(0, 0),
+            properties = PopupProperties(focusable = true),
+        ) {
+            top.yukonga.miuix.kmp.basic.Card(modifier = Modifier.padding(24.dp)) {
+                Column(modifier = Modifier.width(160.dp)) {
+                    top.yukonga.miuix.kmp.basic.Text(
+                        "关于",
+                        style = MiuixTheme.textStyles.body1,
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable { showMoreMenu = false; infoItems = selectedNow; showInfoDialog = true }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                    top.yukonga.miuix.kmp.basic.Text(
+                        "分享",
+                        style = MiuixTheme.textStyles.body1,
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable {
+                                showMoreMenu = false
+                                shareItems = selectedNow
+                                if (selectedNow.any { it.isDir }) showZipShareDialog = true
+                                else doShare(selectedNow)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    WindowDialog(show = confirmAction != null, title = confirmTitle, onDismissRequest = { confirmAction = null }) {
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(confirmText, style = MiuixTheme.textStyles.body1)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { confirmAction = null },
+                    modifier = Modifier.weight(1f),
+                    colors = MiuixButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                        contentColor = MiuixTheme.colorScheme.onSurface,
+                    ),
+                ) { Text("取消") }
+                Button(
+                    onClick = {
+                        val action = confirmAction
+                        confirmAction = null
+                        action?.invoke()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("确定") }
+            }
+        }
+    }
+
+    WindowDialog(show = showZipShareDialog, title = "分享", onDismissRequest = { showZipShareDialog = false }) {
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+                "选中的内容包含文件夹，需要先压缩成 zip 才能分享。",
+                style = MiuixTheme.textStyles.body1,
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { showZipShareDialog = false },
+                    modifier = Modifier.weight(1f),
+                    colors = MiuixButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.secondaryContainer,
+                        contentColor = MiuixTheme.colorScheme.onSurface,
+                    ),
+                ) { Text("取消") }
+                Button(
+                    onClick = {
+                        showZipShareDialog = false
+                        doShare(shareItems)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("压缩并分享") }
+            }
+        }
+    }
+
     if (infoItems.isNotEmpty()) {
         FileInfoDialog(
             items = infoItems,
@@ -470,7 +620,13 @@ fun FileManagerPage(
 /* ---------------- MIUIX ---------------- */
 
 @Composable
-private fun FileManagerMiuix(controller: FileManagerController, onInfo: (List<FsEntry>) -> Unit, onDelete: () -> Unit) {
+private fun FileManagerMiuix(
+    controller: FileManagerController,
+    onInfo: (List<FsEntry>) -> Unit,
+    onDelete: () -> Unit,
+    onCompress: () -> Unit,
+    onExtract: (FsEntry) -> Unit,
+) {
     val scrollBehavior = MiuixScrollBehavior()
     val density = LocalDensity.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -659,14 +815,14 @@ private fun FileManagerMiuix(controller: FileManagerController, onInfo: (List<Fs
                                 modifier = Modifier.size(24.dp),
                             )
                         }
-                        controller.selecting -> IconButton(onClick = { controller.selected = emptyList() }) {
-                            Icon(
-                                imageVector = MiuixIcons.ChevronBackward,
-                                contentDescription = "退出多选",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
+                        controller.selecting -> SettingsTopBarAction(
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardMaterialModifier,
+                            onClick = { controller.selected = emptyList() },
+                            contentDescription = "退出多选",
+                            icon = MiuixIcons.ChevronBackward,
+                            tint = MiuixTheme.colorScheme.onSurface,
+                        )
                         else -> SettingsBackButton(
                             onBack = {
                                 if (!controller.up()) controller.onBack()
@@ -711,7 +867,8 @@ private fun FileManagerMiuix(controller: FileManagerController, onInfo: (List<Fs
                     onOpen = { one -> controller.open(one); controller.selected = emptyList() },
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
-                    onExtract = { one -> controller.extract(one); controller.selected = emptyList() },
+                    onExtract = onExtract,
+                    onCompress = onCompress,
                     onDelete = onDelete,
                     onInfo = { onInfo(controller.selected.ifEmpty { barItems }) },
                 )
@@ -857,6 +1014,7 @@ private fun MiuixActionBar(
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onExtract: (FsEntry) -> Unit,
+    onCompress: () -> Unit,
     onDelete: () -> Unit,
     onInfo: () -> Unit,
 ) {
@@ -871,14 +1029,15 @@ private fun MiuixActionBar(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CapsuleAction(MiuixIcons.FileIcon, "打开", enabled = single) { one?.let(onOpen) }
+        if (single && one != null && !one.isDir && isArchive(one.file.name)) {
+            CapsuleAction(androidx.compose.material.icons.Icons.Rounded.Unarchive, "解压", enabled = true) { onExtract(one) }
+        } else {
+            CapsuleAction(androidx.compose.material.icons.Icons.Rounded.Archive, "压缩", enabled = true) { onCompress() }
+        }
         CapsuleAction(MiuixIcons.Copy, "复制", enabled = true) { onCopy() }
         CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = true) { onMove() }
         CapsuleAction(MiuixIcons.Delete, "删除", enabled = true) { onDelete() }
-        if (single && one != null && !one.isDir && isArchive(one.file.name)) {
-            CapsuleAction(MiuixIcons.FolderIcon, "解压", enabled = true) { onExtract(one) }
-        }
-        CapsuleAction(MiuixIcons.Info, "关于", enabled = true) { onInfo() }
+        CapsuleAction(androidx.compose.material.icons.Icons.Rounded.MoreVert, "更多", enabled = true) { onInfo() }
     }
 }
 
@@ -938,7 +1097,13 @@ private fun MiuixPickBar(controller: FileManagerController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FileManagerMaterial(controller: FileManagerController, onInfo: (List<FsEntry>) -> Unit, onDelete: () -> Unit) {
+private fun FileManagerMaterial(
+    controller: FileManagerController,
+    onInfo: (List<FsEntry>) -> Unit,
+    onDelete: () -> Unit,
+    onCompress: () -> Unit,
+    onExtract: (FsEntry) -> Unit,
+) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
@@ -1084,8 +1249,13 @@ private fun FileManagerMaterial(controller: FileManagerController, onInfo: (List
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            M3CapsuleAction(Icons.Filled.InsertDriveFile, "打开", single) {
-                                one?.let { controller.open(it); controller.selected = emptyList() }
+                            if (single && one != null && !one.isDir && isArchive(one.file.name)) {
+                                M3CapsuleAction(Icons.Rounded.Unarchive, "解压", true) {
+                                    controller.extract(one)
+                                    controller.selected = emptyList()
+                                }
+                            } else {
+                                M3CapsuleAction(Icons.Rounded.Archive, "压缩", true) { controller.compressSelected() }
                             }
                             M3CapsuleAction(Icons.Filled.Folder, "复制", true) { controller.beginMove(PendingOp.COPY) }
                             M3CapsuleAction(Icons.Filled.Folder, "移动", true) { controller.beginMove(PendingOp.MOVE) }
@@ -1096,7 +1266,7 @@ private fun FileManagerMaterial(controller: FileManagerController, onInfo: (List
                                     controller.selected = emptyList()
                                 }
                             }
-                            M3CapsuleAction(Icons.Filled.Folder, "关于", true) {
+                            M3CapsuleAction(Icons.Rounded.MoreVert, "更多", true) {
                                 onInfo(controller.selected.ifEmpty { barItems })
                             }
                         }
@@ -1272,5 +1442,48 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
         Box(modifier = Modifier.weight(1f)) { value() }
+    }
+}
+
+private fun zipForShare(context: android.content.Context, items: List<FsEntry>): java.io.File? {
+    return try {
+        val dir = java.io.File(context.cacheDir, "share").apply { mkdirs() }
+        val zip = java.io.File(dir, "Mote分享_${System.currentTimeMillis()}.zip")
+        java.util.zip.ZipOutputStream(java.io.BufferedOutputStream(java.io.FileOutputStream(zip))).use { out ->
+            val buffer = ByteArray(256 * 1024)
+            fun add(node: java.io.File, base: String) {
+                if (node.isDirectory) {
+                    node.listFiles()?.forEach { add(it, "$base${node.name}/") }
+                } else if (node.isFile) {
+                    out.putNextEntry(java.util.zip.ZipEntry("$base${node.name}"))
+                    java.io.FileInputStream(node).use { input ->
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            out.write(buffer, 0, read)
+                        }
+                    }
+                    out.closeEntry()
+                }
+            }
+            items.forEach { add(it.file, "") }
+        }
+        zip
+    } catch (_: Throwable) {
+        null
+    }
+}
+
+private fun shareFile(context: android.content.Context, file: java.io.File) {
+    try {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/zip"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(Intent.createChooser(intent, "分享压缩包").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: Exception) {
+        Toast.makeText(context, "没有可以分享的应用", Toast.LENGTH_SHORT).show()
     }
 }

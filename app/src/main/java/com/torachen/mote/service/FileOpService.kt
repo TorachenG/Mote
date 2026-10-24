@@ -54,6 +54,7 @@ class FileOpService : Service() {
                     ACTION_MOVE -> copyAll(sources, destDir, move = true)
                     ACTION_EXTRACT -> extractArchive(File(archive), File(destDir))
                     ACTION_DELETE -> deleteAll(sources)
+                    ACTION_COMPRESS -> compressTo(sources, destDir)
                     else -> false
                 }
             } catch (e: Exception) {
@@ -66,6 +67,7 @@ class FileOpService : Service() {
                     ACTION_COPY -> "复制完成"
                     ACTION_MOVE -> "移动完成"
                     ACTION_DELETE -> "删除完成"
+                    ACTION_COMPRESS -> "压缩完成"
                     else -> "解压完成"
                 }
                 FileOpState.message.value = text
@@ -143,6 +145,34 @@ class FileOpService : Service() {
             val src = File(path)
             if (!src.exists()) return@forEach
             copyNode(src, File(destRoot, src.name))
+        }
+        return true
+    }
+
+    private fun compressTo(paths: List<String>, zipPath: String): Boolean {
+        val zipFile = File(zipPath)
+        zipFile.parentFile?.mkdirs()
+        java.util.zip.ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zip ->
+            val buffer = ByteArray(256 * 1024)
+            fun addNode(node: File, base: String) {
+                if (node.isDirectory) {
+                    node.listFiles()?.forEach { addNode(it, "$base${node.name}/") }
+                } else if (node.isFile) {
+                    zip.putNextEntry(java.util.zip.ZipEntry("$base${node.name}"))
+                    FileInputStream(node).use { input ->
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read <= 0) break
+                            zip.write(buffer, 0, read)
+                        }
+                    }
+                    zip.closeEntry()
+                }
+            }
+            paths.forEach { path ->
+                val file = File(path)
+                if (file.exists()) addNode(file, "")
+            }
         }
         return true
     }
@@ -330,6 +360,7 @@ class FileOpService : Service() {
         const val ACTION_MOVE = "move"
         const val ACTION_EXTRACT = "extract"
         const val ACTION_DELETE = "delete"
+        const val ACTION_COMPRESS = "compress"
 
         private const val EXTRA_ACTION = "action"
         private const val EXTRA_SOURCES = "sources"
@@ -347,6 +378,9 @@ class FileOpService : Service() {
 
         fun delete(context: Context, paths: List<String>) =
             start(context, ACTION_DELETE, paths, "", null)
+
+        fun compress(context: Context, paths: List<String>, zipPath: String) =
+            start(context, ACTION_COMPRESS, paths, zipPath, null)
 
         private fun start(context: Context, action: String, sources: List<String>, dest: String, archive: String?) {
             val intent = Intent(context, FileOpService::class.java).apply {
