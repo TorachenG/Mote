@@ -410,11 +410,13 @@ private fun loadThumbnail(file: java.io.File): ImageBitmap? {
 fun FileManagerPage(
     onBack: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
+    onSelectionModeChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val controller = remember { FileManagerController(context, onOpenInBrowser, onBack) }
 
     LaunchedEffect(controller.currentDir) { controller.reload() }
+    LaunchedEffect(controller.selecting) { onSelectionModeChange(controller.selecting) }
 
     val message by FileOpState.message.collectAsState()
     LaunchedEffect(message) {

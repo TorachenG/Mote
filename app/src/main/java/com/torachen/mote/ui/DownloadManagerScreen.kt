@@ -921,6 +921,7 @@ fun DownloadManagerScreen(
     onOpenDownloadSettings: () -> Unit = {},
     onOpenTaskDetail: () -> Unit = {},
     onOpenFileManager: () -> Unit = {},
+    onSelectionModeChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     LaunchedEffect(MoteDownloader.toastEvent) {
@@ -934,8 +935,8 @@ fun DownloadManagerScreen(
     MonitorFileStatus(context)
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager)
-        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager)
+        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager, onSelectionModeChange)
+        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager, onSelectionModeChange)
     }
 }
 
@@ -949,6 +950,7 @@ private fun DownloadManagerScreenMiuix(
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onOpenFileManager: () -> Unit,
+    onSelectionModeChange: (Boolean) -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -1030,6 +1032,7 @@ private fun DownloadManagerScreenMiuix(
     }
 
     var isMultiSelectMode by remember { mutableStateOf(false) }
+    LaunchedEffect(isMultiSelectMode) { onSelectionModeChange(isMultiSelectMode) }
     val selectedIds = remember { mutableStateListOf<String>() }
     var pendingDeleteIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -1305,7 +1308,7 @@ private fun DownloadManagerScreenMiuix(
 
             val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             AnimatedVisibility(
-                visible = !showDeleteDialog,
+                visible = isMultiSelectMode && !showDeleteDialog,
                 enter = slideInVertically(tween(220), initialOffsetY = { it + 40 }) + fadeIn(tween(180)),
                 exit = slideOutVertically(tween(200), targetOffsetY = { it + 40 }) + fadeOut(tween(150)),
                 modifier = Modifier.align(Alignment.BottomEnd).zIndex(10f).padding(end = 24.dp, bottom = navBarBottom + 24.dp),
@@ -1327,24 +1330,6 @@ private fun DownloadManagerScreenMiuix(
                     ).padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (!isMultiSelectMode) {
-                        Column(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .clickable { onOpenFileManager() }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.Folder,
-                                contentDescription = "文件管理",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(22.dp),
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text("文件管理", fontSize = 11.sp, color = MiuixTheme.colorScheme.onSurface)
-                        }
-                    }
                     if (isMultiSelectMode) {
                     IconButton(onClick = {
                         val toShare = tasks.filter { it.id in selectedIds && it.status == MoteDownloadStatus.COMPLETED && !it.isMissing }
@@ -1945,6 +1930,7 @@ private fun DownloadManagerScreenMaterial(
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onOpenFileManager: () -> Unit,
+    onSelectionModeChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1964,6 +1950,7 @@ private fun DownloadManagerScreenMaterial(
     }
 
     var isMultiSelectMode by remember { mutableStateOf(false) }
+    LaunchedEffect(isMultiSelectMode) { onSelectionModeChange(isMultiSelectMode) }
     val selectedIds = remember { mutableStateListOf<String>() }
     var pendingDeleteIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -2162,26 +2149,13 @@ private fun DownloadManagerScreenMaterial(
 
                 val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 AnimatedVisibility(
-                    visible = !showDeleteDialog,
+                    visible = isMultiSelectMode && !showDeleteDialog,
                     enter = slideInVertically(tween(220), initialOffsetY = { it + 40 }) + fadeIn(tween(180)),
                     exit = slideOutVertically(tween(200), targetOffsetY = { it + 40 }) + fadeOut(tween(150)),
                     modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f).padding(bottom = navBarBottom + 24.dp).padding(horizontal = 24.dp),
                 ) {
                     M3Surface(shape = RoundedCornerShape(28.dp), color = M3MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 3.dp, shadowElevation = 8.dp) {
                         Row(modifier = Modifier.height(56.dp).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (!isMultiSelectMode) {
-                                Column(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .clickable { onOpenFileManager() }
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    M3Icon(Icons.Filled.Folder, contentDescription = "文件管理", modifier = Modifier.size(22.dp))
-                                    Spacer(Modifier.height(2.dp))
-                                    M3Text("文件管理", fontSize = 11.sp)
-                                }
-                            }
                             if (isMultiSelectMode) {
                             M3IconButton(onClick = {
                                 val toShare = tasks.filter { it.id in selectedIds && it.status == MoteDownloadStatus.COMPLETED && !it.isMissing }
