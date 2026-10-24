@@ -458,13 +458,12 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
         else if (!controller.selecting) barPending = null
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(surface)
-            .then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(surface)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
+        ) {
             AnimatedContent(
                 targetState = controller.currentDir,
                 modifier = Modifier.fillMaxSize(),
