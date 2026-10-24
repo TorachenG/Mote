@@ -11,6 +11,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -76,12 +79,13 @@ fun DownloadsShell(
     onOpenInBrowser: (String) -> Unit,
     initialTab: Int = 0,
 ) {
-    val tabState = remember { mutableIntStateOf(initialTab) }
-    val tab = tabState.intValue
+    val pagerState = rememberPagerState(initialPage = initialTab) { 2 }
+    val tab = pagerState.currentPage
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     // 复用同一个 controller，避免每次切到文件页都重新扫描目录导致掉帧
     val fileController = remember {
-        FileManagerController(context, onOpenInBrowser) { tabState.intValue = 0 }
+        FileManagerController(context, onOpenInBrowser) { scope.launch { pagerState.animateScrollToPage(0) } }
     }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { fileController.reload() }
@@ -93,7 +97,9 @@ fun DownloadsShell(
         UiMode.Miuix -> DownloadsShellMiuix(
             fileController = fileController,
             tab = tab,
-            onTabChange = { tabState.intValue = it },
+            onTabChange = { scope.launch { pagerState.animateScrollToPage(it) } },
+            pagerState = pagerState,
+            swipeEnabled = !downloadsSelecting && !filesSelecting,
             onBack = onBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
@@ -101,12 +107,14 @@ fun DownloadsShell(
             navBarVisible = !downloadsSelecting && !filesSelecting,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
-            selectedIndex = { tabState.intValue },
+            selectedIndex = { pagerState.currentPage },
         )
         UiMode.Material -> DownloadsShellMaterial(
             fileController = fileController,
             tab = tab,
-            onTabChange = { tabState.intValue = it },
+            onTabChange = { scope.launch { pagerState.animateScrollToPage(it) } },
+            pagerState = pagerState,
+            swipeEnabled = !downloadsSelecting && !filesSelecting,
             onBack = onBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
@@ -114,7 +122,7 @@ fun DownloadsShell(
             navBarVisible = !downloadsSelecting && !filesSelecting,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
-            selectedIndex = { tabState.intValue },
+            selectedIndex = { pagerState.currentPage },
         )
     }
 }
@@ -132,6 +140,8 @@ private fun DownloadsShellMiuix(
     onFilesSelectingChange: (Boolean) -> Unit,
     selectedIndex: () -> Int,
     fileController: FileManagerController,
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    swipeEnabled: Boolean,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -149,23 +159,13 @@ private fun DownloadsShellMiuix(
                 .fillMaxSize()
                 .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
         ) {
-            AnimatedContent(
-                targetState = tab,
-                transitionSpec = {
-                    val forward = targetState > initialState
-                    val slide = tween<androidx.compose.ui.unit.IntOffset>(durationMillis = 280)
-                    val fade = tween<Float>(durationMillis = 200)
-                    if (forward) {
-                        (slideInHorizontally(slide) { it / 4 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { -it / 4 } + fadeOut(fade))
-                    } else {
-                        (slideInHorizontally(slide) { -it / 4 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { it / 4 } + fadeOut(fade))
-                    }
-                },
-                label = "sheetTab",
-            ) { current ->
-                if (current == 0) {
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 1,
+                userScrollEnabled = swipeEnabled,
+            ) { page ->
+                if (page == 0) {
                     DownloadManagerScreen(
                         onBack = onBack,
                         onOpenDownloadSettings = onOpenDownloadSettings,
@@ -282,6 +282,8 @@ private fun DownloadsShellMaterial(
     onFilesSelectingChange: (Boolean) -> Unit,
     selectedIndex: () -> Int,
     fileController: FileManagerController,
+    pagerState: androidx.compose.foundation.pager.PagerState,
+    swipeEnabled: Boolean,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
