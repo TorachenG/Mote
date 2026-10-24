@@ -13217,7 +13217,7 @@ private fun BookmarkSheet(
                                         Spacer(Modifier.width(8.dp))
 
                                         AnimatedVisibility(
-                                            visible = multiSelect && !entry.isFolder,
+                                            visible = multiSelect,
                                             enter = fadeIn(tween(160)) + expandHorizontally(
                                                 animationSpec = tween(220),
                                                 expandFrom = Alignment.End,
