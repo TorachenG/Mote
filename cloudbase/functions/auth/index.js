@@ -130,6 +130,7 @@ async function handleLogin(body) {
 
   const user = await findUser(username)
   if (!user) return { error: '账号不存在或密码错误', code: 401 }
+  if (user.disabled) return { error: '账号已被停用', code: 403 }
 
   const hash = hashPassword(password, user.salt)
   if (hash !== user.hash) return { error: '账号不存在或密码错误', code: 401 }
@@ -190,12 +191,127 @@ async function handleRefresh(body) {
   return { token, uid: payload.uid, username: payload.username }
 }
 
+// ---------- 管理端 ----------
+function requireAdmin(body) {
+  const adminKey = process.env.ADMIN_KEY || ''
+  if (!adminKey) return '服务端未配置 ADMIN_KEY 环境变量'
+  if (String(body.key || '') !== adminKey) return '管理员密钥错误'
+  return null
+}
+
+async function handleAdminList(body) {
+  const authError = requireAdmin(body)
+  if (authError) return { error: authError, code: 401 }
+
+  const res = await db.collection('Users').limit(1000).get()
+  const users = (res && res.data) || []
+  const out = []
+  for (const u of users) {
+    let syncAt = 0
+    let syncSize = 0
+    try {
+      const s = await db.collection('SyncData').where({ user_id: u.uid }).limit(1).get()
+      const doc = ((s && s.data) || [])[0]
+      if (doc) {
+        syncAt = doc.updated_at || 0
+        syncSize = String(doc.content || '').length
+      }
+    } catch (e) {}
+    out.push({
+      username: u.username,
+      uid: u.uid,
+      created_at: u.created_at || 0,
+      disabled: !!u.disabled,
+      sync_at: syncAt,
+      sync_size: syncSize,
+    })
+  }
+  out.sort((a, b) => (b.created_at || 0) - (a.created_at || 0))
+  return { total: out.length, users: out }
+}
+
+async function handleAdminResetPassword(body) {
+  const authError = requireAdmin(body)
+  if (authError) return { error: authError, code: 401 }
+  const username = String(body.username || '').trim().toLowerCase()
+  const newPassword = String(body.newPassword || '')
+  if (newPassword.length < 8 || newPassword.length > 32) return { error: '密码长度需 8~32 位' }
+  const user = await findUser(username)
+  if (!user) return { error: '账号不存在', code: 404 }
+  const salt = newSalt()
+  await db.collection('Users').doc(user._id).update({ salt, hash: hashPassword(newPassword, salt) })
+  return { ok: true, username, uid: user.uid }
+}
+
+async function handleAdminDisable(body) {
+  const authError = requireAdmin(body)
+  if (authError) return { error: authError, code: 401 }
+  const username = String(body.username || '').trim().toLowerCase()
+  const disabled = !!body.disabled
+  const user = await findUser(username)
+  if (!user) return { error: '账号不存在', code: 404 }
+  await db.collection('Users').doc(user._id).update({ disabled })
+  return { ok: true, username, disabled }
+}
+
+async function handleAdminDelete(body) {
+  const authError = requireAdmin(body)
+  if (authError) return { error: authError, code: 401 }
+  const username = String(body.username || '').trim().toLowerCase()
+  const user = await findUser(username)
+  if (!user) return { error: '账号不存在', code: 404 }
+  await deleteUserData(user)
+  return { ok: true, username, uid: user.uid }
+}
+
+async function deleteUserData(user) {
+  try {
+    const s = await db.collection('SyncData').where({ user_id: user.uid }).limit(1).get()
+    const doc = ((s && s.data) || [])[0]
+    if (doc) await db.collection('SyncData').doc(doc._id).remove()
+  } catch (e) {}
+  await db.collection('Users').doc(user._id).remove()
+}
+
+// ---------- 用户自助 ----------
+async function handleChangePassword(body) {
+  const payload = verifyAccess(body.token)
+  if (!payload) return { error: '登录已过期，请重新登录', code: 401 }
+  const user = await findUser(payload.username)
+  if (!user) return { error: '账号不存在', code: 404 }
+  const oldPassword = String(body.oldPassword || '')
+  if (hashPassword(oldPassword, user.salt) !== user.hash) return { error: '旧密码错误', code: 403 }
+  const newPassword = String(body.newPassword || '')
+  if (newPassword.length < 8 || newPassword.length > 32) return { error: '密码长度需 8~32 位' }
+  const salt = newSalt()
+  await db.collection('Users').doc(user._id).update({ salt, hash: hashPassword(newPassword, salt) })
+  return { ok: true }
+}
+
+async function handleDeleteAccount(body) {
+  const payload = verifyAccess(body.token)
+  if (!payload) return { error: '登录已过期，请重新登录', code: 401 }
+  const user = await findUser(payload.username)
+  if (!user) return { error: '账号不存在', code: 404 }
+  if (hashPassword(String(body.password || ''), user.salt) !== user.hash) {
+    return { error: '密码错误', code: 403 }
+  }
+  await deleteUserData(user)
+  return { ok: true }
+}
+
 const handlers = {
   register: handleRegister,
   login: handleLogin,
   refresh: handleRefresh,
   pull: handlePull,
   push: handlePush,
+  changePassword: handleChangePassword,
+  deleteAccount: handleDeleteAccount,
+  adminList: handleAdminList,
+  adminResetPassword: handleAdminResetPassword,
+  adminDisable: handleAdminDisable,
+  adminDelete: handleAdminDelete,
 }
 
 const server = http.createServer(async (req, res) => {
