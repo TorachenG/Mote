@@ -332,6 +332,7 @@ import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Filter
 import top.yukonga.miuix.kmp.icon.extended.Lock
+import top.yukonga.miuix.kmp.icon.extended.MoveFile
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.icon.extended.Link
 
@@ -3878,6 +3879,7 @@ fun BrowserScreen(
     var scriptContent by remember { mutableStateOf("") }
     var pendingDeleteBookmarkId by remember { mutableStateOf<String?>(null) }
     var showDeleteBookmarkDialog by remember { mutableStateOf(false) }
+    var showMoveBookmarksDialog by remember { mutableStateOf(false) }
     var addFromBookmarkSheet by remember { mutableStateOf(false) }
     var addFolderFromAddBookmark by remember { mutableStateOf(false) }
 
@@ -4759,6 +4761,20 @@ fun BrowserScreen(
             }
         }
         return null
+    }
+
+    fun collectAllFolders(
+        items: List<BookmarkItem>,
+        depth: Int = 0,
+        out: MutableList<Pair<BookmarkItem, Int>> = mutableListOf(),
+    ): List<Pair<BookmarkItem, Int>> {
+        items.forEach { item ->
+            if (item.isFolder) {
+                out.add(item to depth)
+                collectAllFolders(item.children, depth + 1, out)
+            }
+        }
+        return out
     }
 
     fun getTargetFolderItems(): MutableList<BookmarkItem> {
@@ -5868,6 +5884,29 @@ fun BrowserScreen(
     val historySelected = remember { mutableStateListOf<String>() }
     var bookmarkMultiSelect by remember { mutableStateOf(false) }
     val bookmarkSelected = remember { mutableStateListOf<String>() }
+
+    fun moveSelectedBookmarks(targetFolderId: String?): Int {
+        if (bookmarkSelected.isEmpty()) return 0
+        val targetChildren: MutableList<BookmarkItem> = if (targetFolderId == null) {
+            bookmarks
+        } else {
+            findBookmarkById(bookmarks, targetFolderId)?.children ?: return 0
+        }
+        val moved = mutableListOf<BookmarkItem>()
+        bookmarkSelected.toList().forEach { id ->
+            val item = findBookmarkById(bookmarks, id) ?: return@forEach
+            if (item.isFolder) return@forEach
+            if (removeBookmarkById(bookmarks, id)) moved.add(item)
+        }
+        if (moved.isNotEmpty()) {
+            targetChildren.addAll(moved)
+            saveBookmarks()
+        }
+        bookmarkMultiSelect = false
+        bookmarkSelected.clear()
+        return moved.size
+    }
+
 
 
 
@@ -8182,6 +8221,7 @@ fun BrowserScreen(
                 } catch (_: Exception) {}
             }
         },
+        onMoveSelected = { showMoveBookmarksDialog = true },
         onAddBookmark = {
             addFromBookmarkSheet = true
             showBookmarkSheet = false
@@ -8735,6 +8775,76 @@ fun BrowserScreen(
                         contentColor = Color.White,
                     ),
                 ) { Text("删除") }
+            }
+        }
+    }
+
+    WindowDialog(
+        show = showMoveBookmarksDialog,
+        title = "移动到",
+        onDismissRequest = { showMoveBookmarksDialog = false }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .padding(top = 8.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        val moved = moveSelectedBookmarks(null)
+                        showMoveBookmarksDialog = false
+                        if (moved > 0) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = "已移动 $moved 项",
+                                    duration = SnackbarDuration.Short,
+                                )
+                            }
+                        }
+                    }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = "根目录",
+                    fontSize = 15.sp,
+                    color = MiuixTheme.colorScheme.onSurface,
+                )
+            }
+            collectAllFolders(bookmarks).forEach { (folder, depth) ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            val moved = moveSelectedBookmarks(folder.id)
+                            showMoveBookmarksDialog = false
+                            if (moved > 0) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = "已移动 $moved 项",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                }
+                            }
+                        }
+                        .padding(
+                            start = 12.dp + (depth * 16).dp,
+                            end = 12.dp,
+                            top = 12.dp,
+                            bottom = 12.dp,
+                        ),
+                ) {
+                    Text(
+                        text = folder.title,
+                        fontSize = 15.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }
@@ -12595,6 +12705,7 @@ private fun BookmarkSheet(
     onToggleSelectAllFiltered: (List<String>) -> Unit,
     onDeleteSelected: () -> Unit,
     onShareSelected: (List<String>) -> Unit,
+    onMoveSelected: () -> Unit,
     onAddBookmark: () -> Unit,
     onAddFolder: () -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -13009,6 +13120,14 @@ private fun BookmarkSheet(
                             Icon(
                                 imageVector = MiuixIcons.Share,
                                 contentDescription = "分享",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        IconButton(onClick = { if (selectedIds.isNotEmpty()) onMoveSelected() }) {
+                            Icon(
+                                imageVector = MiuixIcons.MoveFile,
+                                contentDescription = "移动",
                                 tint = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.size(22.dp),
                             )
