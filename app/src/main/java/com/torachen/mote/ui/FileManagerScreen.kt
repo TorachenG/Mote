@@ -125,6 +125,8 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults as MiuixButtonDefaults
 import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -141,6 +143,7 @@ import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -430,7 +433,6 @@ fun FileManagerPage(
     var infoItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var showMoreMenu by remember { mutableStateOf(false) }
     var shareItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var showZipShareDialog by remember { mutableStateOf(false) }
     var confirmTitle by remember { mutableStateOf("") }
@@ -452,17 +454,35 @@ fun FileManagerPage(
         if (controller.selected.isNotEmpty()) showDeleteDialog = true
     }
 
+    fun doShare(items: List<FsEntry>) {
+        if (items.isEmpty()) return
+        uiScope.launch {
+            Toast.makeText(context, "正在压缩…", Toast.LENGTH_SHORT).show()
+            val zip = withContext(Dispatchers.IO) { zipForShare(context, items) }
+            if (zip == null) {
+                Toast.makeText(context, "压缩失败", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            shareFile(context, zip)
+            controller.selected = emptyList()
+            delay(60000)
+            withContext(Dispatchers.IO) { zip.delete() }
+        }
+    }
+
     when (LocalUiMode.current) {
         UiMode.Miuix -> FileManagerMiuix(
             controller = controller,
-            onInfo = { showMoreMenu = true },
+            onAbout = { items -> infoItems = items; showInfoDialog = true },
+            onShare = { items -> shareItems = items; if (items.any { it.isDir }) showZipShareDialog = true else doShare(items) },
             onDelete = requestDelete,
             onCompress = requestCompress,
             onExtract = requestExtract,
         )
         UiMode.Material -> FileManagerMaterial(
             controller = controller,
-            onInfo = { showMoreMenu = true },
+            onAbout = { items -> infoItems = items; showInfoDialog = true },
+            onShare = { items -> shareItems = items; if (items.any { it.isDir }) showZipShareDialog = true else doShare(items) },
             onDelete = requestDelete,
             onCompress = requestCompress,
             onExtract = requestExtract,
@@ -503,79 +523,7 @@ fun FileManagerPage(
             }
         }
 
-    val selectedNow = controller.selected
 
-    fun doShare(items: List<FsEntry>) {
-        if (items.isEmpty()) return
-        uiScope.launch {
-            Toast.makeText(context, "正在压缩…", Toast.LENGTH_SHORT).show()
-            val zip = withContext(Dispatchers.IO) { zipForShare(context, items) }
-            if (zip == null) {
-                Toast.makeText(context, "压缩失败", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            shareFile(context, zip)
-            controller.selected = emptyList()
-            delay(60000)
-            withContext(Dispatchers.IO) { zip.delete() }
-        }
-    }
-
-    if (showMoreMenu) {
-        Popup(
-            onDismissRequest = { showMoreMenu = false },
-            offset = IntOffset(0, 0),
-            properties = PopupProperties(focusable = true),
-        ) {
-            top.yukonga.miuix.kmp.basic.Card(modifier = Modifier.padding(24.dp)) {
-                Column(modifier = Modifier.width(160.dp)) {
-                    top.yukonga.miuix.kmp.basic.Text(
-                        "关于",
-                        style = MiuixTheme.textStyles.body1,
-                        modifier = Modifier.fillMaxWidth()
-                            .clickable { showMoreMenu = false; infoItems = selectedNow; showInfoDialog = true }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                    )
-                    top.yukonga.miuix.kmp.basic.Text(
-                        "分享",
-                        style = MiuixTheme.textStyles.body1,
-                        modifier = Modifier.fillMaxWidth()
-                            .clickable {
-                                showMoreMenu = false
-                                shareItems = selectedNow
-                                if (selectedNow.any { it.isDir }) showZipShareDialog = true
-                                else doShare(selectedNow)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                    )
-                }
-            }
-        }
-    }
-
-    WindowDialog(show = confirmAction != null, title = confirmTitle, onDismissRequest = { confirmAction = null }) {
-        Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(confirmText, style = MiuixTheme.textStyles.body1)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
-                    onClick = { confirmAction = null },
-                    modifier = Modifier.weight(1f),
-                    colors = MiuixButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.secondaryContainer,
-                        contentColor = MiuixTheme.colorScheme.onSurface,
-                    ),
-                ) { Text("取消") }
-                Button(
-                    onClick = {
-                        val action = confirmAction
-                        confirmAction = null
-                        action?.invoke()
-                    },
-                    modifier = Modifier.weight(1f),
-                ) { Text("确定") }
-            }
-        }
-    }
 
     WindowDialog(show = showZipShareDialog, title = "分享", onDismissRequest = { showZipShareDialog = false }) {
         Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -622,7 +570,8 @@ fun FileManagerPage(
 @Composable
 private fun FileManagerMiuix(
     controller: FileManagerController,
-    onInfo: (List<FsEntry>) -> Unit,
+    onAbout: (List<FsEntry>) -> Unit,
+    onShare: (List<FsEntry>) -> Unit,
     onDelete: () -> Unit,
     onCompress: () -> Unit,
     onExtract: (FsEntry) -> Unit,
@@ -864,13 +813,14 @@ private fun FileManagerMiuix(
             } else if (barItems.isNotEmpty()) {
                 MiuixActionBar(
                     items = barItems,
+                    onAbout = { onAbout(barItems) },
+                    onShare = { onShare(barItems) },
                     onOpen = { one -> controller.open(one); controller.selected = emptyList() },
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
                     onExtract = onExtract,
                     onCompress = onCompress,
                     onDelete = onDelete,
-                    onInfo = { onInfo(controller.selected.ifEmpty { barItems }) },
                 )
             }
         }
@@ -1016,7 +966,8 @@ private fun MiuixActionBar(
     onExtract: (FsEntry) -> Unit,
     onCompress: () -> Unit,
     onDelete: () -> Unit,
-    onInfo: () -> Unit,
+    onAbout: () -> Unit,
+    onShare: () -> Unit,
 ) {
     val single = items.size == 1
     val one = items.firstOrNull()
@@ -1037,7 +988,22 @@ private fun MiuixActionBar(
         CapsuleAction(MiuixIcons.Copy, "复制", enabled = true) { onCopy() }
         CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = true) { onMove() }
         CapsuleAction(MiuixIcons.Delete, "删除", enabled = true) { onDelete() }
-        CapsuleAction(androidx.compose.material.icons.Icons.Rounded.MoreVert, "更多", enabled = true) { onInfo() }
+        var showMore by remember { mutableStateOf(false) }
+        Box {
+            CapsuleAction(androidx.compose.material.icons.Icons.Rounded.MoreVert, "更多", enabled = true) { showMore = true }
+            WindowCascadingListPopup(
+                show = showMore,
+                entries = listOf(
+                    DropdownEntry(
+                        items = listOf(
+                            DropdownItem(text = "关于", onClick = { showMore = false; onAbout() }),
+                            DropdownItem(text = "分享", onClick = { showMore = false; onShare() }),
+                        )
+                    )
+                ),
+                onDismissRequest = { showMore = false },
+            )
+        }
     }
 }
 
@@ -1099,7 +1065,8 @@ private fun MiuixPickBar(controller: FileManagerController) {
 @Composable
 private fun FileManagerMaterial(
     controller: FileManagerController,
-    onInfo: (List<FsEntry>) -> Unit,
+    onAbout: (List<FsEntry>) -> Unit,
+    onShare: (List<FsEntry>) -> Unit,
     onDelete: () -> Unit,
     onCompress: () -> Unit,
     onExtract: (FsEntry) -> Unit,
@@ -1267,7 +1234,7 @@ private fun FileManagerMaterial(
                                 }
                             }
                             M3CapsuleAction(Icons.Rounded.MoreVert, "更多", true) {
-                                onInfo(controller.selected.ifEmpty { barItems })
+                                onAbout(controller.selected.ifEmpty { barItems })
                             }
                         }
                     }
