@@ -290,6 +290,21 @@ internal object MoteCloudSyncManager {
         }
     }
 
+    /** 从已保存的 token 里解析用户名（老版本登录没存用户名时用） */
+    fun usernameFromToken(token: String): String {
+        return try {
+            val parts = token.split(".")
+            if (parts.size < 2) return ""
+            val payload = Base64.decode(
+                parts[1],
+                Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
+            ).toString(Charsets.UTF_8)
+            JSONObject(payload).optString("username", "")
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     fun buildLocalData(prefs: SharedPreferences): JSONObject {
         val root = JSONObject()
         root.put("fallback_key", getLocalPass(prefs))
@@ -545,6 +560,16 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
 
     var isLoggedIn by remember { mutableStateOf(prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, "")?.isNotBlank() == true) }
     var currentUserEmail by remember { mutableStateOf(prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: "") }
+    var currentUsername by remember {
+        mutableStateOf(
+            (prefs.getString("cloudbase_username", "") ?: "").ifBlank {
+                MoteCloudSyncManager.usernameFromToken(
+                    prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, "") ?: ""
+                )
+            }
+        )
+    }
+    var showAccountDialog by remember { mutableStateOf(false) }
     var usernameInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var isLoggingIn by remember { mutableStateOf(false) }
@@ -585,9 +610,11 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
             .putString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, token)
             .putString(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN, refresh)
             .putString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, uid.ifBlank { accountName })
+            .putString("cloudbase_username", accountName)
             .apply()
         isLoggedIn = true
         currentUserEmail = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: ""
+        currentUsername = prefs.getString("cloudbase_username", "") ?: ""
         if (accountPassword.isNotBlank()) {
             MoteCloudSyncManager.updateE2EEKey(accountName, accountPassword, prefs)
         }
@@ -779,10 +806,8 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                     if (isLoggedIn) {
                                         BasicComponent(
                                             title = "账号",
-                                            summary = currentUserEmail,
-                                            onClick = {
-                                                // 可选：点击查看账号详情或空操作
-                                            },
+                                            summary = currentUsername.ifBlank { currentUserEmail },
+                                            onClick = { showAccountDialog = true },
                                             endActions = {
                                                 Box(
                                                     modifier = Modifier
@@ -794,6 +819,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                                                 .remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN)
                                                                 .remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN)
                                                                 .remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID)
+                                                                .remove("cloudbase_username")
                                                                 .apply()
                                                             isLoggedIn = false
                                                             usernameInput = ""
@@ -1039,6 +1065,28 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
             }
         }
 
+    WindowDialog(
+        show = showAccountDialog,
+        title = "账号详情",
+        onDismissRequest = { showAccountDialog = false }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "用户名：${currentUsername.ifBlank { "—" }}",
+                color = MiuixTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+            )
+            Text(
+                text = "UID：${currentUserEmail.ifBlank { "—" }}",
+                color = MiuixTheme.colorScheme.onSurface,
+                fontSize = 15.sp,
+            )
+        }
+    }
+
     // 错误详情弹窗
     WindowDialog(
         show = errorDialogMessage != null,
@@ -1145,6 +1193,16 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
 
     var isLoggedIn by remember { mutableStateOf(prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, "")?.isNotBlank() == true) }
     var currentUserEmail by remember { mutableStateOf(prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: "") }
+    var currentUsername by remember {
+        mutableStateOf(
+            (prefs.getString("cloudbase_username", "") ?: "").ifBlank {
+                MoteCloudSyncManager.usernameFromToken(
+                    prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, "") ?: ""
+                )
+            }
+        )
+    }
+    var showAccountDialog by remember { mutableStateOf(false) }
     var usernameInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var isLoggingIn by remember { mutableStateOf(false) }
@@ -1183,9 +1241,11 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
             .putString(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN, token)
             .putString(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN, refresh)
             .putString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, uid.ifBlank { accountName })
+            .putString("cloudbase_username", accountName)
             .apply()
         isLoggedIn = true
         currentUserEmail = prefs.getString(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID, "") ?: ""
+        currentUsername = prefs.getString("cloudbase_username", "") ?: ""
         if (accountPassword.isNotBlank()) {
             MoteCloudSyncManager.updateE2EEKey(accountName, accountPassword, prefs)
         }
@@ -1413,11 +1473,11 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                 if (isLoggedIn) {
                                                     M3SegmentItem(
                                                         headline = { M3Text("账号") },
-                                                        supporting = { M3Text(currentUserEmail, color = M3MaterialTheme.colorScheme.onSurfaceVariant) },
+                                                        supporting = { M3Text(currentUsername.ifBlank { currentUserEmail }, color = M3MaterialTheme.colorScheme.onSurfaceVariant) },
                                                         trailing = {
                                                             M3Surface(
                                                                 onClick = {
-                                                                    prefs.edit().remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID).apply()
+                                                                    prefs.edit().remove(MoteCloudSyncManager.KEY_CLOUDBASE_ACCESS_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_REFRESH_TOKEN).remove(MoteCloudSyncManager.KEY_CLOUDBASE_USER_ID).remove("cloudbase_username").apply()
                                                                     isLoggedIn = false; usernameInput = ""; passwordInput = ""
                                                                 },
                                                                 shape = RoundedCornerShape(16.dp),
@@ -1429,7 +1489,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                                                                 }
                                                             }
                                                         },
-                                                        onClick = null
+                                                        onClick = { showAccountDialog = true }
                                                     )
                                                 } else {
                                                     M3SegmentArrowItem(
@@ -1596,6 +1656,22 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
             },
             dismissButton = {
                 M3TextButton(onClick = { showE2eeDialog = false }) { M3Text("取消") }
+            }
+        )
+    }
+
+    if (showAccountDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showAccountDialog = false },
+            title = { M3Text("账号详情") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    M3Text("用户名：${currentUsername.ifBlank { "—" }}")
+                    M3Text("UID：${currentUserEmail.ifBlank { "—" }}")
+                }
+            },
+            confirmButton = {
+                M3TextButton(onClick = { showAccountDialog = false }) { M3Text("关闭") }
             }
         )
     }
