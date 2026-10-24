@@ -1118,6 +1118,19 @@ private fun ToastText(text: String) {
     }
 }
 
+private fun dirSize(file: java.io.File): Long {
+    if (file.isFile) return file.length()
+    var total = 0L
+    file.listFiles()?.forEach { total += dirSize(it) }
+    return total
+}
+
+private fun typeLabel(file: java.io.File, isDir: Boolean): String {
+    if (isDir) return "文件夹"
+    val ext = file.name.substringAfterLast('.', "").uppercase()
+    return if (ext.isBlank()) "文件" else "$ext 文件"
+}
+
 @Composable
 private fun FileInfoDialog(
     items: List<FsEntry>,
@@ -1130,7 +1143,16 @@ private fun FileInfoDialog(
         val first = one?.file?.name ?: ""
         "$first 等 ${items.size} 个文件"
     }
-    val totalSize = items.sumOf { if (it.isDir) 0L else it.size }
+
+    val totalSize by produceState(initialValue = -1L, items) {
+        value = withContext(Dispatchers.IO) {
+            var sum = 0L
+            items.forEach { entry ->
+                sum += if (entry.isDir) dirSize(entry.file) else entry.size
+            }
+            sum
+        }
+    }
 
     WindowDialog(show = true, title = title, onDismissRequest = onDismiss) {
         Column(
@@ -1146,9 +1168,17 @@ private fun FileInfoDialog(
                         modifier = Modifier.clickable { onJump(one.file.parentFile ?: one.file) },
                     )
                 }
+                InfoRow("类型") {
+                    Text(typeLabel(one.file, one.isDir), style = MiuixTheme.textStyles.body1)
+                }
                 InfoRow("大小") {
+                    val size = when {
+                        !one.isDir -> one.size
+                        totalSize >= 0 -> totalSize
+                        else -> -1L
+                    }
                     Text(
-                        if (one.isDir) "文件夹" else fmFormatSize(one.size),
+                        if (size < 0) "计算中…" else fmFormatSize(size).ifBlank { "0 B" },
                         style = MiuixTheme.textStyles.body1,
                     )
                 }
@@ -1157,7 +1187,12 @@ private fun FileInfoDialog(
                 InfoRow("可写") { Text(if (one.file.canWrite()) "是" else "否", style = MiuixTheme.textStyles.body1) }
                 InfoRow("隐藏") { Text(if (one.file.isHidden) "是" else "否", style = MiuixTheme.textStyles.body1) }
             } else {
-                InfoRow("总计大小") { Text(fmFormatSize(totalSize), style = MiuixTheme.textStyles.body1) }
+                InfoRow("总计大小") {
+                    Text(
+                        if (totalSize < 0) "计算中…" else fmFormatSize(totalSize).ifBlank { "0 B" },
+                        style = MiuixTheme.textStyles.body1,
+                    )
+                }
             }
         }
     }
