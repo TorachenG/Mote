@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -77,6 +78,8 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -560,10 +563,10 @@ internal object MoteCloudSyncManager {
 // 入口
 // ============================================================
 @Composable
-fun SettingsSyncPage(onBack: () -> Unit) {
+fun SettingsSyncPage(onBack: () -> Unit, onOpenBrowserSync: () -> Unit) {
     when (LocalUiMode.current) {
-        UiMode.Miuix -> SettingsSyncMiuix(onBack)
-        UiMode.Material -> SettingsSyncMaterial(onBack)
+        UiMode.Miuix -> SettingsSyncMiuix(onBack, onOpenBrowserSync)
+        UiMode.Material -> SettingsSyncMaterial(onBack, onOpenBrowserSync)
     }
 }
 
@@ -571,7 +574,7 @@ fun SettingsSyncPage(onBack: () -> Unit) {
 // MIUIX 版
 // ============================================================
 @Composable
-private fun SettingsSyncMiuix(onBack: () -> Unit) {
+private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit) {
     LaunchedEffect(Unit) {
         // 提前预热云函数，减少首次同步的冷启动等待
         withContext(Dispatchers.IO) { MoteCloudSyncManager.warmUp() }
@@ -1066,6 +1069,13 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
                                                     useWebDav = !useWebDav
                                                     prefs.edit().putString("sync_provider", if (useWebDav) "webdav" else "cloudbase").apply()
                                                 }
+                                            ),
+                                            DropdownItem(
+                                                text = "与其它浏览器同步",
+                                                onClick = {
+                                                    showMoreMenu = false
+                                                    onOpenBrowserSync()
+                                                }
                                             )
                                         )
                                     )
@@ -1274,7 +1284,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit) {
 // ============================================================
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsSyncMaterial(onBack: () -> Unit) {
+private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Unit) {
     LaunchedEffect(Unit) {
         // 提前预热云函数，减少首次同步的冷启动等待
         withContext(Dispatchers.IO) { MoteCloudSyncManager.warmUp() }
@@ -1869,6 +1879,122 @@ private fun SettingsSyncMaterial(onBack: () -> Unit) {
                     conflictData = null
                 }) { M3Text("保留云端") }
             }
+        )
+    }
+}
+
+/**
+ * 与其它浏览器同步：图文教程页，沿用设置页同一套骨架。
+ */
+@Composable
+fun SettingsSyncBrowsersPage(
+    onBack: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+) {
+    val scrollBehavior = MiuixScrollBehavior()
+    val surface = MiuixTheme.colorScheme.surface
+    val density = LocalDensity.current
+    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    var topBarBottomPx by remember { mutableIntStateOf(0) }
+    val contentTopPadding = if (topBarBottomPx > 0) {
+        with(density) { topBarBottomPx.toDp() }
+    } else {
+        statusBarHeight + 128.dp
+    }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    Box(modifier = Modifier.fillMaxSize().background(surface)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .overScrollVertical(),
+            contentPadding = PaddingValues(top = contentTopPadding, bottom = 24.dp),
+            overscrollEffect = null,
+        ) {
+            item {
+                Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                        Text(
+                            "在电脑浏览器里同步 Mote 的书签",
+                            style = MiuixTheme.textStyles.title4,
+                            color = MiuixTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "安装 Mote 书签同步扩展，用与手机相同的账号登录，即可双向同步书签。",
+                            style = MiuixTheme.textStyles.body2,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Image(
+                            painter = painterResource(id = com.torachen.mote.R.drawable.sync_browsers_store),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillWidth,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    onOpenUrl("https://microsoftedge.microsoft.com/addons/detail/gknjcogfnimdkgnefmiajfcfopgbfpcg")
+                                },
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        StepText("1. 打开扩展商店，点击「获取」安装「Mote 书签同步」。")
+                        StepText("2. 安装完成后，在浏览器工具栏点击 Mote 图标，选择「打开设置」。")
+                        StepText("3. 用与 Mote 相同的账号和密码登录，等待首次同步完成。")
+                        StepText("4. 之后在浏览器新增、修改或删除书签，都会与 Mote 双向同步。")
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                onOpenUrl("https://microsoftedge.microsoft.com/addons/detail/gknjcogfnimdkgnefmiajfcfopgbfpcg")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("前往扩展商店") }
+                    }
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .background(surface)
+                .statusBarsPadding()
+                .onGloballyPositioned { coords ->
+                    val bottom = coords.boundsInWindow().bottom.toInt()
+                    if (bottom != topBarBottomPx) topBarBottomPx = bottom
+                },
+        ) {
+            TopAppBar(
+                title = "与其它浏览器同步",
+                largeTitle = "与其它浏览器同步",
+                scrollBehavior = scrollBehavior,
+                color = Color.Transparent,
+                defaultWindowInsetsPadding = false,
+                navigationIcon = {
+                    SettingsBackButton(
+                        onBack = onBack,
+                        progressiveTitleBlur = false,
+                        backCardAlpha = 0f,
+                        backCardMaterialModifier = Modifier,
+                        iconTint = MiuixTheme.colorScheme.onSurface,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepText(text: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
+        Text(
+            text,
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.onSurface,
         )
     }
 }

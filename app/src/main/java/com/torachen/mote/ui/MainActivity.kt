@@ -3566,6 +3566,7 @@ private fun RenderPageContent(
             )
             "settings_sync" -> SettingsSyncPage(
                 onBack = { onPop() },
+                onOpenBrowserSync = { onPush("settings_sync_browsers") },
             )
             "settings_legal" -> SettingsLegalPage(
                 onBack = { onPop() },
@@ -3605,6 +3606,13 @@ private fun RenderPageContent(
                 onBack = { onPop() },
                 onOpenInBrowser = { uri ->
                     PendingOpenInNewWindowStore.pending = uri
+                    onPopToRoot()
+                },
+            )
+            "settings_sync_browsers" -> SettingsSyncBrowsersPage(
+                onBack = { onPop() },
+                onOpenUrl = { url ->
+                    PendingOpenInNewWindowStore.pending = url
                     onPopToRoot()
                 },
             )
