@@ -314,6 +314,42 @@ const handlers = {
   adminDelete: handleAdminDelete,
 }
 
+// ---------- 简单限频（进程内计数，冷启动重置；多实例各自计数，用于挡住脚本刷接口） ----------
+const RATE_WINDOW_MS = 60 * 1000
+const RATE_LIMITS = {
+  register: 5,      // 每 IP 每分钟最多注册 5 次
+  login: 20,        // 每 IP 每分钟最多登录 20 次
+  refresh: 60,
+  pull: 120,
+  push: 120,
+  default: 120,
+}
+const rateBuckets = new Map()
+
+function clientIp(req) {
+  const forwarded = req.headers['x-forwarded-for']
+  if (forwarded) return String(forwarded).split(',')[0].trim()
+  return req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : 'unknown'
+}
+
+function hitRateLimit(action, ip) {
+  const limit = RATE_LIMITS[action] || RATE_LIMITS.default
+  const now = Date.now()
+  const key = action + '|' + ip
+  let bucket = rateBuckets.get(key)
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + RATE_WINDOW_MS }
+    rateBuckets.set(key, bucket)
+  }
+  bucket.count += 1
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) {
+      if (v.resetAt <= now) rateBuckets.delete(k)
+    }
+  }
+  return bucket.count > limit
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'OPTIONS') return send(res, 204, {})
@@ -328,6 +364,10 @@ const server = http.createServer(async (req, res) => {
 
     const handler = handlers[action]
     if (!handler) return fail(res, '不支持的 action: ' + action)
+
+    if (hitRateLimit(action, clientIp(req))) {
+      return fail(res, '请求过于频繁，请稍后再试', 429)
+    }
 
     const result = await handler(body)
     if (result.error) return fail(res, result.error, result.code)
