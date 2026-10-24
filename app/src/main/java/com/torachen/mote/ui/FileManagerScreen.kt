@@ -506,12 +506,14 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
         }
 
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .then(
-                    if (blurSupported && backdrop != null && materialStyle != 0) {
+        // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
+        if (blurSupported && backdrop != null && materialStyle != 0) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(topPadding + 48.dp)
+                    .align(Alignment.TopCenter)
+                    .then(
                         if (progressiveTitleBlur) {
                             Modifier.progressiveTextureBlur(
                                 backdrop = backdrop,
@@ -529,10 +531,15 @@ private fun FileManagerMiuix(controller: FileManagerController, toast: String?) 
                                 colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                             )
                         }
-                    } else {
-                        Modifier.background(surface)
-                    }
-                )
+                    ),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .then(if (blurSupported && backdrop != null && materialStyle != 0) Modifier else Modifier.background(surface))
                 .statusBarsPadding()
                 .onGloballyPositioned { coords ->
                     val bottom = coords.boundsInWindow().bottom.toInt()
