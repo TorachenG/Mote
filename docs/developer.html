@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>管理入口 · Mote</title>
 <meta name="theme-color" content="#f4f7fb">
+<meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="assets/mote_logo.png">
 <link rel="stylesheet" href="assets/site.css">
 <style>
@@ -44,6 +45,19 @@
     .stats{gap:22px}
     table{font-size:13px}
     td.actions button{padding:5px 9px;font-size:12px}
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tag.on{background:#1d2a22;color:#5fd08a}
+    .tag.off{background:#2c1e20;color:#ff7b7f}
+    .modal{background:#1e2127;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+    .modal h3{color:#e6e9ee}
+    .modal-mask{background:rgba(8,10,14,.55)}
+    #message{color:#8f97a4}
+    #message.error{color:#ff7b7f}
+    #message.ok{color:#5fd08a}
+    td.mono{color:#8f97a4}
+    .state{color:#8f97a4}
   }
 </style>
 </head>

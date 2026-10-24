@@ -63,6 +63,37 @@
   .account-name{font-size:14px;color:var(--text);letter-spacing:.2px}
   .check{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--text)}
   .check input{width:16px;height:16px}
+
+  @media (prefers-color-scheme: dark) {
+    body{
+      color:#c9cfd8;
+      background:
+        radial-gradient(900px 500px at 10% 0%, rgba(255,255,255,.05), transparent 60%),
+        linear-gradient(140deg,#15171c,#171a20 45%,#101216);
+    }
+    h1{color:#e6e9ee}
+    .lead{color:#8f97a4}
+    .card{background:#1e2127;box-shadow:0 10px 30px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4)}
+    .card h2{color:#aab2c0}
+    label{color:#8f97a4}
+    input[type=text],input[type=password],input[type=number],select{
+      background:#23272e;border-color:#2f343c;color:#e2e6ec;
+    }
+    input:focus,select:focus{background:#262b33;border-color:#3f5b8a;box-shadow:0 0 0 3px rgba(76,141,255,.16)}
+    .radio label{background:#23272e;border-color:#2f343c;color:#cdd3dc}
+    .radio input:checked + span{color:#7fb0ff}
+    .radio label:has(input:checked){background:#1e293b;border-color:#3f5b8a;box-shadow:0 0 0 3px rgba(76,141,255,.14)}
+    button{background:#262b33;color:#d7dce4}
+    button:hover{background:#2e343d}
+    button.primary{background:#3b7ff0;color:#fff}
+    button.primary:hover{background:#4a8bf5}
+    .status{color:#8f97a4}
+    .hint{color:#8b93a0}
+    .account-name{color:#e2e6ec}
+    .check{color:#cdd3dc}
+    .check input{accent-color:#3b7ff0}
+    .stat b{color:#e6e9ee}
+  }
 </style>
 </head>
 <body>

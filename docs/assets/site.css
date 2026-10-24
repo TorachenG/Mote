@@ -1,5 +1,6 @@
 /* Mote 官网公共样式 */
 :root{
+  color-scheme: light dark;
   --ink:#8b93a1;
   --nav:#8b93a0;
   --sep:#c9cfd8;
@@ -106,6 +107,7 @@ nav i{font-style:normal;color:var(--sep);font-size:14px}
   .nav-item .dropdown{transition:none}
 }
 
+
 /* ---------- 页面容器 ---------- */
 .wrap{
   width:100%;
@@ -199,4 +201,65 @@ footer a:hover{color:#6b7480;border-bottom-color:rgba(107,116,128,.6)}
   .card{padding:16px}
   .page-head h1{font-size:21px}
   .doc{font-size:14px}
+}
+
+/* ---------- 深色模式 ---------- */
+@media (prefers-color-scheme: dark) {
+  :root{
+    --ink:#a8b0bd;
+    --nav:#9aa3b0;
+    --sep:#3a4048;
+    --brand:#3f4855;
+    --text:#e6e9ee;
+    --muted:#8f97a4;
+    --line:#2c3138;
+    --ok:#4fbf7a;
+    --danger:#ff7b7f;
+  }
+  body{
+    color:#b9c0cb;
+    background:
+      radial-gradient(1200px 700px at 12% 0%, rgba(90,120,180,.10), transparent 60%),
+      linear-gradient(140deg,#14161a 0%,#171a1f 42%,#101216 100%);
+  }
+  .brand .org{color:#7e8794}
+  .brand .name{color:#3f4855}
+  nav a{color:#9aa3b0}
+  nav a:hover{color:#e6e9ee}
+  nav a.active{color:#4c8dff}
+  nav i{color:#3a4048}
+  .nav-item .dropdown{
+    background:rgba(30,33,39,.9);
+    border-color:rgba(255,255,255,.07);
+    box-shadow:0 18px 40px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.4);
+  }
+  .nav-item .dropdown a{color:#c3c9d4}
+  .nav-item .dropdown a:hover{background:rgba(255,255,255,.07);color:#fff}
+  .wrap{color:#b9c0cb}
+  .page-head h1{color:#e6e9ee}
+  .page-head .sub{color:#8f97a4}
+  .card{
+    background:#1e2127;
+    box-shadow:0 10px 30px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.4);
+  }
+  label{color:#8f97a4}
+  input{
+    background:#23272e;border-color:#2f343c;color:#e2e6ec;
+  }
+  input:focus{background:#262b33;border-color:#3f5b8a;box-shadow:0 0 0 3px rgba(76,141,255,.16)}
+  button{background:#262b33;color:#d7dce4}
+  button:hover{background:#2e343d}
+  button.primary{background:#3b7ff0;color:#fff}
+  button.primary:hover{background:#4a8bf5}
+  button.danger{background:#33222a;color:#ff9aa0}
+  .doc{color:#b9c0cb}
+  .doc h1,.doc h2,.doc h3{color:#e6e9ee}
+  .doc a{color:#7fb0ff;border-bottom-color:rgba(127,176,255,.3)}
+  .doc a:hover{border-bottom-color:rgba(127,176,255,.6)}
+  .doc code{background:#2a2f37;color:#cfd6e0}
+  .doc blockquote{background:#21262d;border-left-color:#33404f;color:#a9b1bd}
+  .doc hr{border-top-color:#2c3138}
+  footer{color:#7b8391}
+  footer a{border-bottom-color:rgba(150,160,175,.3)}
+  footer a:hover{color:#c6ccd6}
 }
