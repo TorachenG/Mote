@@ -1,6 +1,11 @@
 package com.torachen.mote.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -66,14 +71,15 @@ fun DownloadsShell(
     onOpenInBrowser: (String) -> Unit,
     initialTab: Int = 0,
 ) {
-    var tab by rememberSaveable { mutableIntStateOf(initialTab) }
+    val tabState = remember { mutableIntStateOf(initialTab) }
+    val tab = tabState.intValue
     var downloadsSelecting by remember { mutableStateOf(false) }
     var filesSelecting by remember { mutableStateOf(false) }
 
     when (LocalUiMode.current) {
         UiMode.Miuix -> DownloadsShellMiuix(
             tab = tab,
-            onTabChange = { tab = it },
+            onTabChange = { tabState.intValue = it },
             onBack = onBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
@@ -81,10 +87,11 @@ fun DownloadsShell(
             navBarVisible = !downloadsSelecting && !filesSelecting,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
+            selectedIndex = { tabState.intValue },
         )
         UiMode.Material -> DownloadsShellMaterial(
             tab = tab,
-            onTabChange = { tab = it },
+            onTabChange = { tabState.intValue = it },
             onBack = onBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
@@ -92,6 +99,7 @@ fun DownloadsShell(
             navBarVisible = !downloadsSelecting && !filesSelecting,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
+            selectedIndex = { tabState.intValue },
         )
     }
 }
@@ -107,6 +115,7 @@ private fun DownloadsShellMiuix(
     navBarVisible: Boolean,
     onDownloadsSelectingChange: (Boolean) -> Unit,
     onFilesSelectingChange: (Boolean) -> Unit,
+    selectedIndex: () -> Int,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -124,19 +133,36 @@ private fun DownloadsShellMiuix(
                 .fillMaxSize()
                 .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
         ) {
-            if (tab == 0) {
-                DownloadManagerScreen(
-                    onBack = onBack,
-                    onOpenDownloadSettings = onOpenDownloadSettings,
-                    onOpenTaskDetail = onOpenTaskDetail,
-                    onSelectionModeChange = onDownloadsSelectingChange,
-                )
-            } else {
-                FileManagerPage(
-                    onBack = { onTabChange(0) },
-                    onOpenInBrowser = onOpenInBrowser,
-                    onSelectionModeChange = onFilesSelectingChange,
-                )
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    val forward = targetState > initialState
+                    val slide = tween<androidx.compose.ui.unit.IntOffset>(durationMillis = 300)
+                    val fade = tween<Float>(durationMillis = 220)
+                    if (forward) {
+                        (slideInHorizontally(slide) { it / 4 } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { -it / 4 } + fadeOut(fade))
+                    } else {
+                        (slideInHorizontally(slide) { -it / 4 } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { it / 4 } + fadeOut(fade))
+                    }
+                },
+                label = "sheetTab",
+            ) { current ->
+                if (current == 0) {
+                    DownloadManagerScreen(
+                        onBack = onBack,
+                        onOpenDownloadSettings = onOpenDownloadSettings,
+                        onOpenTaskDetail = onOpenTaskDetail,
+                        onSelectionModeChange = onDownloadsSelectingChange,
+                    )
+                } else {
+                    FileManagerPage(
+                        onBack = { onTabChange(0) },
+                        onOpenInBrowser = onOpenInBrowser,
+                        onSelectionModeChange = onFilesSelectingChange,
+                    )
+                }
             }
         }
 
@@ -151,7 +177,7 @@ private fun DownloadsShellMiuix(
                     modifier = Modifier.padding(
                         bottom = 12.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
                     ),
-                    selectedIndex = { tab },
+                    selectedIndex = selectedIndex,
                     onSelected = { onTabChange(it) },
                     backdrop = backdrop,
                     tabsCount = 2,
@@ -237,6 +263,7 @@ private fun DownloadsShellMaterial(
     navBarVisible: Boolean,
     onDownloadsSelectingChange: (Boolean) -> Unit,
     onFilesSelectingChange: (Boolean) -> Unit,
+    selectedIndex: () -> Int,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
