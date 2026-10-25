@@ -1,5 +1,9 @@
 package com.torachen.mote.ui
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,264 +12,212 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.SwapHoriz
-import androidx.compose.material.icons.rounded.QrCodeScanner
-import androidx.compose.material.icons.rounded.TextFields
-import androidx.compose.material.icons.rounded.Forum
-import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Android
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.fastCoerceIn
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurDefaults
+import top.yukonga.miuix.kmp.blur.ProgressiveBlur
+import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** 文件管理主页：与目录页完全分离 */
 @Composable
 internal fun FileManagerHomePage(
     controller: FileManagerController,
     onOpenScanner: () -> Unit,
 ) {
-    val context = controller.context
     val surface = MiuixTheme.colorScheme.surface
     val onSurface = MiuixTheme.colorScheme.onSurface
     val summary = MiuixTheme.colorScheme.onSurfaceVariantSummary
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scrollBehavior = MiuixScrollBehavior()
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val storage = remember { fmStorageUsage() }
-    val apps = remember { fmDetectedApps(context) }
+    val apps = remember { fmDetectedApps(controller.context) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(surface),
-        contentPadding = PaddingValues(bottom = 40.dp),
-    ) {
-        item(key = "header") {
-            Column(modifier = Modifier.statusBarsPadding()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 12.dp, top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ChevronLeft,
-                        contentDescription = "返回",
-                        tint = onSurface,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clickable { controller.onBack() }
-                            .padding(9.dp),
-                    )
-                }
-                Text(
-                    text = "文件管理",
-                    fontSize = 34.sp,
-                    color = onSurface,
-                    modifier = Modifier.padding(start = 26.dp, bottom = 10.dp),
-                )
-            }
+    val blurSupported = isRuntimeShaderSupported()
+    val backdrop = if (blurSupported) {
+        rememberLayerBackdrop {
+            drawRect(surface)
+            drawContent()
         }
+    } else null
+    var barBottomPx by remember { mutableIntStateOf(0) }
+    val contentTopPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
+    val listState = rememberLazyListState()
+    val isAtTop by remember {
+        androidx.compose.runtime.derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val backCardAlpha by animateFloatAsState(
+        targetValue = if (isAtTop || !blurSupported) 0f else 1f,
+        animationSpec = tween(400, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+        label = "homeBackCardAlpha",
+    )
+    val backCardModifier = if (blurSupported && backdrop != null) {
+        buildBackCardMaterialModifier(2, true, backdrop, surface.luminance() < 0.5f)
+    } else Modifier
 
-        // 功能区：5 列 × 2 行
-        item(key = "tools") {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                insideMargin = PaddingValues(0.dp),
+    Box(modifier = Modifier.fillMaxSize().background(surface)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                contentPadding = PaddingValues(top = contentTopPadding, bottom = navBottom + 96.dp),
+                overscrollEffect = null,
             ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 14.dp)) {
-                    fmHomeTools.chunked(5).forEachIndexed { rowIndex, row ->
-                        if (rowIndex > 0) Spacer(Modifier.height(14.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            row.forEach { tool ->
-                                HomeToolCell(tool, onSurface) {
-                                    when (tool.tool) {
-                                        FmTool.SCAN -> onOpenScanner()
-                                        FmTool.TRASH -> controller.openRecycleBin()
-                                        FmTool.COMPRESS, FmTool.EXTRACT ->
-                                            controller.enterList(controller.root)
-                                        else -> controller.enterList(controller.root)
-                                    }
-                                }
-                            }
-                            repeat(5 - row.size) { Spacer(Modifier.width(44.dp)) }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 存储环
-        item(key = "storage") {
-            Spacer(Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                insideMargin = PaddingValues(0.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val used = storage.first
-                    val total = storage.second
-                    val fraction = if (total > 0) (used.toFloat() / total).coerceIn(0f, 1f) else 0f
-                    Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(
-                            progress = fraction,
-                            size = 72.dp,
-                            strokeWidth = 6.dp,
-                        )
-                        Text(
-                            text = "${(fraction * 100).toInt()}%",
-                            fontSize = 16.sp,
-                            color = onSurface,
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text(
-                            text = fmStorageHint(fraction),
-                            fontSize = 16.sp,
-                            color = onSurface,
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "已占用 ${fmFormatGb(used)} GB / ${fmFormatGb(total)} GB" +
-                                "（可用 ${fmFormatGb((total - used).coerceAtLeast(0))} GB）",
-                            fontSize = 12.sp,
-                            color = summary,
-                        )
-                    }
-                }
-            }
-        }
-
-        // 手机存储目录
-        item(key = "root") {
-            Spacer(Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                insideMargin = PaddingValues(0.dp),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { controller.enterList(controller.root) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.PhoneAndroid,
-                        contentDescription = null,
-                        tint = onSurface,
-                        modifier = Modifier.size(24.dp),
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Text(text = "手机存储目录", fontSize = 16.sp, color = onSurface, modifier = Modifier.weight(1f))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = summary,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-        }
-
-        // 分类：2 列
-        item(key = "categories") {
-            Spacer(Modifier.height(12.dp))
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                fmCategories.chunked(2).forEachIndexed { index, pair ->
-                    if (index > 0) Spacer(Modifier.height(10.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        pair.forEach { entry ->
-                            Card(modifier = Modifier.weight(1f), insideMargin = PaddingValues(0.dp)) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { controller.openCategory(entry.category) }
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(34.dp)
-                                            .background(
-                                                if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
-                                                RoundedCornerShape(9.dp),
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = entry.icon,
-                                            contentDescription = entry.category.label,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                    }
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(text = entry.category.label, fontSize = 15.sp, color = onSurface)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 已安装应用下载目录
-        if (apps.isNotEmpty()) {
-            item(key = "apps") {
-                Spacer(Modifier.height(12.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    insideMargin = PaddingValues(0.dp),
-                ) {
+                item(key = "home") {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        apps.forEachIndexed { index, app ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val dir = java.io.File(app.dirPath)
-                                        if (dir.exists()) controller.enterList(dir) else controller.enterList(controller.root)
+                        Spacer(Modifier.height(12.dp))
+                        // 5×2 功能区
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            insideMargin = PaddingValues(0.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                                    .padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
+                            ) {
+                                fmHomeTools.chunked(5).forEachIndexed { rowIndex, row ->
+                                    if (rowIndex > 0) Spacer(Modifier.height(14.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        row.forEach { tool ->
+                                            HomeToolCell(tool, onSurface) {
+                                                when (tool.tool) {
+                                                    FmTool.SCAN -> onOpenScanner()
+                                                    FmTool.TRASH -> controller.openRecycleBin()
+                                                    else -> controller.enterList(controller.root)
+                                                }
+                                            }
+                                        }
+                                        repeat(5 - row.size) { Spacer(Modifier.width(40.dp)) }
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // 存储环
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            insideMargin = PaddingValues(0.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                val used = storage.first
+                                val total = storage.second
+                                val fraction = if (total > 0) (used.toFloat() / total).coerceIn(0f, 1f) else 0f
+                                Box(contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(
+                                        progress = fraction,
+                                        size = 72.dp,
+                                        strokeWidth = 6.dp,
+                                    )
+                                    Text("${(fraction * 100).toInt()}%", fontSize = 16.sp, color = onSurface)
+                                }
+                                Spacer(Modifier.width(16.dp))
+                                Column {
+                                    Text(fmStorageHint(fraction), fontSize = 16.sp, color = onSurface)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "已占用 ${fmFormatGb(used)} GB / ${fmFormatGb(total)} GB" +
+                                            "（可用 ${fmFormatGb((total - used).coerceAtLeast(0))} GB）",
+                                        fontSize = 12.sp,
+                                        color = summary,
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // 手机存储目录
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            insideMargin = PaddingValues(0.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clickable { controller.enterList(controller.root) }
+                                    .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Android,
+                                    imageVector = Icons.Rounded.PhoneAndroid,
                                     contentDescription = null,
-                                    tint = app.color,
+                                    tint = onSurface,
                                     modifier = Modifier.size(24.dp),
                                 )
                                 Spacer(Modifier.width(14.dp))
-                                Text(text = app.name, fontSize = 16.sp, color = onSurface, modifier = Modifier.weight(1f))
+                                Text("手机存储目录", fontSize = 16.sp, color = onSurface, modifier = Modifier.weight(1f))
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                     contentDescription = null,
@@ -274,9 +226,137 @@ internal fun FileManagerHomePage(
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // 2 列分类
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                            fmCategories.chunked(2).forEachIndexed { index, pair ->
+                                if (index > 0) Spacer(Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    pair.forEach { entry ->
+                                        Card(modifier = Modifier.weight(1f), insideMargin = PaddingValues(0.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth()
+                                                    .clickable { controller.openCategory(entry.category) }
+                                                    .padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(34.dp)
+                                                        .background(
+                                                            if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
+                                                            RoundedCornerShape(9.dp),
+                                                        ),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Icon(
+                                                        imageVector = entry.icon,
+                                                        contentDescription = entry.category.label,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(22.dp),
+                                                    )
+                                                }
+                                                Spacer(Modifier.width(10.dp))
+                                                Text(entry.category.label, fontSize = 15.sp, color = onSurface)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (apps.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                insideMargin = PaddingValues(0.dp),
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    apps.forEach { app ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth()
+                                                .clickable {
+                                                    val dir = java.io.File(app.dirPath)
+                                                    controller.enterList(if (dir.exists()) dir else controller.root)
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Android,
+                                                contentDescription = null,
+                                                tint = app.color,
+                                                modifier = Modifier.size(24.dp),
+                                            )
+                                            Spacer(Modifier.width(14.dp))
+                                            Text(app.name, fontSize = 16.sp, color = onSurface, modifier = Modifier.weight(1f))
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                                                contentDescription = null,
+                                                tint = summary,
+                                                modifier = Modifier.size(22.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        // 顶部模糊 + 标题栏（与下载管理页一致）
+        if (blurSupported && backdrop != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(contentTopPadding)
+                    .align(Alignment.TopCenter)
+                    .progressiveTextureBlur(
+                        backdrop = backdrop,
+                        shape = RectangleShape,
+                        blurRadius = 25f,
+                        gradient = ProgressiveBlur(
+                            angle = 90f,
+                            startFraction = 0.6f,
+                            endFraction = 1f,
+                        ),
+                        colors = BlurDefaults.blurColors(
+                            blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.8f))),
+                        ),
+                    ),
+            )
+        }
+
+        Box(
+            modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding()
+                .onGloballyPositioned { coords ->
+                    val bottom = coords.boundsInWindow().bottom.toInt()
+                    if (bottom != barBottomPx) barBottomPx = bottom
+                },
+        ) {
+            TopAppBar(
+                title = "文件管理",
+                largeTitle = "文件管理",
+                color = Color.Transparent,
+                defaultWindowInsetsPadding = false,
+                scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    SettingsBackButton(
+                        onBack = { if (!controller.onBackPressed()) controller.onBack() },
+                        progressiveTitleBlur = blurSupported,
+                        backCardAlpha = backCardAlpha,
+                        backCardMaterialModifier = backCardModifier,
+                        iconTint = onSurface,
+                    )
+                },
+            )
         }
     }
 }
@@ -285,7 +365,7 @@ internal fun FileManagerHomePage(
 private fun HomeToolCell(tool: FmToolEntry, onSurface: Color, onClick: () -> Unit) {
     val remote = tool.remoteIcon?.let { rememberRemoteIcon(it) }
     Column(
-        modifier = Modifier.width(44.dp).clickable(onClick = onClick),
+        modifier = Modifier.width(40.dp).clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
@@ -298,7 +378,7 @@ private fun HomeToolCell(tool: FmToolEntry, onSurface: Color, onClick: () -> Uni
             contentAlignment = Alignment.Center,
         ) {
             if (remote != null) {
-                androidx.compose.foundation.Image(
+                Image(
                     bitmap = remote,
                     contentDescription = tool.label,
                     colorFilter = if (tool.whiteMask) {
@@ -319,7 +399,7 @@ private fun HomeToolCell(tool: FmToolEntry, onSurface: Color, onClick: () -> Uni
             }
         }
         Spacer(Modifier.height(5.dp))
-        Text(text = tool.label, fontSize = 9.sp, color = onSurface, maxLines = 1, softWrap = false)
+        Text(tool.label, fontSize = 9.sp, color = onSurface, maxLines = 1, softWrap = false)
     }
 }
 
@@ -358,9 +438,7 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
     val out = mutableListOf<FmDetectedApp>()
     candidates.forEachIndexed { index, (name, pkg, path) ->
         val installed = runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess
-        if (installed) {
-            out.add(FmDetectedApp(name, java.io.File(root, path).absolutePath, colors[index]))
-        }
+        if (installed) out.add(FmDetectedApp(name, java.io.File(root, path).absolutePath, colors[index]))
     }
     return out
 }
