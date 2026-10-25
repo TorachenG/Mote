@@ -66,16 +66,20 @@ internal data class FmToolEntry(
     val icon: ImageVector,
     val color: Color,
     val remoteIcon: String? = null,
+    val usePrimary: Boolean = false,
+    val whiteMask: Boolean = false,
 )
 
 internal val fmTools = listOf(
-    FmToolEntry(FmTool.COMPRESS, "文件压缩", Icons.Rounded.FolderZip, Color(0xFF3B6EF6)),
-    FmToolEntry(FmTool.EXTRACT, "文件解压", Icons.Rounded.FolderOpen, Color(0xFF3B6EF6)),
+    FmToolEntry(FmTool.COMPRESS, "文件压缩", Icons.Rounded.FolderZip, Color(0xFFFFFFFF), usePrimary = true),
+    FmToolEntry(FmTool.EXTRACT, "文件解压", Icons.Rounded.FolderOpen, Color(0xFFFFFFFF), usePrimary = true),
     FmToolEntry(FmTool.CONVERT, "格式转换", Icons.Rounded.SwapHoriz, Color(0xFF6B7A99)),
     FmToolEntry(FmTool.OCR, "提取文字", Icons.Rounded.TextFields, Color(0xFF7E6BD6)),
     FmToolEntry(
         FmTool.QQ, "QQ文件", Icons.Rounded.Chat, Color(0xFF12B7F5),
         remoteIcon = "https://img.icons8.com/color/96/qq.png",
+        usePrimary = true,
+        whiteMask = true,
     ),
     FmToolEntry(
         FmTool.WECHAT, "微信文件", Icons.Rounded.Forum, Color(0xFF07C160),
@@ -92,7 +96,7 @@ internal data class FmCategoryEntry(
 )
 
 internal val fmCategories = listOf(
-    FmCategoryEntry(FileCategory.DOCUMENT, Icons.Rounded.Description, Color(0xFFF5C043)),
+    FmCategoryEntry(FileCategory.DOCUMENT, Icons.Rounded.Description, Color(0xFFFFD966)),
     FmCategoryEntry(FileCategory.IMAGE, Icons.Rounded.Image, Color(0xFF8B5CF6)),
     FmCategoryEntry(FileCategory.VIDEO, Icons.Rounded.Movie, Color(0xFF7C4DFF)),
     FmCategoryEntry(FileCategory.AUDIO, Icons.Rounded.MusicNote, Color(0xFFE8452C)),
@@ -156,7 +160,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 .height(208.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Card(modifier = Modifier.weight(2f).fillMaxHeight()) {
+            Card(modifier = Modifier.weight(2.1f).fillMaxHeight()) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -203,15 +207,15 @@ internal fun FileManagerHomeHeaderMiuix(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .background(entry.color, RoundedCornerShape(12.dp)),
+                                .size(40.dp)
+                                .background(entry.color, RoundedCornerShape(10.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = entry.icon,
                                 contentDescription = entry.category.label,
                                 tint = Color.White,
-                                modifier = Modifier.size(32.dp),
+                                modifier = Modifier.size(26.dp),
                             )
                         }
                         Spacer(Modifier.height(6.dp))
@@ -232,6 +236,7 @@ private fun FmToolCellMiuix(
     onClick: () -> Unit,
 ) {
     val remote = tool.remoteIcon?.let { rememberRemoteIcon(it) }
+    val bg = if (tool.usePrimary) MiuixTheme.colorScheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -239,7 +244,7 @@ private fun FmToolCellMiuix(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(tool.color, RoundedCornerShape(10.dp)),
+                .background(bg, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (remote != null) {
@@ -247,6 +252,9 @@ private fun FmToolCellMiuix(
                     bitmap = remote,
                     contentDescription = tool.label,
                     contentScale = ContentScale.Fit,
+                    colorFilter = if (tool.whiteMask) {
+                        androidx.compose.ui.graphics.ColorFilter.tint(Color.White, androidx.compose.ui.graphics.BlendMode.SrcIn)
+                    } else null,
                     modifier = Modifier.size(26.dp),
                 )
             } else {
@@ -293,14 +301,13 @@ private fun FmStorageCardMiuix(
             )
         }
         Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-            Text(text = "存储空间", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
             Spacer(Modifier.weight(1f))
             Text(text = "已用", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(text = fmFormatGb(used), fontSize = 20.sp, color = MiuixTheme.colorScheme.onSurface)
                 Text(
                     text = " GB/${fmFormatGb(total)}GB",
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     maxLines = 1,
                     softWrap = false,
@@ -329,7 +336,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 .height(208.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            M3Card(modifier = Modifier.weight(2f).fillMaxHeight()) {
+            M3Card(modifier = Modifier.weight(2.1f).fillMaxHeight()) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -376,15 +383,15 @@ internal fun FileManagerHomeHeaderMaterial(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .background(entry.color, RoundedCornerShape(12.dp)),
+                                .size(40.dp)
+                                .background(entry.color, RoundedCornerShape(10.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
                             M3Icon(
                                 imageVector = entry.icon,
                                 contentDescription = entry.category.label,
                                 tint = Color.White,
-                                modifier = Modifier.size(32.dp),
+                                modifier = Modifier.size(26.dp),
                             )
                         }
                         Spacer(Modifier.height(6.dp))
@@ -405,6 +412,7 @@ private fun FmToolCellMaterial(
     onClick: () -> Unit,
 ) {
     val remote = tool.remoteIcon?.let { rememberRemoteIcon(it) }
+    val bg = if (tool.usePrimary) scheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -412,7 +420,7 @@ private fun FmToolCellMaterial(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(tool.color, RoundedCornerShape(10.dp)),
+                .background(bg, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
         ) {
             if (remote != null) {
@@ -420,6 +428,9 @@ private fun FmToolCellMaterial(
                     bitmap = remote,
                     contentDescription = tool.label,
                     contentScale = ContentScale.Fit,
+                    colorFilter = if (tool.whiteMask) {
+                        androidx.compose.ui.graphics.ColorFilter.tint(Color.White, androidx.compose.ui.graphics.BlendMode.SrcIn)
+                    } else null,
                     modifier = Modifier.size(26.dp),
                 )
             } else {
@@ -466,14 +477,13 @@ private fun FmStorageCardMaterial(
             )
         }
         Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-            M3Text(text = "存储空间", fontSize = 15.sp, color = scheme.onSurface)
             Spacer(Modifier.weight(1f))
             M3Text(text = "已用", fontSize = 12.sp, color = scheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.Bottom) {
                 M3Text(text = fmFormatGb(used), fontSize = 20.sp, color = scheme.onSurface)
                 M3Text(
                     text = " GB/${fmFormatGb(total)}GB",
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
                     color = scheme.onSurfaceVariant,
                     maxLines = 1,
                     softWrap = false,

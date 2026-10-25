@@ -800,6 +800,7 @@ private fun FileManagerMiuix(
                         listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
                     },
                     onRefresh = { controller.reload() },
+                    indicatorTopPadding = 52.dp,
                 ) {
                 LazyColumn(
                     state = listState,
@@ -813,6 +814,9 @@ private fun FileManagerMiuix(
                     if (controller.currentDir == controller.root) {
                         item(key = "home_header") {
                             FileManagerHomeHeaderMiuix(controller, onTool)
+                        }
+                        item(key = "home_breadcrumb") {
+                            MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
                         }
                     }
                     if (controller.needsAllFiles) {
@@ -938,7 +942,9 @@ private fun FileManagerMiuix(
                     }
                 },
             )
-            MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
+            if (controller.currentDir != controller.root) {
+                MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
+            }
             }
         }
 
@@ -1161,8 +1167,9 @@ private fun EntryThumb(entry: FsEntry) {
                 imageVector = if (entry.isDir || isArchive(entry.file.name)) MiuixIcons.FolderFill
                 else MiuixIcons.FileIcon,
                 contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.size(26.dp),
+                tint = if (entry.isDir) Color(0xFFFFD966)
+                else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.size(if (entry.isDir) 30.dp else 26.dp),
             )
         }
     }
@@ -1304,7 +1311,9 @@ private fun FileManagerMaterial(
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
+            if (controller.currentDir != controller.root) {
+                MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
+            }
 
             if (controller.category != null) {
                 CategoryListMaterial(controller, topPadding)
@@ -1336,6 +1345,7 @@ private fun FileManagerMaterial(
                             materialFileListState.firstVisibleItemScrollOffset == 0
                     },
                     onRefresh = { controller.reload() },
+                    indicatorTopPadding = 52.dp,
                 ) {
                 LazyColumn(
                     state = materialFileListState,
@@ -1345,6 +1355,9 @@ private fun FileManagerMaterial(
                     if (controller.currentDir == controller.root) {
                         item(key = "home_header") {
                             FileManagerHomeHeaderMaterial(controller, onTool)
+                        }
+                        item(key = "home_breadcrumb") {
+                            MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
                         }
                     }
                     if (controller.needsAllFiles) {

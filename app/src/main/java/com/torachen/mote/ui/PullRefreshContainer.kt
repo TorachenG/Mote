@@ -39,6 +39,7 @@ internal fun PullRefreshContainer(
     canPull: () -> Boolean,
     onRefresh: suspend () -> Unit,
     modifier: Modifier = Modifier,
+    indicatorTopPadding: androidx.compose.ui.unit.Dp = 0.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
@@ -117,6 +118,14 @@ internal fun PullRefreshContainer(
                 }
             },
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationY = animatedOffset },
+        ) {
+            content()
+        }
+
         if (pullDistance > 0f || isRefreshing) {
             val indicatorScale = 1f + indicatorProgress * 0.6f
             val indicatorColor = if (indicatorProgress >= 1f) {
@@ -127,28 +136,21 @@ internal fun PullRefreshContainer(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 28.dp)
-                    .size(18.dp)
+                    .padding(top = indicatorTopPadding + 12.dp)
+                    .size(22.dp)
                     .graphicsLayer {
                         scaleX = indicatorScale
                         scaleY = indicatorScale
+                        translationY = animatedOffset * 0.9f
                     },
                 contentAlignment = Alignment.Center,
             ) {
                 InfiniteProgressIndicator(
                     color = indicatorColor,
-                    size = 18.dp,
-                    strokeWidth = 2.dp,
+                    size = 22.dp,
+                    strokeWidth = 2.5.dp,
                 )
             }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { translationY = animatedOffset },
-        ) {
-            content()
         }
     }
 }
