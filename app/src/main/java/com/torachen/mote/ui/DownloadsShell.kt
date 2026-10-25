@@ -71,6 +71,15 @@ fun DownloadsShell(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { fileController.reload() }
     }
+    val openDownloadsFolder: () -> Unit = {
+        val target = java.io.File(
+            android.os.Environment.getExternalStorageDirectory(),
+            "Download/Mote",
+        )
+        if (!target.exists()) target.mkdirs()
+        fileController.enter(target)
+        scope.launch { pagerState.animateScrollToPage(1) }
+    }
     var downloadsSelecting by remember { mutableStateOf(false) }
     var filesSelecting by remember { mutableStateOf(false) }
 
@@ -89,6 +98,7 @@ fun DownloadsShell(
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
             selectedIndex = { pagerState.currentPage },
+            onOpenDownloadsFolder = openDownloadsFolder,
         )
         UiMode.Material -> DownloadsShellMaterial(
             fileController = fileController,
@@ -104,6 +114,7 @@ fun DownloadsShell(
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
             selectedIndex = { pagerState.currentPage },
+            onOpenDownloadsFolder = openDownloadsFolder,
         )
     }
 }
@@ -123,6 +134,7 @@ private fun DownloadsShellMiuix(
     fileController: FileManagerController,
     pagerState: androidx.compose.foundation.pager.PagerState,
     swipeEnabled: Boolean,
+    onOpenDownloadsFolder: () -> Unit,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -152,6 +164,7 @@ private fun DownloadsShellMiuix(
                         onOpenDownloadSettings = onOpenDownloadSettings,
                         onOpenTaskDetail = onOpenTaskDetail,
                         onSelectionModeChange = onDownloadsSelectingChange,
+                        onOpenDownloadsFolder = onOpenDownloadsFolder,
                     )
                 } else {
                     FileManagerPage(
@@ -265,6 +278,7 @@ private fun DownloadsShellMaterial(
     fileController: FileManagerController,
     pagerState: androidx.compose.foundation.pager.PagerState,
     swipeEnabled: Boolean,
+    onOpenDownloadsFolder: () -> Unit,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
@@ -275,6 +289,7 @@ private fun DownloadsShellMaterial(
                 onOpenDownloadSettings = onOpenDownloadSettings,
                 onOpenTaskDetail = onOpenTaskDetail,
                 onSelectionModeChange = onDownloadsSelectingChange,
+                onOpenDownloadsFolder = onOpenDownloadsFolder,
             )
         } else {
             FileManagerPage(

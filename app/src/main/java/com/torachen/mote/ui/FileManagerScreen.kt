@@ -69,6 +69,9 @@ import androidx.compose.material3.Text as M3Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -411,6 +414,25 @@ internal fun FileManagerPage(
     LaunchedEffect(controller.currentDir) { controller.reload() }
     LaunchedEffect(controller.selecting) { onSelectionModeChange(controller.selecting) }
 
+    // 从系统「所有文件访问权限」页返回时，应用不会重建，需要在 ON_RESUME 重新检查并刷新
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val permissionScope = rememberCoroutineScope()
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val granted = hasAllFiles(context)
+                if (granted == controller.needsAllFiles) {
+                    controller.needsAllFiles = !granted
+                }
+                if (granted) {
+                    permissionScope.launch { controller.reload() }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     val message by FileOpState.message.collectAsState()
     LaunchedEffect(message) {
         val msg = message ?: return@LaunchedEffect
@@ -669,6 +691,12 @@ private fun FileManagerMiuix(
                 },
                 label = "dir",
             ) { dir ->
+                PullRefreshContainer(
+                    canPull = {
+                        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                    },
+                    onRefresh = { controller.reload() },
+                ) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -695,6 +723,7 @@ private fun FileManagerMiuix(
                     items(controller.entriesOf(dir)) { entry ->
                         MiuixEntryRow(controller, entry)
                     }
+                }
                 }
             }
         }
@@ -1115,7 +1144,16 @@ private fun FileManagerMaterial(
                 },
                 label = "m3dir",
             ) { dir ->
+                val materialFileListState = rememberLazyListState()
+                PullRefreshContainer(
+                    canPull = {
+                        materialFileListState.firstVisibleItemIndex == 0 &&
+                            materialFileListState.firstVisibleItemScrollOffset == 0
+                    },
+                    onRefresh = { controller.reload() },
+                ) {
                 LazyColumn(
+                    state = materialFileListState,
                     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
@@ -1143,6 +1181,7 @@ private fun FileManagerMaterial(
                     items(controller.entriesOf(dir)) { entry ->
                         MaterialEntryRow(controller, entry)
                     }
+                }
                 }
             }
         }

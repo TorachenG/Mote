@@ -723,6 +723,40 @@ internal object MoteDownloader {
         }
     }
 
+    /** 下拉刷新：重新核对已完成任务的文件是否还存在、大小是否变化 */
+    suspend fun refreshFileStatus(context: Context) {
+        val updates = mutableListOf<Pair<String, Boolean>>()
+        withContext(Dispatchers.IO) {
+            tasks.forEach { task ->
+                if (task.status != MoteDownloadStatus.COMPLETED) return@forEach
+                var exists = false
+                if (task.uri != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    try {
+                        val uri = Uri.parse(task.uri)
+                        val cursor = context.contentResolver.query(
+                            uri, arrayOf(MediaStore.Downloads._ID), null, null, null,
+                        )
+                        if (cursor?.use { it.moveToFirst() } == true) {
+                            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                                val actualSize = pfd.statSize
+                                exists = actualSize > 0 && (task.downloadedBytes <= 0 || actualSize == task.downloadedBytes)
+                            }
+                        }
+                    } catch (_: Exception) {
+                        exists = false
+                    }
+                } else {
+                    val f = File(task.filePath)
+                    exists = f.exists() && f.length() > 0 &&
+                        (task.downloadedBytes <= 0 || f.length() == task.downloadedBytes)
+                }
+                if (!exists && !task.isMissing) updates.add(task.id to true)
+                else if (exists && task.isMissing) updates.add(task.id to false)
+            }
+        }
+        updates.forEach { (id, isMissing) -> updateMissingStatus(id, isMissing) }
+    }
+
     fun updateMissingStatus(taskId: String, isMissing: Boolean) {
         val idx = tasks.indexOfFirst { it.id == taskId }
         if (idx >= 0) {
@@ -908,6 +942,7 @@ fun DownloadManagerScreen(
     onOpenDownloadSettings: () -> Unit = {},
     onOpenTaskDetail: () -> Unit = {},
     onSelectionModeChange: (Boolean) -> Unit = {},
+    onOpenDownloadsFolder: () -> Unit = {},
 ) {
     val context = LocalContext.current
     LaunchedEffect(MoteDownloader.toastEvent) {
@@ -921,8 +956,12 @@ fun DownloadManagerScreen(
     MonitorFileStatus(context)
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange)
-        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange)
+        UiMode.Miuix -> DownloadManagerScreenMiuix(
+            onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange, onOpenDownloadsFolder,
+        )
+        UiMode.Material -> DownloadManagerScreenMaterial(
+            onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange, onOpenDownloadsFolder,
+        )
     }
 }
 
@@ -936,6 +975,7 @@ private fun DownloadManagerScreenMiuix(
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
+    onOpenDownloadsFolder: () -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -1059,6 +1099,12 @@ private fun DownloadManagerScreenMiuix(
     CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navOwner) {
         Box(modifier = Modifier.fillMaxSize().background(surfaceColor)) {
             Box(modifier = Modifier.fillMaxSize().then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
+                PullRefreshContainer(
+                    canPull = {
+                        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                    },
+                    onRefresh = { MoteDownloader.refreshFileStatus(context) },
+                ) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize()
@@ -1179,6 +1225,7 @@ private fun DownloadManagerScreenMiuix(
                         }
                     }
                 }
+                }
             }
 
             Box(
@@ -1277,7 +1324,7 @@ private fun DownloadManagerScreenMiuix(
                                                     text = "打开下载目录",
                                                     onClick = {
                                                         showMoreMenu = false
-                                                        openDownloadFolder(context)
+                                                        onOpenDownloadsFolder()
                                                     }
                                                 )
                                             )
@@ -1915,6 +1962,7 @@ private fun DownloadManagerScreenMaterial(
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
+    onOpenDownloadsFolder: () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -2020,7 +2068,7 @@ private fun DownloadManagerScreenMaterial(
                                         text = { M3Text("打开下载目录") },
                                         onClick = {
                                             showMoreMenu = false
-                                            openDownloadFolder(context)
+                                            onOpenDownloadsFolder()
                                         }
                                     )
                                 }
@@ -2032,7 +2080,14 @@ private fun DownloadManagerScreenMaterial(
             },
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-                LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                val materialListState = rememberLazyListState()
+                PullRefreshContainer(
+                    canPull = {
+                        materialListState.firstVisibleItemIndex == 0 && materialListState.firstVisibleItemScrollOffset == 0
+                    },
+                    onRefresh = { MoteDownloader.refreshFileStatus(context) },
+                ) {
+                LazyColumn(state = materialListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     if (tasks.isEmpty()) {
                         item(key = "empty") { M3DownloadEmptyState() }
                     } else {
@@ -2129,6 +2184,7 @@ private fun DownloadManagerScreenMaterial(
                             }
                         }
                     }
+                }
                 }
 
                 val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -2562,59 +2618,6 @@ private fun M3DownloadEmptyState() {
 // ============================================================
 // 辅助工具与函数
 // ============================================================
-
-private fun openDownloadFolder(context: Context) {
-    val docUri = DocumentsContract.buildDocumentUri(
-        "com.android.externalstorage.documents",
-        "primary:Download/Mote"
-    )
-
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(docUri, DocumentsContract.Document.MIME_TYPE_DIR)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-    }
-
-    val pm = context.packageManager
-    val activities = pm.queryIntentActivities(intent, 0)
-
-    if (activities.isNotEmpty()) {
-        val systemFileManagers = listOf(
-            "com.android.documentsui",
-            "com.google.android.documentsui",
-            "com.android.fileexplorer",
-            "com.miui.fileexplorer",
-            "com.huawei.filemanager",
-            "com.oppo.filemanager",
-            "com.vivo.filemanager",
-            "com.coloros.filemanager"
-        )
-
-        val targetInfo = activities.firstOrNull {
-            it.activityInfo.packageName in systemFileManagers
-        } ?: activities.firstOrNull {
-            val pkg = it.activityInfo.packageName
-            !pkg.contains("quark") && !pkg.contains("baidu") &&
-                    !pkg.contains("tencent") && !pkg.contains("alipan") &&
-                    !pkg.contains("115") && !pkg.contains("uc") &&
-                    pkg != "com.android.providers.downloads.ui"
-        }
-
-        if (targetInfo != null) {
-            try {
-                intent.setClassName(targetInfo.activityInfo.packageName, targetInfo.activityInfo.name)
-                context.startActivity(intent)
-                return
-            } catch (_: Exception) {
-            }
-        }
-    }
-
-    Toast.makeText(context, "无法打开文件管理器\n路径已复制到剪贴板，请手动前往", Toast.LENGTH_LONG).show()
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("path", "Download/Mote"))
-}
 
 private fun shareSelectedFiles(context: Context, tasks: List<MoteDownloadTask>) {
     val validTasks = tasks.filter { !it.isMissing }
