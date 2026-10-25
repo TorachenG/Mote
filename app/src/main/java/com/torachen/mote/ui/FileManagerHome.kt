@@ -132,7 +132,8 @@ private fun rememberRemoteIcon(url: String): ImageBitmap? {
                 conn.inputStream.use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
             }.getOrNull()
         }
-        remoteIconCache[url] = bmp
+        // ConcurrentHashMap 不允许 null value
+        if (bmp != null) remoteIconCache[url] = bmp
         value = bmp
     }
     return state.value
@@ -152,7 +153,7 @@ internal fun FileManagerHomeHeaderMiuix(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .height(240.dp),
+                .height(208.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Card(modifier = Modifier.weight(2f).fillMaxHeight()) {
@@ -325,7 +326,7 @@ internal fun FileManagerHomeHeaderMaterial(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
-                .height(240.dp),
+                .height(208.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             M3Card(modifier = Modifier.weight(2f).fillMaxHeight()) {
