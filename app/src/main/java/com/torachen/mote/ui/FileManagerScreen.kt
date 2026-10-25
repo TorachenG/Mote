@@ -204,6 +204,11 @@ internal class FileManagerController(
     var needsAllFiles by mutableStateOf(false)
     /** 当前目录存在但无法读取（典型：其它应用的 Android/data） */
     var dirUnreadable by mutableStateOf(false)
+    /** SAF 浏览模式：java.io 不可读时改用 DocumentsContract 列举 */
+    var safMode by mutableStateOf(false)
+    var safPath by mutableStateOf("")
+    var safEntries by mutableStateOf<List<FmSafStore.Entry>>(emptyList())
+    var safFailed by mutableStateOf(false)
 
     /** 是否显示主页（与目录列表互斥） */
     var showHome by mutableStateOf(true)
@@ -301,7 +306,50 @@ internal class FileManagerController(
     }
 
     /** 返回键/返回按钮统一处理：返回 true 表示已消费 */
+    fun enterSaf(absolutePath: String) {
+        safMode = true
+        safPath = absolutePath
+            .removePrefix(root.absolutePath)
+            .trim('/')
+        loadSaf()
+    }
+
+    fun loadSaf() {
+        scanScope.launch {
+            val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                FmSafStore.list(context, safPath)
+            }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                safEntries = list.orEmpty()
+                safFailed = list == null
+            }
+        }
+    }
+
+    fun safOpen(entry: FmSafStore.Entry) {
+        if (entry.isDir) {
+            safPath = entry.docId.removePrefix("primary:").trim('/')
+            loadSaf()
+        } else {
+            if (!FmSafStore.open(context, entry.docId)) {
+                android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun safUp(): Boolean {
+        if (safPath.isEmpty()) return false
+        safPath = safPath.substringBeforeLast('/', "")
+        loadSaf()
+        return true
+    }
+
     fun onBackPressed(): Boolean {
+        if (safMode) {
+            if (safUp()) return true
+            safMode = false
+            return true
+        }
         if (selectionMode) {
             exitSelection()
             return true
@@ -392,6 +440,11 @@ internal class FileManagerController(
                 ?: emptyList()
         }
         dirUnreadable = dir.exists() && dir.listFiles() == null
+        if (dirUnreadable) {
+            enterSaf(dir.absolutePath)
+        } else {
+            safMode = false
+        }
         dirEntries = dirEntries + (dir.absolutePath to list)
         val path = dir.absolutePath
         needsAllFiles = !hasAllFiles(context)
@@ -1002,6 +1055,29 @@ private fun FileManagerMiuix(
                     contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
                 ) {
+                    if (controller.safMode) {
+                        item(key = "saf_header") { MiuixBreadcrumbSaf(controller) }
+                        if (controller.safFailed) {
+                            item(key = "saf_failed") {
+                                Card(
+                                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                                        Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            "系统未授予该目录的访问权限，请先授予「所有文件访问权限」，或使用系统文件管理器。",
+                                            fontSize = 12.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        items(controller.safEntries) { entry ->
+                            SafEntryRow(entry) { controller.safOpen(entry) }
+                        }
+                    }
                     if (controller.currentDir == controller.root) {
                         item(key = "home_breadcrumb") {
                             MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
@@ -1047,8 +1123,10 @@ private fun FileManagerMiuix(
                             }
                         }
                     }
-                    items(controller.entriesOf(dir)) { entry ->
-                        MiuixEntryRow(controller, entry)
+                    if (!controller.safMode) {
+                        items(controller.entriesOf(dir)) { entry ->
+                            MiuixEntryRow(controller, entry)
+                        }
                     }
                 }
                 }
@@ -1419,6 +1497,67 @@ internal fun FileManagerDirPage(
         onOpenInBrowser = onOpenInBrowser,
         controller = controller,
     )
+}
+
+
+@Composable
+private fun MiuixBreadcrumbSaf(controller: FileManagerController) {
+    val segments = if (controller.safPath.isEmpty()) emptyList()
+    else controller.safPath.split("/")
+    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+        BreadcrumbBar(
+            items = (listOf("内部存储") + segments).mapIndexed { index, text ->
+                BreadcrumbItem(path = index.toString(), text = text)
+            },
+            highlightIndex = segments.size,
+            onItemClick = { index ->
+                controller.safPath = segments.take(index).joinToString("/")
+                controller.loadSaf()
+            },
+            insideMargin = PaddingValues(start = 26.dp, end = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun SafEntryRow(entry: FmSafStore.Entry, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = if (entry.isDir) MiuixIcons.FolderFill else MiuixIcons.FileIcon,
+            contentDescription = null,
+            tint = if (entry.isDir) Color(0xFFFFD966) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.size(if (entry.isDir) 30.dp else 26.dp),
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(entry.name, fontSize = 16.sp, color = MiuixTheme.colorScheme.onSurface, maxLines = 1)
+            val summary = if (entry.isDir) {
+                fmFormatTime(entry.modified)
+            } else {
+                listOf(fmFormatSize(entry.size), fmFormatTime(entry.modified))
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
+            }
+            if (summary.isNotBlank()) {
+                Text(summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1)
+            }
+        }
+        if (entry.isDir) {
+            Icon(
+                imageVector = MiuixIcons.ChevronForward,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
 }
 
 @Composable
@@ -1865,6 +2004,25 @@ private fun FileManagerMaterial(
                         .graphicsLayer { alpha = if (controller.reloading) 0f else 1f },
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
+                    if (controller.safMode) {
+                        item(key = "saf_header") { MiuixBreadcrumbSaf(controller) }
+                        if (controller.safFailed) {
+                            item(key = "saf_failed") {
+                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                                    M3Text("无法读取该目录", fontSize = 15.sp, color = M3MaterialTheme.colorScheme.onSurface)
+                                    Spacer(Modifier.height(4.dp))
+                                    M3Text(
+                                        "系统未授予该目录的访问权限，请先授予「所有文件访问权限」。",
+                                        fontSize = 12.sp,
+                                        color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                        items(controller.safEntries) { entry ->
+                            SafEntryRow(entry) { controller.safOpen(entry) }
+                        }
+                    }
                     if (controller.currentDir == controller.root) {
                         item(key = "home_breadcrumb") {
                             MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
@@ -1894,8 +2052,10 @@ private fun FileManagerMaterial(
                             }
                         }
                     }
-                    items(controller.entriesOf(dir)) { entry ->
-                        MaterialEntryRow(controller, entry)
+                    if (!controller.safMode) {
+                        items(controller.entriesOf(dir)) { entry ->
+                            MaterialEntryRow(controller, entry)
+                        }
                     }
                 }
                 }

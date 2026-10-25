@@ -330,15 +330,7 @@ internal fun FileManagerHomePage(
                                             },
                                             onClick = {
                                                 when {
-                                                    app.restricted -> {
-                                                        if (!fmOpenWithSystemFileManager(controller.context, app.dirPath)) {
-                                                            android.widget.Toast.makeText(
-                                                                controller.context,
-                                                                "系统文件管理器也无法打开该目录，请在 ${app.name} 内导出文件",
-                                                                android.widget.Toast.LENGTH_LONG,
-                                                            ).show()
-                                                        }
-                                                    }
+                                                    app.restricted -> controller.onOpenDir(app.dirPath, null)
                                                     exists -> controller.onOpenDir(app.dirPath, null)
                                                     else -> android.widget.Toast.makeText(
                                                         controller.context,
