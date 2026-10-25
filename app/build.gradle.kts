@@ -117,9 +117,16 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            // 开启 R8：代码精简 + 优化（含 baseline profile 的 R8 重写）
             optimization {
-                enable = false
+                enable = true
             }
+            // 暂用 debug 签名，便于直接装机验证；正式发布前替换为自有 keystore
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
         // 仅用于生成 Baseline Profile 的可采集变体：不可调试、独立包名、debug 签名
         create("profile") {
@@ -128,6 +135,14 @@ android {
             versionNameSuffix = "-bp"
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            // 与 release 保持一致，用于验证 R8 后的运行情况
+            optimization {
+                enable = true
+            }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
     compileOptions {
