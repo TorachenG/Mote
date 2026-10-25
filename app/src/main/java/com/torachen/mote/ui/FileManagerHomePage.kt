@@ -216,39 +216,29 @@ internal fun FileManagerHomePage(
                         // 手机存储目录
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                            insideMargin = PaddingValues(0.dp),
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth()
-                                    .clickable { controller.enterList(controller.root) }
-                                    .padding(13.5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .background(
-                                            MiuixTheme.colorScheme.surfaceContainer,
-                                            RoundedCornerShape(9.dp),
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.PhoneAndroid,
-                                        contentDescription = null,
-                                        tint = onSurface,
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Text("手机存储目录", fontSize = 15.sp, color = onSurface, modifier = Modifier.weight(1f))
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                    contentDescription = null,
-                                    tint = summary,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            }
+                            ArrowPreference(
+                                title = "手机存储目录",
+                                startAction = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .background(
+                                                MiuixTheme.colorScheme.surfaceContainer,
+                                                RoundedCornerShape(9.dp),
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.PhoneAndroid,
+                                            contentDescription = null,
+                                            tint = onSurface,
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
+                                },
+                                onClick = { controller.enterList(controller.root) },
+                            )
                         }
 
                         Spacer(Modifier.height(12.dp))
@@ -262,32 +252,29 @@ internal fun FileManagerHomePage(
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
                                     pair.forEach { entry ->
-                                        Card(modifier = Modifier.weight(1f), insideMargin = PaddingValues(0.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth()
-                                                    .clickable { controller.openCategory(entry.category) }
-                                                    .padding(13.5.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(34.dp)
-                                                        .background(
-                                                            if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
-                                                            RoundedCornerShape(9.dp),
-                                                        ),
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    Icon(
-                                                        imageVector = entry.icon,
-                                                        contentDescription = entry.category.label,
-                                                        tint = Color.White,
-                                                        modifier = Modifier.size(22.dp),
-                                                    )
-                                                }
-                                                Spacer(Modifier.width(10.dp))
-                                                Text(entry.category.label, fontSize = 15.sp, color = onSurface)
-                                            }
+                                        Card(modifier = Modifier.weight(1f)) {
+                                            ArrowPreference(
+                                                title = entry.category.label,
+                                                startAction = {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(34.dp)
+                                                            .background(
+                                                                if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
+                                                                RoundedCornerShape(9.dp),
+                                                            ),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = entry.icon,
+                                                            contentDescription = entry.category.label,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(22.dp),
+                                                        )
+                                                    }
+                                                },
+                                                onClick = { controller.openCategory(entry.category) },
+                                            )
                                         }
                                     }
                                 }
@@ -298,59 +285,41 @@ internal fun FileManagerHomePage(
                             Spacer(Modifier.height(12.dp))
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                                insideMargin = PaddingValues(0.dp),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
                                     apps.forEach { app ->
                                         val exists = java.io.File(app.dirPath).exists()
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth()
-                                                .clickable {
-                                                    if (exists) {
-                                                        controller.enterList(java.io.File(app.dirPath))
-                                                    } else {
-                                                        android.widget.Toast.makeText(
-                                                            controller.context,
-                                                            "${app.name} 的下载目录不存在",
-                                                            android.widget.Toast.LENGTH_SHORT,
-                                                        ).show()
-                                                    }
+                                        ArrowPreference(
+                                            title = app.name,
+                                            summary = app.dirPath.removePrefix(
+                                                android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
+                                            ),
+                                            startAction = {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(34.dp)
+                                                        .background(app.color, RoundedCornerShape(9.dp)),
+                                                    contentAlignment = Alignment.Center,
+                                                ) {
+                                                    Text(
+                                                        text = app.name.take(1),
+                                                        fontSize = 15.sp,
+                                                        color = Color.White,
+                                                    )
                                                 }
-                                                .padding(horizontal = 13.5.dp, vertical = 12.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(34.dp)
-                                                    .background(app.color, RoundedCornerShape(9.dp)),
-                                                contentAlignment = Alignment.Center,
-                                            ) {
-                                                Text(
-                                                    text = app.name.take(1),
-                                                    fontSize = 15.sp,
-                                                    color = Color.White,
-                                                )
-                                            }
-                                            Spacer(Modifier.width(10.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(app.name, fontSize = 15.sp, color = onSurface)
-                                                Spacer(Modifier.height(2.dp))
-                                                Text(
-                                                    text = app.dirPath.removePrefix(
-                                                        android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
-                                                    ),
-                                                    fontSize = 11.sp,
-                                                    color = summary,
-                                                    maxLines = 1,
-                                                )
-                                            }
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                                                contentDescription = null,
-                                                tint = summary,
-                                                modifier = Modifier.size(22.dp),
-                                            )
-                                        }
+                                            },
+                                            onClick = {
+                                                if (exists) {
+                                                    controller.enterList(java.io.File(app.dirPath))
+                                                } else {
+                                                    android.widget.Toast.makeText(
+                                                        controller.context,
+                                                        "${app.name} 的下载目录不存在",
+                                                        android.widget.Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                }
+                                            },
+                                        )
                                     }
                                 }
                             }
