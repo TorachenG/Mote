@@ -1191,60 +1191,73 @@ internal fun fmTypeIcon(file: java.io.File): Pair<androidx.compose.ui.graphics.v
     }
 }
 
-/** 多选态下按住 checkbox 拖动：沿路切换选中状态，靠近上下边缘自动滚动 */
+/** 多选态下从右侧 checkbox 区域拖动：沿路切换选中；其它区域手势不拦截，列表可正常滑动 */
 private fun Modifier.dragSelectModifier(
     controller: FileManagerController,
     listState: androidx.compose.foundation.lazy.LazyListState,
     scope: kotlinx.coroutines.CoroutineScope,
 ): Modifier = this.pointerInput(controller.selecting) {
     if (!controller.selecting) return@pointerInput
+    val slop = 10.dp.toPx()
+    val checkboxZone = 72.dp.toPx()
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        var target: Boolean? = null
-        var autoScroll = 0f
-        var autoJob: kotlinx.coroutines.Job? = null
+        val startY = down.position.y
+        val fromCheckbox = down.position.x > size.width - checkboxZone
 
         fun rowAt(y: Float): FsEntry? {
             val info = listState.layoutInfo
             val entryCount = controller.entriesOf(controller.currentDir).size
+            if (entryCount <= 0) return null
             val startIndex = info.totalItemsCount - entryCount
             val item = info.visibleItemsInfo.firstOrNull { y >= it.offset && y <= it.offset + it.size } ?: return null
-            val row = item.index - startIndex
-            return controller.entriesOf(controller.currentDir).getOrNull(row)
+            return controller.entriesOf(controller.currentDir).getOrNull(item.index - startIndex)
         }
 
-        fun applyAt(y: Float) {
+        fun applyAt(y: Float, target: Boolean) {
             val entry = rowAt(y) ?: return
-            if (target == null) target = !controller.isSelected(entry)
             if (controller.isSelected(entry) != target) controller.toggle(entry)
         }
 
-        applyAt(down.position.y)
-        var lastY = down.position.y
+        var painting = false
+        var target = false
+        var lastY = startY
+        var autoScroll = 0f
+        var autoJob: kotlinx.coroutines.Job? = null
+
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             val change = event.changes.firstOrNull { it.id == down.id } ?: break
             if (!change.pressed) break
             lastY = change.position.y
-            applyAt(lastY)
-            val info = listState.layoutInfo
-            val top = info.viewportStartOffset + 140f
-            val bottom = info.viewportEndOffset - 160f
-            autoScroll = when {
-                lastY < top -> -16f
-                lastY > bottom -> 16f
-                else -> 0f
+
+            if (!painting && fromCheckbox && kotlin.math.abs(lastY - startY) > slop) {
+                painting = true
+                target = rowAt(startY)?.let { !controller.isSelected(it) } ?: true
+                applyAt(startY, target)
             }
-            if (autoScroll != 0f && autoJob == null) {
-                autoJob = scope.launch {
-                    while (autoScroll != 0f) {
-                        listState.scrollBy(autoScroll)
-                        applyAt(lastY)
-                        kotlinx.coroutines.delay(16)
+
+            if (painting) {
+                change.consume()
+                applyAt(lastY, target)
+                val info = listState.layoutInfo
+                val top = info.viewportStartOffset + 140f
+                val bottom = info.viewportEndOffset - 160f
+                autoScroll = when {
+                    lastY < top -> -16f
+                    lastY > bottom -> 16f
+                    else -> 0f
+                }
+                if (autoScroll != 0f && autoJob == null) {
+                    autoJob = scope.launch {
+                        while (autoScroll != 0f) {
+                            listState.scrollBy(autoScroll)
+                            applyAt(lastY, target)
+                            kotlinx.coroutines.delay(16)
+                        }
                     }
                 }
             }
-            change.consume()
         }
         autoScroll = 0f
         autoJob?.cancel()
