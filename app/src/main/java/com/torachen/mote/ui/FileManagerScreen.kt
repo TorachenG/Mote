@@ -190,7 +190,7 @@ internal class FileManagerController(
     val context: Context,
     val onOpenInBrowser: (String) -> Unit,
     val onBack: () -> Unit,
-    val onOpenDir: (path: String?, category: String?) -> Unit = { _, _ -> },
+    val onOpenDir: (path: String?, category: String?, title: String?) -> Unit = { _, _, _ -> },
 ) {
     val root: java.io.File = Environment.getExternalStorageDirectory()
 
@@ -683,6 +683,9 @@ private fun loadThumbnail(file: java.io.File): ImageBitmap? {
 internal object FileManagerDirRequest {
     var path: String? = null
     var category: String? = null
+    var title: String? = null
+    /** 每次进入递增，确保路由页面重新创建状态 */
+    var token: Long = 0L
 }
 
 @Composable
@@ -693,6 +696,7 @@ internal fun FileManagerPage(
     controller: FileManagerController? = null,
     onOpenScanner: () -> Unit = {},
     onSubPageChange: (Boolean) -> Unit = {},
+    pageTitle: String = "文件管理",
 ) {
     val context = LocalContext.current
     val realController = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
@@ -843,6 +847,7 @@ internal fun FileManagerPage(
             onCompress = requestCompress,
             onExtract = requestExtract,
             onTool = onTool,
+            pageTitle = pageTitle,
         )
         UiMode.Material -> FileManagerMaterial(
             controller = controller,
@@ -852,6 +857,7 @@ internal fun FileManagerPage(
             onCompress = requestCompress,
             onExtract = requestExtract,
             onTool = onTool,
+            pageTitle = pageTitle,
         )
     }
         }
@@ -944,12 +950,13 @@ private fun FileManagerMiuix(
     onCompress: () -> Unit,
     onExtract: (FsEntry) -> Unit,
     onTool: (FmTool) -> Unit,
+    pageTitle: String,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val density = LocalDensity.current
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val listState = rememberLazyListState()
+    val listState = controller.listStateFor(controller.currentDir.absolutePath)
     var headerHeightDp by remember { mutableStateOf(0.dp) }
     val pullUi = remember { PullRefreshUiState() }
     var pendingScroll by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -1066,7 +1073,6 @@ private fun FileManagerMiuix(
                 },
                 label = "dir",
             ) { dir ->
-                val listState = remember(dir.absolutePath) { controller.listStateFor(dir.absolutePath) }
                 PullRefreshContainer(
                     canPull = {
                         listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
@@ -1246,8 +1252,8 @@ private fun FileManagerMiuix(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
             TopAppBar(
-                title = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
-                largeTitle = if (controller.pendingOp != null) "选择目标目录" else "文件管理",
+                title = if (controller.pendingOp != null) "选择目标目录" else pageTitle,
+                largeTitle = if (controller.pendingOp != null) "选择目标目录" else pageTitle,
                 color = Color.Transparent,
                 defaultWindowInsetsPadding = false,
                 scrollBehavior = scrollBehavior,
@@ -1517,10 +1523,12 @@ internal fun FileManagerDirPage(
     onOpenInBrowser: (String) -> Unit,
     initialPath: String? = null,
     initialCategory: String? = null,
+    pageTitle: String = "文件管理",
+    requestToken: Long = 0L,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // 首帧前就落到目标目录，避免先渲染主页再动画切换（那会产生额外的淡入淡出）
-    val controller = androidx.compose.runtime.remember(initialPath, initialCategory) {
+    val controller = androidx.compose.runtime.remember(initialPath, initialCategory, requestToken) {
         FileManagerController(context, onOpenInBrowser, onBack).apply {
             showHome = false
             initialPath?.let { currentDir = java.io.File(it) }
@@ -1533,6 +1541,7 @@ internal fun FileManagerDirPage(
         onBack = onBack,
         onOpenInBrowser = onOpenInBrowser,
         controller = controller,
+        pageTitle = pageTitle,
     )
 }
 
@@ -1945,6 +1954,7 @@ private fun FileManagerMaterial(
     onCompress: () -> Unit,
     onExtract: (FsEntry) -> Unit,
     onTool: (FmTool) -> Unit,
+    pageTitle: String,
 ) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -2003,7 +2013,7 @@ private fun FileManagerMaterial(
                 },
                 label = "m3dir",
             ) { dir ->
-                val materialFileListState = rememberLazyListState()
+                val materialFileListState = controller.listStateFor(controller.currentDir.absolutePath)
     val materialPullUi = remember { PullRefreshUiState() }
     var pendingScrollM by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     LaunchedEffect(materialFileListState) {

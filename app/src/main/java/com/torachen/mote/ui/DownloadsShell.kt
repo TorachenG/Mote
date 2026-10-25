@@ -65,7 +65,7 @@ fun DownloadsShell(
     onOpenTaskDetail: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onOpenScanner: () -> Unit = {},
-    onOpenDir: (String?, String?) -> Unit = { _, _ -> },
+    onOpenDir: (String?, String?, String?) -> Unit = { _, _, _ -> },
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
     val tab = pagerState.currentPage

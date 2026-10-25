@@ -3595,9 +3595,15 @@ private fun RenderPageContent(
                     onPopToRoot()
                 },
                 onOpenScanner = { onPush("scanner") },
-                onOpenDir = { path, category ->
+                onOpenDir = { path, category, title ->
                     FileManagerDirRequest.path = path
                     FileManagerDirRequest.category = category
+                    FileManagerDirRequest.title = title
+                    FileManagerDirRequest.token = System.nanoTime()
+                    // 若上一次的目录页还在栈顶（退出动画未完成），先正常出栈再入栈，避免被路由去重拦截
+                    if (pageStack.lastOrNull()?.route == "file_manager_dir") {
+                        onPop()
+                    }
                     onPush("file_manager_dir")
                 },
             )
@@ -3609,6 +3615,8 @@ private fun RenderPageContent(
                 },
                 initialPath = FileManagerDirRequest.path,
                 initialCategory = FileManagerDirRequest.category,
+                pageTitle = FileManagerDirRequest.title ?: "手机存储目录",
+                requestToken = FileManagerDirRequest.token,
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }

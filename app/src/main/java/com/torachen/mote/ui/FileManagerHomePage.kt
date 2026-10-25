@@ -166,7 +166,7 @@ internal fun FileManagerHomePage(
                                                 when (tool.tool) {
                                                     FmTool.SCAN -> onOpenScanner()
                                                     FmTool.TRASH -> controller.openRecycleBin()
-                                                    else -> controller.onOpenDir(controller.root.absolutePath, null)
+                                                    else -> controller.onOpenDir(controller.root.absolutePath, null, null)
                                                 }
                                             }
                                         }
@@ -238,7 +238,7 @@ internal fun FileManagerHomePage(
                                         )
                                     }
                                 },
-                                onClick = { controller.onOpenDir(controller.root.absolutePath, null) },
+                                onClick = { controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录") },
                             )
                         }
 
@@ -275,7 +275,7 @@ internal fun FileManagerHomePage(
                                                     }
                                                 },
                                                 onClick = {
-                                                    controller.onOpenDir(controller.root.absolutePath, entry.category.name,)
+                                                    controller.onOpenDir(controller.root.absolutePath, entry.category.name, entry.category.label)
                                                 },
                                             )
                                         }
@@ -330,8 +330,8 @@ internal fun FileManagerHomePage(
                                             },
                                             onClick = {
                                                 when {
-                                                    app.restricted -> controller.onOpenDir(app.dirPath, null)
-                                                    exists -> controller.onOpenDir(app.dirPath, null)
+                                                    app.restricted -> controller.onOpenDir(app.dirPath, null, app.name)
+                                                    exists -> controller.onOpenDir(app.dirPath, null, app.name)
                                                     else -> android.widget.Toast.makeText(
                                                         controller.context,
                                                         "${app.name} 的下载目录不存在",
