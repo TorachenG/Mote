@@ -330,11 +330,15 @@ internal fun FileManagerHomePage(
                                             },
                                             onClick = {
                                                 when {
-                                                    app.restricted -> android.widget.Toast.makeText(
-                                                        controller.context,
-                                                        "Android 11+ 不允许访问其它应用的 Android/data 目录，可先在 ${app.name} 内保存到相册/Download",
-                                                        android.widget.Toast.LENGTH_LONG,
-                                                    ).show()
+                                                    app.restricted -> {
+                                                        if (!fmOpenWithSystemFileManager(controller.context, app.dirPath)) {
+                                                            android.widget.Toast.makeText(
+                                                                controller.context,
+                                                                "系统文件管理器也无法打开该目录，请在 ${app.name} 内导出文件",
+                                                                android.widget.Toast.LENGTH_LONG,
+                                                            ).show()
+                                                        }
+                                                    }
                                                     exists -> controller.onOpenDir(app.dirPath, null)
                                                     else -> android.widget.Toast.makeText(
                                                         controller.context,
@@ -546,4 +550,30 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
         }
     }
     return out
+}
+
+/** 通过 DocumentsProvider 打开目录：系统文件管理器与 MT 管理器可读取 Android/data */
+internal fun fmOpenWithSystemFileManager(context: android.content.Context, path: String): Boolean {
+    val root = android.os.Environment.getExternalStorageDirectory().absolutePath
+    val relative = path.removePrefix(root).trimStart('/')
+    val docId = "primary:" + relative
+    return try {
+        val authority = "com.android.externalstorage.documents"
+        val uri = android.provider.DocumentsContract.buildDocumentUri(authority, docId)
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, android.provider.DocumentsContract.Document.MIME_TYPE_DIR)
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+        val handlers = context.packageManager.queryIntentActivities(intent, 0)
+        if (handlers.isEmpty()) {
+            false
+        } else {
+            context.startActivity(intent)
+            true
+        }
+    } catch (_: Throwable) {
+        false
+    }
 }
