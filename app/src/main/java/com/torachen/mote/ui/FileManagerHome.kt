@@ -6,10 +6,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -130,15 +132,16 @@ internal fun FileManagerHomeMiuix(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 12.dp)
+                        .height(268.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Card(modifier = Modifier.weight(1.35f)) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    Card(modifier = Modifier.weight(1.9f).fillMaxSize()) {
+                        Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                             Text(text = "实用功能", fontSize = 16.sp, color = onSurface)
                             Spacer(Modifier.height(12.dp))
                             fmTools.chunked(4).forEachIndexed { rowIndex, row ->
-                                if (rowIndex > 0) Spacer(Modifier.height(14.dp))
+                                if (rowIndex > 0) Spacer(Modifier.height(18.dp))
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     row.forEach { tool ->
                                         FmToolCellMiuix(
@@ -155,11 +158,12 @@ internal fun FileManagerHomeMiuix(
                                     }
                                 }
                             }
+                            Spacer(Modifier.weight(1f))
                         }
                     }
-                    Card(modifier = Modifier.weight(0.65f)) {
+                    Card(modifier = Modifier.weight(1f).fillMaxSize()) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            modifier = Modifier.fillMaxSize().padding(14.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(text = "存储空间", fontSize = 16.sp, color = onSurface)
@@ -169,34 +173,36 @@ internal fun FileManagerHomeMiuix(
                             val fraction = if (total > 0) (used.toFloat() / total) else 0f
                             Box(
                                 modifier = Modifier
-                                    .width(52.dp)
-                                    .height(150.dp)
-                                    .background(
-                                        MiuixTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                        RoundedCornerShape(12.dp),
-                                    ),
+                                    .weight(1f)
+                                    .width(44.dp)
+                                    .padding(vertical = 10.dp)
+                                    .background(Color(0xFFEDF1FB), RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.BottomCenter,
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height((150 * fraction).dp.coerceAtLeast(4.dp))
-                                        .background(
-                                            MiuixTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                            RoundedCornerShape(12.dp),
-                                        )
+                                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                    val h = maxHeight
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height((h * fraction).coerceAtLeast(6.dp))
+                                            .background(Color(0xFFC6D6F7), RoundedCornerShape(10.dp))
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Text(text = "已用", fontSize = 12.sp, color = summary)
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(text = fmFormatGb(used), fontSize = 20.sp, color = onSurface)
+                                Text(
+                                    text = " GB/${fmFormatGb(total)}GB",
+                                    fontSize = 10.sp,
+                                    color = summary,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(bottom = 3.dp),
                                 )
                             }
-                            Spacer(Modifier.height(10.dp))
-                            Text(text = "已用", fontSize = 12.sp, color = summary)
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                text = "${fmFormatGb(used)} GB / ${fmFormatGb(total)} GB",
-                                fontSize = 11.sp,
-                                color = summary,
-                                maxLines = 1,
-                                softWrap = false,
-                            )
                         }
                     }
                 }
@@ -222,19 +228,19 @@ internal fun FileManagerHomeMiuix(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(44.dp)
-                                        .background(entry.color, RoundedCornerShape(12.dp)),
+                                        .size(52.dp)
+                                        .background(entry.color, RoundedCornerShape(14.dp)),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
                                         imageVector = entry.icon,
                                         contentDescription = entry.category.label,
                                         tint = Color.White,
-                                        modifier = Modifier.size(22.dp),
+                                        modifier = Modifier.size(26.dp),
                                     )
                                 }
-                                Spacer(Modifier.height(6.dp))
-                                Text(text = entry.category.label, fontSize = 11.sp, color = onSurface)
+                                Spacer(Modifier.height(8.dp))
+                                Text(text = entry.category.label, fontSize = 12.sp, color = onSurface)
                             }
                         }
                     }
@@ -262,10 +268,10 @@ private fun FmToolCellMiuix(
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(46.dp)
                 .background(
                     color = if (tool.enabled) tool.color else cardColor,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -281,6 +287,8 @@ private fun FmToolCellMiuix(
             text = tool.label,
             fontSize = 11.sp,
             color = if (tool.enabled) onSurface else summary,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
@@ -304,15 +312,16 @@ internal fun FileManagerHomeMaterial(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 12.dp)
+                        .height(268.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    M3Card(modifier = Modifier.weight(1.35f)) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    M3Card(modifier = Modifier.weight(1.9f).fillMaxSize()) {
+                        Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                             M3Text(text = "实用功能", fontSize = 16.sp, color = scheme.onSurface)
                             Spacer(Modifier.height(12.dp))
                             fmTools.chunked(4).forEachIndexed { rowIndex, row ->
-                                if (rowIndex > 0) Spacer(Modifier.height(14.dp))
+                                if (rowIndex > 0) Spacer(Modifier.height(18.dp))
                                 Row(modifier = Modifier.fillMaxWidth()) {
                                     row.forEach { tool ->
                                         FmToolCellMaterial(
@@ -325,11 +334,12 @@ internal fun FileManagerHomeMaterial(
                                     repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
                                 }
                             }
+                            Spacer(Modifier.weight(1f))
                         }
                     }
-                    M3Card(modifier = Modifier.weight(0.65f)) {
+                    M3Card(modifier = Modifier.weight(1f).fillMaxSize()) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            modifier = Modifier.fillMaxSize().padding(14.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             M3Text(text = "存储空间", fontSize = 16.sp, color = scheme.onSurface)
@@ -339,28 +349,36 @@ internal fun FileManagerHomeMaterial(
                             val fraction = if (total > 0) used.toFloat() / total else 0f
                             Box(
                                 modifier = Modifier
-                                    .width(52.dp)
-                                    .height(150.dp)
-                                    .background(scheme.primary.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
+                                    .weight(1f)
+                                    .width(44.dp)
+                                    .padding(vertical = 10.dp)
+                                    .background(Color(0xFFEDF1FB), RoundedCornerShape(10.dp)),
                                 contentAlignment = Alignment.BottomCenter,
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height((150 * fraction).dp.coerceAtLeast(4.dp))
-                                        .background(scheme.primary.copy(alpha = 0.38f), RoundedCornerShape(12.dp))
+                                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                    val h = maxHeight
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height((h * fraction).coerceAtLeast(6.dp))
+                                            .background(Color(0xFFC6D6F7), RoundedCornerShape(10.dp))
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            M3Text(text = "已用", fontSize = 12.sp, color = scheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                M3Text(text = fmFormatGb(used), fontSize = 20.sp, color = scheme.onSurface)
+                                M3Text(
+                                    text = " GB/${fmFormatGb(total)}GB",
+                                    fontSize = 10.sp,
+                                    color = scheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(bottom = 3.dp),
                                 )
                             }
-                            Spacer(Modifier.height(10.dp))
-                            M3Text(text = "已用", fontSize = 12.sp, color = scheme.onSurfaceVariant)
-                            Spacer(Modifier.height(2.dp))
-                            M3Text(
-                                text = "${fmFormatGb(used)} GB / ${fmFormatGb(total)} GB",
-                                fontSize = 11.sp,
-                                color = scheme.onSurfaceVariant,
-                                maxLines = 1,
-                                softWrap = false,
-                            )
                         }
                     }
                 }
@@ -385,19 +403,19 @@ internal fun FileManagerHomeMaterial(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(44.dp)
-                                        .background(entry.color, RoundedCornerShape(12.dp)),
+                                        .size(52.dp)
+                                        .background(entry.color, RoundedCornerShape(14.dp)),
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     M3Icon(
                                         imageVector = entry.icon,
                                         contentDescription = entry.category.label,
                                         tint = Color.White,
-                                        modifier = Modifier.size(22.dp),
+                                        modifier = Modifier.size(26.dp),
                                     )
                                 }
-                                Spacer(Modifier.height(6.dp))
-                                M3Text(text = entry.category.label, fontSize = 11.sp, color = scheme.onSurface)
+                                Spacer(Modifier.height(8.dp))
+                                M3Text(text = entry.category.label, fontSize = 12.sp, color = scheme.onSurface)
                             }
                         }
                     }
@@ -420,10 +438,10 @@ private fun FmToolCellMaterial(
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
+                .size(46.dp)
                 .background(
                     color = if (tool.enabled) tool.color else scheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -439,6 +457,8 @@ private fun FmToolCellMaterial(
             text = tool.label,
             fontSize = 11.sp,
             color = if (tool.enabled) scheme.onSurface else scheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
