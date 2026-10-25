@@ -515,7 +515,7 @@ internal class FileManagerController(
 private fun hasAllFiles(context: Context): Boolean =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager() else true
 
-private fun requestAllFiles(context: Context) {
+internal fun requestAllFiles(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
     try {
         context.startActivity(
@@ -727,7 +727,7 @@ internal fun FileManagerPage(
         modifier = Modifier.fillMaxSize(),
         transitionSpec = {
             if (targetState) {
-                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it / 3 } + fadeIn(tween(200))) togetherWith
+                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { -it / 3 } + fadeIn(tween(200))) togetherWith
                     (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(160)))
             } else {
                 (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it } + fadeIn(tween(200))) togetherWith

@@ -73,6 +73,8 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.utils.overScrollVertical
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -124,13 +126,25 @@ internal fun FileManagerHomePage(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .overScrollVertical(),
                 contentPadding = PaddingValues(top = contentTopPadding, bottom = navBottom + 96.dp),
                 overscrollEffect = null,
             ) {
                 item(key = "home") {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Spacer(Modifier.height(12.dp))
+                        if (controller.needsAllFiles) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            ) {
+                                ArrowPreference(
+                                    title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
+                                    onClick = { requestAllFiles(controller.context) },
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
                         // 5×2 功能区
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
