@@ -1519,14 +1519,14 @@ internal fun FileManagerDirPage(
     initialCategory: String? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val controller = androidx.compose.runtime.remember {
-        FileManagerController(context, onOpenInBrowser, onBack)
-    }
-    androidx.compose.runtime.LaunchedEffect(initialPath, initialCategory) {
-        controller.showHome = false
-        initialPath?.let { controller.currentDir = java.io.File(it) }
-        initialCategory?.let { name ->
-            runCatching { FileCategory.valueOf(name) }.getOrNull()?.let { controller.openCategory(it) }
+    // 首帧前就落到目标目录，避免先渲染主页再动画切换（那会产生额外的淡入淡出）
+    val controller = androidx.compose.runtime.remember(initialPath, initialCategory) {
+        FileManagerController(context, onOpenInBrowser, onBack).apply {
+            showHome = false
+            initialPath?.let { currentDir = java.io.File(it) }
+            initialCategory?.let { name ->
+                runCatching { FileCategory.valueOf(name) }.getOrNull()?.let { openCategory(it) }
+            }
         }
     }
     FileManagerPage(
