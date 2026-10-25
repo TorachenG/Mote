@@ -793,7 +793,10 @@ private fun FileManagerMiuix(
         label = "fmBackCardAlpha",
     )
     val backCardMaterialModifier = if (progressiveTitleBlur) {
-        buildBackCardMaterialModifier(materialStyle, blurSupported, backdrop, themeIsDark)
+        // 文件管理页返回按钮材质更透明：直接调材质混合透明度
+        buildBackCardMaterialModifier(
+            materialStyle, blurSupported, backdrop, themeIsDark, blendAlpha = 0.55f,
+        )
     } else {
         Modifier
     }

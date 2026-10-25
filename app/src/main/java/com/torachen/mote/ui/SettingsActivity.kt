@@ -1366,14 +1366,16 @@ internal fun buildBackCardMaterialModifier(
     backdrop: LayerBackdrop?,
     themeIsDark: Boolean,
     shape: Shape = CircleShape, // ★ 新增参数，默认圆形，保证返回按钮不受影响
+    /** 材质混合透明度倍率：1f 为原始效果，越小越透明 */
+    blendAlpha: Float = 1f,
 ): Modifier {
     return when (materialStyle) {
         1 -> {
             if (blurSupported && backdrop != null) {
                 val tint = if (themeIsDark) {
-                    Color.Black.copy(alpha = 0.2f)
+                    Color.Black.copy(alpha = 0.2f * blendAlpha)
                 } else {
-                    Color.White.copy(alpha = 0.2f)
+                    Color.White.copy(alpha = 0.2f * blendAlpha)
                 }
                 Modifier.textureBlur(
                     backdrop = backdrop,
@@ -1407,10 +1409,10 @@ internal fun buildBackCardMaterialModifier(
                 }
                 val blendColor = if (themeIsDark) {
                     lerp(baseSurface, Color.Black, 0.25f)
-                        .copy(alpha = 0.25f)
+                        .copy(alpha = 0.25f * blendAlpha)
                 } else {
                     lerp(baseSurface, Color.White, 0.25f)
-                        .copy(alpha = 0.25f)
+                        .copy(alpha = 0.25f * blendAlpha)
                 }
                 val blurColors = BlurDefaults.blurColors(
                     blendColors = listOf(
