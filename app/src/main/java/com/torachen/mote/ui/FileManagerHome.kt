@@ -127,7 +127,7 @@ internal fun fmFormatGb(bytes: Long): String {
 private val remoteIconCache = ConcurrentHashMap<String, ImageBitmap?>()
 
 @Composable
-private fun rememberRemoteIcon(url: String): ImageBitmap? {
+internal fun rememberRemoteIcon(url: String): ImageBitmap? {
     val state = produceState<ImageBitmap?>(initialValue = remoteIconCache[url], key1 = url) {
         if (remoteIconCache.containsKey(url)) return@produceState
         val bmp = withContext(Dispatchers.IO) {

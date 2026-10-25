@@ -200,6 +200,22 @@ internal class FileManagerController(
     var pickDir by mutableStateOf<java.io.File?>(null)
     var needsAllFiles by mutableStateOf(false)
 
+    /** 是否显示主页（与目录列表互斥） */
+    var showHome by mutableStateOf(true)
+
+    fun enterList(dir: java.io.File) {
+        showHome = false
+        category = null
+        selected = emptyList()
+        currentDir = dir
+    }
+
+    fun goHome() {
+        showHome = true
+        category = null
+        selected = emptyList()
+    }
+
     // 分类浏览
     var category by mutableStateOf<FileCategory?>(null)
     var categoryFiles by mutableStateOf<List<FsEntry>>(emptyList())
@@ -291,6 +307,10 @@ internal class FileManagerController(
         }
         if (currentDir != root) {
             up()
+            return true
+        }
+        if (!showHome) {
+            goHome()
             return true
         }
         return false
@@ -644,7 +664,10 @@ internal fun FileManagerPage(
         controller.reload()
     }
 
-    BackHandler(enabled = controller.selecting || controller.category != null || controller.currentDir != controller.root) {
+    BackHandler(
+        enabled = controller.selecting || controller.category != null ||
+            controller.currentDir != controller.root || !controller.showHome
+    ) {
         controller.onBackPressed()
     }
 
@@ -699,6 +722,23 @@ internal fun FileManagerPage(
         }
     }
 
+    AnimatedContent(
+        targetState = controller.showHome,
+        modifier = Modifier.fillMaxSize(),
+        transitionSpec = {
+            if (targetState) {
+                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it / 3 } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(160)))
+            } else {
+                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(160)))
+            }
+        },
+        label = "home",
+    ) { home ->
+        if (home) {
+            FileManagerHomePage(controller, onOpenScanner)
+        } else {
     when (LocalUiMode.current) {
         UiMode.Miuix -> FileManagerMiuix(
             controller = controller,
@@ -718,6 +758,8 @@ internal fun FileManagerPage(
             onExtract = requestExtract,
             onTool = onTool,
         )
+    }
+        }
     }
 
     WindowDialog(show = showDeleteDialog, title = "删除", onDismissRequest = { showDeleteDialog = false }) {
@@ -949,14 +991,6 @@ private fun FileManagerMiuix(
                     overscrollEffect = null,
                 ) {
                     if (controller.currentDir == controller.root) {
-                        item(key = "home_header") {
-                            val density = androidx.compose.ui.platform.LocalDensity.current
-                            Box(modifier = Modifier.onGloballyPositioned {
-                                headerHeightDp = with(density) { it.size.height.toDp() }
-                            }) {
-                                FileManagerHomeHeaderMiuix(controller, onTool)
-                            }
-                        }
                         item(key = "home_breadcrumb") {
                             MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
                         }
@@ -1771,14 +1805,6 @@ private fun FileManagerMaterial(
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
                     if (controller.currentDir == controller.root) {
-                        item(key = "home_header") {
-                            val density = androidx.compose.ui.platform.LocalDensity.current
-                            Box(modifier = Modifier.onGloballyPositioned {
-                                headerHeightDp = with(density) { it.size.height.toDp() }
-                            }) {
-                                FileManagerHomeHeaderMaterial(controller, onTool)
-                            }
-                        }
                         item(key = "home_breadcrumb") {
                             MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
                         }
