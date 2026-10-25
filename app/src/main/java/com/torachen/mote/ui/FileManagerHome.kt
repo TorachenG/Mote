@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -167,7 +168,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .padding(14.dp),
                 ) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -203,9 +204,10 @@ internal fun FileManagerHomeHeaderMiuix(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
+            insideMargin = PaddingValues(0.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 fmCategories.forEach { entry ->
@@ -370,7 +372,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .padding(14.dp),
                 ) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))

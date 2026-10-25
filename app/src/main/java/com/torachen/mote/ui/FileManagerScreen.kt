@@ -191,6 +191,8 @@ internal class FileManagerController(
     var currentDir by mutableStateOf(root)
     var dirEntries by mutableStateOf<Map<String, List<FsEntry>>>(emptyMap())
     var selected by mutableStateOf<List<FsEntry>>(emptyList())
+    /** 多选模式独立状态：清空选择后仍保持多选 */
+    var selectionMode by mutableStateOf(false)
     var pendingOp by mutableStateOf<PendingOp?>(null)
     var pickDir by mutableStateOf<java.io.File?>(null)
     var needsAllFiles by mutableStateOf(false)
@@ -203,11 +205,26 @@ internal class FileManagerController(
     var reloading by mutableStateOf(false)
     /** 每个目录的滚动位置记忆（firstVisibleIndex to offset） */
     val scrollMemory = mutableMapOf<String, Pair<Int, Int>>()
+    /** 每个目录独立的 LazyListState，切回时天然保留滚动位置，无需异步恢复 */
+    private val listStateMap = mutableMapOf<String, androidx.compose.foundation.lazy.LazyListState>()
+
+    fun listStateFor(path: String): androidx.compose.foundation.lazy.LazyListState =
+        listStateMap.getOrPut(path) { androidx.compose.foundation.lazy.LazyListState() }
     private val scanScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
     )
 
-    val selecting: Boolean get() = selected.isNotEmpty()
+    val selecting: Boolean get() = selectionMode
+
+    fun enterSelection(entry: FsEntry) {
+        selectionMode = true
+        if (!isSelected(entry)) selected = selected + entry
+    }
+
+    fun exitSelection() {
+        selectionMode = false
+        selected = emptyList()
+    }
 
     fun openCategory(target: FileCategory) {
         category = target
@@ -231,8 +248,8 @@ internal class FileManagerController(
 
     /** 返回键/返回按钮统一处理：返回 true 表示已消费 */
     fun onBackPressed(): Boolean {
-        if (selected.isNotEmpty()) {
-            selected = emptyList()
+        if (selectionMode) {
+            exitSelection()
             return true
         }
         if (category != null) {
@@ -301,7 +318,18 @@ internal class FileManagerController(
         val list = withContext(Dispatchers.IO) {
             dir.listFiles()?.map { file ->
                 FsEntry(file, file.isDirectory, if (file.isFile) file.length() else 0L, file.lastModified())
-            }?.sortedWith(compareByDescending<FsEntry> { it.isDir }.thenBy { it.file.name.lowercase() })
+            }?.sortedWith(
+                compareByDescending<FsEntry> { it.isDir }
+                    .thenBy { entry ->
+                        val name = entry.file.name
+                        when {
+                            name.startsWith(".") -> 0
+                            name.firstOrNull()?.let { it.code in 0x4E00..0x9FFF } == true -> 1
+                            else -> 2
+                        }
+                    }
+                    .thenBy { it.file.name.lowercase() }
+            )
                 ?: emptyList()
         }
         dirEntries = dirEntries + (dir.absolutePath to list)
@@ -604,7 +632,7 @@ internal fun FileManagerPage(
     val requestExtract: (FsEntry) -> Unit = { one ->
         confirmTitle = "解压"
         confirmText = "确定解压「${one.file.name}」到当前目录？"
-        confirmAction = { controller.extract(one); controller.selected = emptyList() }
+        confirmAction = { controller.extract(one); controller.exitSelection() }
     }
     val requestDelete: () -> Unit = {
         if (controller.selected.isNotEmpty()) showDeleteDialog = true
@@ -620,7 +648,7 @@ internal fun FileManagerPage(
                 return@launch
             }
             shareFile(context, zip)
-            controller.selected = emptyList()
+            controller.exitSelection()
             delay(60000)
             withContext(Dispatchers.IO) { zip.delete() }
         }
@@ -726,7 +754,7 @@ internal fun FileManagerPage(
             show = showInfoDialog,
             onJump = { target ->
                 controller.enter(target)
-                controller.selected = emptyList()
+                controller.exitSelection()
                 showInfoDialog = false
             },
             onDismiss = { showInfoDialog = false },
@@ -867,6 +895,7 @@ private fun FileManagerMiuix(
                 },
                 label = "dir",
             ) { dir ->
+                val listState = remember(dir.absolutePath) { controller.listStateFor(dir.absolutePath) }
                 PullRefreshContainer(
                     canPull = {
                         listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
@@ -880,7 +909,6 @@ private fun FileManagerMiuix(
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .dragSelectModifier(controller, listState, rememberCoroutineScope())
                         .graphicsLayer { alpha = if (controller.reloading) 0f else 1f }
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
@@ -1018,7 +1046,7 @@ private fun FileManagerMiuix(
                         controller.selecting -> SettingsTopBarAction(
                             backCardAlpha = backCardAlpha,
                             backCardMaterialModifier = backCardMaterialModifier,
-                            onClick = { controller.selected = emptyList() },
+                            onClick = { controller.exitSelection() },
                             contentDescription = "退出多选",
                             icon = MiuixIcons.ChevronBackward,
                             tint = MiuixTheme.colorScheme.onSurface,
@@ -1083,7 +1111,7 @@ private fun FileManagerMiuix(
                     items = liveBarItems,
                     onAbout = { onAbout(liveBarItems) },
                     onShare = { onShare(liveBarItems) },
-                    onOpen = { one -> controller.open(one); controller.selected = emptyList() },
+                    onOpen = { one -> controller.open(one); controller.exitSelection() },
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
                     onExtract = onExtract,
@@ -1747,7 +1775,7 @@ private fun FileManagerMaterial(
                     M3IconButton(onClick = {
                         when {
                             controller.pendingOp != null -> controller.cancelPick()
-                            controller.selecting -> controller.selected = emptyList()
+                            controller.selecting -> controller.exitSelection()
                             !controller.up() -> controller.onBack()
                         }
                     }) {
@@ -1805,7 +1833,7 @@ private fun FileManagerMaterial(
                             if (single && one != null && !one.isDir && isArchive(one.file.name)) {
                                 M3CapsuleAction(Icons.Rounded.Unarchive, "解压", true) {
                                     controller.extract(one)
-                                    controller.selected = emptyList()
+                                    controller.exitSelection()
                                 }
                             } else {
                                 M3CapsuleAction(Icons.Rounded.Archive, "压缩", true) { controller.compressSelected() }
@@ -1816,7 +1844,7 @@ private fun FileManagerMaterial(
                             if (single && one != null && !one.isDir && isArchive(one.file.name)) {
                                 M3CapsuleAction(Icons.Filled.Folder, "解压", true) {
                                     controller.extract(one)
-                                    controller.selected = emptyList()
+                                    controller.exitSelection()
                                 }
                             }
                             M3CapsuleAction(Icons.Rounded.MoreVert, "更多", true) {
