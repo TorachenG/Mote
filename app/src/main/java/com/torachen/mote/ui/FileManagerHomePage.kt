@@ -192,10 +192,10 @@ internal fun FileManagerHomePage(
                                 Box(contentAlignment = Alignment.Center) {
                                     CircularProgressIndicator(
                                         progress = fraction,
-                                        size = 72.dp,
-                                        strokeWidth = 6.dp,
+                                        size = 56.dp,
+                                        strokeWidth = 5.dp,
                                     )
-                                    Text("${(fraction * 100).toInt()}%", fontSize = 16.sp, color = onSurface)
+                                    Text("${(fraction * 100).toInt()}%", fontSize = 13.sp, color = onSurface)
                                 }
                                 Spacer(Modifier.width(16.dp))
                                 Column {
@@ -221,17 +221,27 @@ internal fun FileManagerHomePage(
                             Row(
                                 modifier = Modifier.fillMaxWidth()
                                     .clickable { controller.enterList(controller.root) }
-                                    .padding(10.5.dp),
+                                    .padding(13.5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    imageVector = Icons.Rounded.PhoneAndroid,
-                                    contentDescription = null,
-                                    tint = onSurface,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                                Spacer(Modifier.width(14.dp))
-                                Text("手机存储目录", fontSize = 16.sp, color = onSurface, modifier = Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .background(
+                                            MiuixTheme.colorScheme.surfaceContainer,
+                                            RoundedCornerShape(9.dp),
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PhoneAndroid,
+                                        contentDescription = null,
+                                        tint = onSurface,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text("手机存储目录", fontSize = 15.sp, color = onSurface, modifier = Modifier.weight(1f))
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                     contentDescription = null,
@@ -292,23 +302,48 @@ internal fun FileManagerHomePage(
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
                                     apps.forEach { app ->
+                                        val exists = java.io.File(app.dirPath).exists()
                                         Row(
                                             modifier = Modifier.fillMaxWidth()
                                                 .clickable {
-                                                    val dir = java.io.File(app.dirPath)
-                                                    controller.enterList(if (dir.exists()) dir else controller.root)
+                                                    if (exists) {
+                                                        controller.enterList(java.io.File(app.dirPath))
+                                                    } else {
+                                                        android.widget.Toast.makeText(
+                                                            controller.context,
+                                                            "${app.name} 的下载目录不存在",
+                                                            android.widget.Toast.LENGTH_SHORT,
+                                                        ).show()
+                                                    }
                                                 }
-                                                .padding(horizontal = 14.dp, vertical = 14.dp),
+                                                .padding(horizontal = 13.5.dp, vertical = 12.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.Android,
-                                                contentDescription = null,
-                                                tint = app.color,
-                                                modifier = Modifier.size(24.dp),
-                                            )
-                                            Spacer(Modifier.width(14.dp))
-                                            Text(app.name, fontSize = 16.sp, color = onSurface, modifier = Modifier.weight(1f))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .background(app.color, RoundedCornerShape(9.dp)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = app.name.take(1),
+                                                    fontSize = 15.sp,
+                                                    color = Color.White,
+                                                )
+                                            }
+                                            Spacer(Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(app.name, fontSize = 15.sp, color = onSurface)
+                                                Spacer(Modifier.height(2.dp))
+                                                Text(
+                                                    text = app.dirPath.removePrefix(
+                                                        android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
+                                                    ),
+                                                    fontSize = 11.sp,
+                                                    color = summary,
+                                                    maxLines = 1,
+                                                )
+                                            }
                                             Icon(
                                                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                                 contentDescription = null,
@@ -442,17 +477,55 @@ internal data class FmDetectedApp(val name: String, val dirPath: String, val col
 internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedApp> {
     val pm = context.packageManager
     val root = android.os.Environment.getExternalStorageDirectory()
-    val candidates = listOf(
-        Triple("QQ", "com.tencent.mobileqq", "Android/data/com.tencent.mobileqq/tencent/QQfile_recv"),
-        Triple("微信", "com.tencent.mm", "Android/data/com.tencent.mm/MicroMsg/Download"),
-        Triple("X", "com.twitter.android", "Android/data/com.twitter.android/files"),
-        Triple("哔哩哔哩", "tv.danmaku.bili", "Android/data/tv.danmaku.bili/download"),
+
+    data class Def(
+        val name: String,
+        val pkg: String,
+        val color: Color,
+        val paths: List<String>,
     )
-    val colors = listOf(Color(0xFF12B7F5), Color(0xFF07C160), Color(0xFF000000), Color(0xFFFB7299))
+
+    val defs = listOf(
+        Def(
+            "QQ", "com.tencent.mobileqq", Color(0xFF12B7F5),
+            listOf(
+                "Android/data/com.tencent.mobileqq/tencent/QQfile_recv",
+                "tencent/QQfile_recv",
+            ),
+        ),
+        Def(
+            "微信", "com.tencent.mm", Color(0xFF07C160),
+            listOf(
+                "Android/data/com.tencent.mm/MicroMsg/Download",
+                "tencent/MicroMsg/Download",
+            ),
+        ),
+        Def(
+            "X", "com.twitter.android", Color(0xFF1A1A1A),
+            listOf(
+                "Android/data/com.twitter.android/files",
+                "Pictures/Twitter",
+            ),
+        ),
+        Def(
+            "哔哩哔哩", "tv.danmaku.bili", Color(0xFFFB7299),
+            listOf(
+                "Android/data/tv.danmaku.bili/download",
+                "Android/data/tv.danmaku.bili/Download",
+            ),
+        ),
+    )
+
     val out = mutableListOf<FmDetectedApp>()
-    candidates.forEachIndexed { index, (name, pkg, path) ->
-        val installed = runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess
-        if (installed) out.add(FmDetectedApp(name, java.io.File(root, path).absolutePath, colors[index]))
+    defs.forEach { def ->
+        val installed = runCatching { pm.getPackageInfo(def.pkg, 0) }.isSuccess
+        val resolved = def.paths
+            .map { java.io.File(root, it) }
+            .firstOrNull { it.exists() }
+            ?: java.io.File(root, def.paths.first())
+        if (installed || resolved.exists()) {
+            out.add(FmDetectedApp(def.name, resolved.absolutePath, def.color))
+        }
     }
     return out
 }
