@@ -60,6 +60,8 @@ class BaselineProfileGenerator {
 
             // 1. 冷启动 + 等首屏真正画完
             coldStart(settleMs = if (firstRound) SETTLE_FIRST_ROUND_MS else SETTLE_OTHER_ROUND_MS)
+            // 首次启动会弹用户协议 / 权限弹窗：先同意并授权，否则采集会一直在弹窗上打转
+            step("first-run-dialogs") { dismissFirstRunDialogs(device) }
 
             // 2. 工具栏 -> 设置 -> 滑动 -> 返回
             var settingsOpened = false
@@ -205,6 +207,7 @@ class BaselineProfileGenerator {
         }
         device.waitForIdle(SHEET_IDLE_MS)
         sleep(settleMs)
+        step("cold-start-dialogs") { dismissFirstRunDialogs(device) }
     }
 
     // ------------------------------------------------------------------ 工具方法
@@ -213,6 +216,33 @@ class BaselineProfileGenerator {
      * 轮询多个选择器，任一命中就点，返回是否点成功。
      * 用轮询而不是 findObject 立即点，避免 HyperOS 上首帧未稳定时的 StaleObjectException。
      */
+    /** 首次启动/权限弹窗：点同意、允许，避免采集卡在弹窗上 */
+    private fun dismissFirstRunDialogs(device: UiDevice) {
+        repeat(4) {
+            var clicked = false
+            for (label in listOf(
+                "同意并继续", "同意", "接受", "允许", "始终允许", "仅在使用中允许",
+                "确定", "知道了", "我知道了", "继续",
+            )) {
+                val node = try {
+                    device.findObject(By.textContains(label))
+                } catch (_: Exception) {
+                    null
+                }
+                if (node != null) {
+                    try {
+                        node.click()
+                        clicked = true
+                        sleep(400)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+            if (!clicked) return
+            device.waitForIdle(SHEET_IDLE_MS)
+        }
+    }
+
     /** 打开工具弹窗，返回是否成功 */
     private fun openToolSheet(device: UiDevice): Boolean {
         val opened = tapAny(
