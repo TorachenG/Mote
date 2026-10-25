@@ -208,7 +208,7 @@ internal fun FileManagerHomeHeaderMiuix(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(15.7.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 fmCategories.forEach { entry ->
                     Column(
@@ -411,7 +411,7 @@ internal fun FileManagerHomeHeaderMaterial(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 fmCategories.forEach { entry ->
                     Column(

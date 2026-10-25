@@ -233,8 +233,8 @@ internal class FileManagerController(
         val entry = list.getOrNull(index) ?: return
         paintStartIndex = index
         paintRowHeightPx = rowHeightPx.coerceAtLeast(1f)
-        paintTarget = !isSelected(entry)
-        applyPaint(index)
+        // 起始行已在 enterSelection 中选中，后续按“选中”状态涂抹，不要把起始行再反选
+        paintTarget = isSelected(entry)
     }
 
     fun paintBy(offsetPx: Float) {
