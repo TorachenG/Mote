@@ -65,6 +65,7 @@ fun DownloadsShell(
     onOpenTaskDetail: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onOpenScanner: () -> Unit = {},
+    onOpenDir: (String?, String?) -> Unit = { _, _ -> },
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
     val tab = pagerState.currentPage
@@ -72,7 +73,12 @@ fun DownloadsShell(
     val context = LocalContext.current
     // 复用同一个 controller，避免每次切到文件页都重新扫描目录导致掉帧
     val fileController = remember {
-        FileManagerController(context, onOpenInBrowser) { scope.launch { pagerState.animateScrollToPage(0) } }
+        FileManagerController(
+            context,
+            onOpenInBrowser,
+            { scope.launch { pagerState.animateScrollToPage(0) } },
+            onOpenDir,
+        )
     }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) { fileController.reload() }

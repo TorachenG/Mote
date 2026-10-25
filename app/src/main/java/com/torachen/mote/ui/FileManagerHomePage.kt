@@ -166,7 +166,7 @@ internal fun FileManagerHomePage(
                                                 when (tool.tool) {
                                                     FmTool.SCAN -> onOpenScanner()
                                                     FmTool.TRASH -> controller.openRecycleBin()
-                                                    else -> startDirActivity(controller.context, controller.root.absolutePath, null)
+                                                    else -> controller.onOpenDir(controller.root.absolutePath, null)
                                                 }
                                             }
                                         }
@@ -275,11 +275,7 @@ internal fun FileManagerHomePage(
                                                     }
                                                 },
                                                 onClick = {
-                                                    startDirActivity(
-                                                        controller.context,
-                                                        controller.root.absolutePath,
-                                                        entry.category.name,
-                                                    )
+                                                    controller.onOpenDir(controller.root.absolutePath, entry.category.name,)
                                                 },
                                             )
                                         }
@@ -334,7 +330,7 @@ internal fun FileManagerHomePage(
                                             },
                                             onClick = {
                                                 if (exists) {
-                                                    startDirActivity(controller.context, app.dirPath, null)
+                                                    controller.onOpenDir(app.dirPath, null)
                                                 } else {
                                                     android.widget.Toast.makeText(
                                                         controller.context,

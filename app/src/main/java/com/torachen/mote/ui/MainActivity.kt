@@ -3595,6 +3595,20 @@ private fun RenderPageContent(
                     onPopToRoot()
                 },
                 onOpenScanner = { onPush("scanner") },
+                onOpenDir = { path, category ->
+                    FileManagerDirRequest.path = path
+                    FileManagerDirRequest.category = category
+                    onPush("file_manager_dir")
+                },
+            )
+            "file_manager_dir" -> FileManagerDirPage(
+                onBack = { onPop() },
+                onOpenInBrowser = { uri ->
+                    PendingOpenInNewWindowStore.pending = uri
+                    onPopToRoot()
+                },
+                initialPath = FileManagerDirRequest.path,
+                initialCategory = FileManagerDirRequest.category,
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }
