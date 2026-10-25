@@ -121,6 +121,14 @@ android {
                 enable = false
             }
         }
+        // 仅用于生成 Baseline Profile 的可采集变体：不可调试、独立包名、debug 签名
+        create("profile") {
+            isDebuggable = false
+            applicationIdSuffix = ".bp"
+            versionNameSuffix = "-bp"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

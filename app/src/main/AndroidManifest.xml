@@ -49,6 +49,7 @@
         android:theme="@style/Theme.Mote"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
+        <profileable android:shell="true" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
