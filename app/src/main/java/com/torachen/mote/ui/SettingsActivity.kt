@@ -1329,6 +1329,7 @@ internal fun SettingsBackButton(
         Box(
             modifier = Modifier
                 .size(40.dp)
+                .clip(CircleShape)
                 .clickable(onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {

@@ -83,6 +83,7 @@ fun DownloadsShell(
     }
     var downloadsSelecting by remember { mutableStateOf(false) }
     var filesSelecting by remember { mutableStateOf(false) }
+    var filesSubPage by remember { mutableStateOf(false) }
 
     when (LocalUiMode.current) {
         UiMode.Miuix -> DownloadsShellMiuix(
@@ -95,9 +96,10 @@ fun DownloadsShell(
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
             onOpenInBrowser = onOpenInBrowser,
-            navBarVisible = !downloadsSelecting && !filesSelecting,
+            navBarVisible = !downloadsSelecting && !filesSelecting && !filesSubPage,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
+            onFilesSubPageChange = { filesSubPage = it },
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
             onOpenScanner = onOpenScanner,
@@ -112,9 +114,10 @@ fun DownloadsShell(
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
             onOpenInBrowser = onOpenInBrowser,
-            navBarVisible = !downloadsSelecting && !filesSelecting,
+            navBarVisible = !downloadsSelecting && !filesSelecting && !filesSubPage,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
+            onFilesSubPageChange = { filesSubPage = it },
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
             onOpenScanner = onOpenScanner,
@@ -133,6 +136,7 @@ private fun DownloadsShellMiuix(
     navBarVisible: Boolean,
     onDownloadsSelectingChange: (Boolean) -> Unit,
     onFilesSelectingChange: (Boolean) -> Unit,
+    onFilesSubPageChange: (Boolean) -> Unit,
     selectedIndex: () -> Int,
     fileController: FileManagerController,
     pagerState: androidx.compose.foundation.pager.PagerState,
@@ -177,6 +181,7 @@ private fun DownloadsShellMiuix(
                         onSelectionModeChange = onFilesSelectingChange,
                         controller = fileController,
                         onOpenScanner = onOpenScanner,
+                        onSubPageChange = onFilesSubPageChange,
                     )
                 }
             }
@@ -286,6 +291,7 @@ private fun DownloadsShellMaterial(
     navBarVisible: Boolean,
     onDownloadsSelectingChange: (Boolean) -> Unit,
     onFilesSelectingChange: (Boolean) -> Unit,
+    onFilesSubPageChange: (Boolean) -> Unit,
     selectedIndex: () -> Int,
     fileController: FileManagerController,
     pagerState: androidx.compose.foundation.pager.PagerState,

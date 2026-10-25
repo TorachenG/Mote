@@ -527,12 +527,16 @@ internal fun FileManagerPage(
     onSelectionModeChange: (Boolean) -> Unit = {},
     controller: FileManagerController? = null,
     onOpenScanner: () -> Unit = {},
+    onSubPageChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val controller = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
 
     LaunchedEffect(controller.currentDir) { controller.reload() }
     LaunchedEffect(Unit) { controller.purgeRecycleBin() }
+    LaunchedEffect(controller.currentDir, controller.category) {
+        onSubPageChange(controller.currentDir != controller.root || controller.category != null)
+    }
     LaunchedEffect(controller.selecting) { onSelectionModeChange(controller.selecting) }
 
     // 从系统「所有文件访问权限」页返回时，应用不会重建，需要在 ON_RESUME 重新检查并刷新
@@ -861,7 +865,7 @@ private fun FileManagerMiuix(
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
+                    contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
                 ) {
                     if (controller.currentDir == controller.root) {
@@ -877,7 +881,9 @@ private fun FileManagerMiuix(
                             MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
                         }
                     }
-                    item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
+                    if (controller.currentDir != controller.root) {
+                        item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
+                    }
                     if (controller.needsAllFiles) {
                         item {
                             Card(
@@ -901,6 +907,30 @@ private fun FileManagerMiuix(
             }
         }
 
+
+        if (controller.currentDir == controller.root && (pullUi.offset > 0f || pullUi.refreshing)) {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            val triggerPx = with(density) { 74.dp.toPx() }
+            val progress = if (pullUi.refreshing) 1f else (pullUi.offset / triggerPx).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = topPadding + 8.dp)
+                    .size(22.dp)
+                    .graphicsLayer {
+                        val sc = progress * 1.6f
+                        scaleX = sc
+                        scaleY = sc
+                        translationY = pullUi.offset * 0.9f
+                    },
+            ) {
+                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                    color = if (progress >= 1f) MiuixTheme.colorScheme.primary else Color(0xFF666666),
+                    size = 22.dp,
+                    strokeWidth = 2.5.dp,
+                )
+            }
+        }
 
         // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
         // 整段标题栏满强度模糊，渐变带收在标题栏底部之内，避免糊到第一条选项
@@ -1048,7 +1078,10 @@ private fun MiuixBreadcrumb(
     startPadding: androidx.compose.ui.unit.Dp,
     category: FileCategory? = null,
 ) {
-    val segments = remember(dir) { controller.segmentsOf(dir) }
+    val inRecycle = dir.absolutePath.startsWith(controller.recycleRoot.absolutePath)
+    val segments = remember(dir) {
+        if (inRecycle) listOf(controller.recycleRoot) else controller.segmentsOf(dir)
+    }
     val items = if (category != null) {
         listOf(
             BreadcrumbItem(path = controller.root.absolutePath, text = "内部存储"),
@@ -1132,8 +1165,21 @@ private fun CategoryListMiuix(
     ) {
         if (controller.categoryLoading) {
             item {
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                    Text("正在扫描…", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                        color = MiuixTheme.colorScheme.primary,
+                        size = 18.dp,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "正在加载...",
+                        style = MiuixTheme.textStyles.body1,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
                 }
             }
         } else if (controller.categoryFiles.isEmpty()) {
@@ -1169,8 +1215,21 @@ private fun CategoryListMaterial(
     ) {
         if (controller.categoryLoading) {
             item {
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                    M3Text("正在扫描…", fontSize = 13.sp, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                        color = M3MaterialTheme.colorScheme.primary,
+                        size = 18.dp,
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    M3Text(
+                        "正在加载...",
+                        fontSize = 14.sp,
+                        color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         } else if (controller.categoryFiles.isEmpty()) {
@@ -1488,7 +1547,7 @@ private fun FileManagerMaterial(
                 LazyColumn(
                     state = materialFileListState,
                     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = 96.dp),
+                    contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
                     if (controller.currentDir == controller.root) {
                         item(key = "home_header") {
@@ -1503,7 +1562,9 @@ private fun FileManagerMaterial(
                             MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
                         }
                     }
-                    item(key = "pull_indicator") { PullIndicatorItem(materialPullUi) }
+                    if (controller.currentDir != controller.root) {
+                        item(key = "pull_indicator") { PullIndicatorItem(materialPullUi) }
+                    }
                     if (controller.needsAllFiles) {
                         item {
                             Column(

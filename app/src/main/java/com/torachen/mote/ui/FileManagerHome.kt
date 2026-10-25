@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Android
@@ -162,7 +163,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 .height(268.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Card(modifier = Modifier.weight(2.3f).fillMaxHeight()) {
+            Card(modifier = Modifier.weight(2.1f).fillMaxHeight()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -172,16 +173,19 @@ internal fun FileManagerHomeHeaderMiuix(
                     Spacer(Modifier.height(12.dp))
                     fmTools.chunked(3).forEachIndexed { rowIndex, row ->
                         if (rowIndex > 0) Spacer(Modifier.height(14.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
                             row.forEach { tool ->
                                 FmToolCellMiuix(
                                     tool = tool,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.width(76.dp),
                                     onSurface = onSurface,
                                     onClick = { onTool(tool.tool) },
                                 )
                             }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(3 - row.size) { Spacer(Modifier.width(76.dp)) }
                         }
                     }
                 }
@@ -206,7 +210,7 @@ internal fun FileManagerHomeHeaderMiuix(
             ) {
                 fmCategories.forEach { entry ->
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        horizontalAlignment = Alignment.Start,
                         modifier = Modifier
                             .weight(1f)
                             .clickable { controller.openCategory(entry.category) },
@@ -248,7 +252,7 @@ private fun FmToolCellMiuix(
     val bg = if (tool.usePrimary) MiuixTheme.colorScheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
     ) {
         Box(
             modifier = Modifier
@@ -356,7 +360,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 .height(268.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            M3Card(modifier = Modifier.weight(2.3f).fillMaxHeight()) {
+            M3Card(modifier = Modifier.weight(2.1f).fillMaxHeight()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -366,16 +370,19 @@ internal fun FileManagerHomeHeaderMaterial(
                     Spacer(Modifier.height(12.dp))
                     fmTools.chunked(3).forEachIndexed { rowIndex, row ->
                         if (rowIndex > 0) Spacer(Modifier.height(14.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
                             row.forEach { tool ->
                                 FmToolCellMaterial(
                                     tool = tool,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.width(76.dp),
                                     scheme = scheme,
                                     onClick = { onTool(tool.tool) },
                                 )
                             }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(3 - row.size) { Spacer(Modifier.width(76.dp)) }
                         }
                     }
                 }
@@ -400,7 +407,7 @@ internal fun FileManagerHomeHeaderMaterial(
             ) {
                 fmCategories.forEach { entry ->
                     Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        horizontalAlignment = Alignment.Start,
                         modifier = Modifier
                             .weight(1f)
                             .clickable { controller.openCategory(entry.category) },
@@ -442,7 +449,7 @@ private fun FmToolCellMaterial(
     val bg = if (tool.usePrimary) scheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
     ) {
         Box(
             modifier = Modifier
