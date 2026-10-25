@@ -154,18 +154,19 @@ internal fun FileManagerHomeHeaderMiuix(
     val storage = remember { fmStorageUsage() }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(12.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .height(208.dp),
+                .padding(start = 26.dp, end = 12.dp)
+                .height(268.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Card(modifier = Modifier.weight(2.1f).fillMaxHeight()) {
+            Card(modifier = Modifier.weight(2.3f).fillMaxHeight()) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
-                    fmTools.chunked(4).forEachIndexed { rowIndex, row ->
+                    fmTools.chunked(3).forEachIndexed { rowIndex, row ->
                         if (rowIndex > 0) Spacer(Modifier.height(14.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
                             row.forEach { tool ->
@@ -176,7 +177,7 @@ internal fun FileManagerHomeHeaderMiuix(
                                     onClick = { onTool(tool.tool) },
                                 )
                             }
-                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
@@ -193,7 +194,7 @@ internal fun FileManagerHomeHeaderMiuix(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+                .padding(start = 26.dp, end = 12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -343,18 +344,19 @@ internal fun FileManagerHomeHeaderMaterial(
     val storage = remember { fmStorageUsage() }
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(12.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp)
-                .height(208.dp),
+                .padding(start = 26.dp, end = 12.dp)
+                .height(268.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            M3Card(modifier = Modifier.weight(2.1f).fillMaxHeight()) {
+            M3Card(modifier = Modifier.weight(2.3f).fillMaxHeight()) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
-                    fmTools.chunked(4).forEachIndexed { rowIndex, row ->
+                    fmTools.chunked(3).forEachIndexed { rowIndex, row ->
                         if (rowIndex > 0) Spacer(Modifier.height(14.dp))
                         Row(modifier = Modifier.fillMaxWidth()) {
                             row.forEach { tool ->
@@ -365,7 +367,7 @@ internal fun FileManagerHomeHeaderMaterial(
                                     onClick = { onTool(tool.tool) },
                                 )
                             }
-                            repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
@@ -382,7 +384,7 @@ internal fun FileManagerHomeHeaderMaterial(
         M3Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+                .padding(start = 26.dp, end = 12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),

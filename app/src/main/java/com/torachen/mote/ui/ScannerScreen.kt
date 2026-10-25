@@ -1430,6 +1430,7 @@ private fun saveDocumentToGallery(context: Context, bitmap: Bitmap): Boolean {
 fun ScannerScreen(
     onCodeScanned: (String) -> Unit,
     onClose: () -> Unit,
+    autoRequestPermission: Boolean = true,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1542,6 +1543,11 @@ fun ScannerScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasPermission = granted
+    }
+    LaunchedEffect(Unit) {
+        if (autoRequestPermission && !hasPermission) {
+            permissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
     }
 
     var pendingWifiInfo by remember { mutableStateOf<WifiQrInfo?>(null) }

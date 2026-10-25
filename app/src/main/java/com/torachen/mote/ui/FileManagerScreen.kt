@@ -197,9 +197,12 @@ internal class FileManagerController(
         categoryLoading = true
         categoryFiles = emptyList()
         scanScope.launch {
-            val files = scanCategory(target)
+            scanCategory(target) { partial ->
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
+                    categoryFiles = partial
+                }
+            }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                categoryFiles = files
                 categoryLoading = false
             }
         }
@@ -226,7 +229,10 @@ internal class FileManagerController(
         return false
     }
 
-    private fun scanCategory(target: FileCategory): List<FsEntry> {
+    private suspend fun scanCategory(
+        target: FileCategory,
+        onPartial: suspend (List<FsEntry>) -> Unit,
+    ): List<FsEntry> {
         val roots = listOf(
             root,
             java.io.File(root, "Download"),
@@ -253,7 +259,10 @@ internal class FileManagerController(
                 }
             }
         }
-        roots.filter { it.isDirectory }.forEach { walk(it, 0) }
+        roots.filter { it.isDirectory }.forEach { rootDir ->
+            walk(rootDir, 0)
+            if (out.isNotEmpty()) onPartial(out.sortedByDescending { it.modified })
+        }
         return out.sortedByDescending { it.modified }
     }
 
@@ -357,10 +366,33 @@ internal class FileManagerController(
         return zip
     }
 
+    val recycleRoot: java.io.File get() = java.io.File(context.filesDir, "recycle")
+
     fun deleteSelected() {
         val items = selected
         if (items.isEmpty()) return
-        FileOpService.delete(context, items.map { it.file.absolutePath })
+        val bucket = java.io.File(recycleRoot, System.currentTimeMillis().toString())
+        bucket.mkdirs()
+        val moved = items.count { item ->
+            runCatching { item.file.renameTo(java.io.File(bucket, item.file.name)) }.getOrDefault(false)
+        }
+        selected = emptyList()
+        FileOpState.message.value = "已移入回收站（保留 7 天）：$moved 项"
+    }
+
+    fun purgeRecycleBin() {
+        scanScope.launch {
+            val expire = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+            recycleRoot.listFiles()?.forEach { bucket ->
+                val ts = bucket.name.toLongOrNull() ?: return@forEach
+                if (ts < expire) bucket.deleteRecursively()
+            }
+        }
+    }
+
+    fun openRecycleBin() {
+        recycleRoot.mkdirs()
+        currentDir = recycleRoot
         selected = emptyList()
     }
 
@@ -497,6 +529,7 @@ internal fun FileManagerPage(
     val controller = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
 
     LaunchedEffect(controller.currentDir) { controller.reload() }
+    LaunchedEffect(Unit) { controller.purgeRecycleBin() }
     LaunchedEffect(controller.selecting) { onSelectionModeChange(controller.selecting) }
 
     // 从系统「所有文件访问权限」页返回时，应用不会重建，需要在 ON_RESUME 重新检查并刷新
@@ -576,7 +609,7 @@ internal fun FileManagerPage(
                 Toast.makeText(context, "请在下方列表中选择文件后使用底部操作", Toast.LENGTH_SHORT).show()
             }
             FmTool.SCAN -> onOpenScanner()
-            FmTool.TRASH -> Toast.makeText(context, "回收站暂未开放", Toast.LENGTH_SHORT).show()
+            FmTool.TRASH -> controller.openRecycleBin()
             else -> Toast.makeText(context, "该功能暂未开放", Toast.LENGTH_SHORT).show()
         }
     }
@@ -1044,7 +1077,7 @@ private fun PullIndicatorItem(state: PullRefreshUiState) {
                 modifier = Modifier
                     .size(22.dp)
                     .graphicsLayer {
-                        val s = 1f + progress * 0.6f
+                        val s = progress * 1.6f
                         scaleX = s
                         scaleY = s
                     },
@@ -1067,6 +1100,12 @@ private fun CategoryListMiuix(
     topPadding: androidx.compose.ui.unit.Dp,
 ) {
     val listState = rememberLazyListState()
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    AnimatedVisibility(
+        visible = appeared,
+        enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
+    ) {
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -1088,6 +1127,8 @@ private fun CategoryListMiuix(
             items(controller.categoryFiles) { entry -> MiuixEntryRow(controller, entry) }
         }
     }
+    }
+
 }
 
 @Composable
@@ -1096,6 +1137,12 @@ private fun CategoryListMaterial(
     topPadding: androidx.compose.ui.unit.Dp,
 ) {
     val listState = rememberLazyListState()
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    AnimatedVisibility(
+        visible = appeared,
+        enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
+    ) {
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -1117,6 +1164,8 @@ private fun CategoryListMaterial(
             items(controller.categoryFiles) { entry -> MaterialEntryRow(controller, entry) }
         }
     }
+    }
+
 }
 
 @OptIn(ExperimentalFoundationApi::class)
