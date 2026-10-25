@@ -128,21 +128,14 @@ android {
                 "proguard-rules.pro",
             )
         }
-        // 仅用于生成 Baseline Profile 的可采集变体：不可调试、独立包名、debug 签名
+        // 仅用于生成 Baseline Profile 的可采集变体：不可调试、独立包名、debug 签名；
+        // 必须保持未混淆，采集结果由 AGP 在 release 打包时按 mapping 重写
         create("profile") {
             isDebuggable = false
             applicationIdSuffix = ".bp"
             versionNameSuffix = "-bp"
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
-            // 与 release 保持一致，用于验证 R8 后的运行情况
-            optimization {
-                enable = true
-            }
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
         }
     }
     compileOptions {

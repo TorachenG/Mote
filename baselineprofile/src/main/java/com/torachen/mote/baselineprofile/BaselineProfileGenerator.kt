@@ -136,6 +136,7 @@ class BaselineProfileGenerator {
                 if (openToolSheet(device)) {
                     tapAny(device, TAP_TIMEOUT_MS, By.textContains("书签列表"), By.descContains("书签列表"))
                     device.waitForIdle(SHEET_IDLE_MS)
+                    dismissFirstRunDialogs(device)
                     swipeUpDown(device, 2)
                     device.pressBack()
                     sleep(BACK_SETTLE_MS)
@@ -145,6 +146,7 @@ class BaselineProfileGenerator {
                 if (openToolSheet(device)) {
                     tapAny(device, TAP_TIMEOUT_MS, By.textContains("历史记录"), By.descContains("历史记录"))
                     device.waitForIdle(SHEET_IDLE_MS)
+                    dismissFirstRunDialogs(device)
                     swipeUpDown(device, 2)
                     device.pressBack()
                     sleep(BACK_SETTLE_MS)
@@ -154,11 +156,13 @@ class BaselineProfileGenerator {
                 if (openToolSheet(device)) {
                     tapAny(device, TAP_TIMEOUT_MS, By.textContains("下载管理"), By.descContains("下载管理"))
                     device.waitForIdle(SHEET_IDLE_MS)
+                    dismissFirstRunDialogs(device)
                     sleep(800)
                     swipeUpDown(device, 2)
                     // 切到文件页签
                     tapAny(device, TAP_TIMEOUT_MS, By.textContains("文件"), By.descContains("文件"))
                     device.waitForIdle(SHEET_IDLE_MS)
+                    dismissFirstRunDialogs(device)
                     sleep(800)
                     swipeUpDown(device, 3)
                     device.pressBack()
@@ -295,6 +299,7 @@ class BaselineProfileGenerator {
                 }
                 if (clicked) {
                     device.waitForIdle(500)
+                    dismissFirstRunDialogs(device)
                     return true
                 }
             }
