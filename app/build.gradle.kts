@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -89,6 +92,15 @@ val generateSettingsSearchCatalog by tasks.registering {
     }
 }
 
+// 正式签名：把 keystore.properties 放在仓库根目录（不入库），格式见 keystore.properties.example
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        FileInputStream(keystorePropsFile).use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystoreProps.getProperty("storeFile").orEmpty().isNotBlank()
+
 android {
     namespace = "com.torachen.mote"
     compileSdk {
@@ -102,6 +114,16 @@ android {
         versionName = "0.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
     }
     splits {
         abi {
@@ -121,8 +143,9 @@ android {
             optimization {
                 enable = true
             }
-            // 暂用 debug 签名，便于直接装机验证；正式发布前替换为自有 keystore
-            signingConfig = signingConfigs.getByName("debug")
+            // 有 keystore.properties 时用正式签名，否则回退 debug 便于本地验证
+            signingConfig = if (hasReleaseKeystore) signingConfigs.getByName("release")
+            else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

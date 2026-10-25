@@ -27,3 +27,7 @@ cloudbase/admin/
 # build outputs
 *.apk
 *.aab
+
+keystore.properties
+*.jks
+*.keystore
