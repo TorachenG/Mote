@@ -3594,6 +3594,7 @@ private fun RenderPageContent(
                     PendingOpenInNewWindowStore.pending = uri
                     onPopToRoot()
                 },
+                onOpenScanner = { onPush("scanner") },
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }

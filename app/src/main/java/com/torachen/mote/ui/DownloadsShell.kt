@@ -59,6 +59,7 @@ fun DownloadsShell(
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
+    onOpenScanner: () -> Unit = {},
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
     val tab = pagerState.currentPage
@@ -99,6 +100,7 @@ fun DownloadsShell(
             onFilesSelectingChange = { filesSelecting = it },
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
+            onOpenScanner = onOpenScanner,
         )
         UiMode.Material -> DownloadsShellMaterial(
             fileController = fileController,
@@ -115,6 +117,7 @@ fun DownloadsShell(
             onFilesSelectingChange = { filesSelecting = it },
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
+            onOpenScanner = onOpenScanner,
         )
     }
 }
@@ -135,6 +138,7 @@ private fun DownloadsShellMiuix(
     pagerState: androidx.compose.foundation.pager.PagerState,
     swipeEnabled: Boolean,
     onOpenDownloadsFolder: () -> Unit,
+    onOpenScanner: () -> Unit,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -172,6 +176,7 @@ private fun DownloadsShellMiuix(
                         onOpenInBrowser = onOpenInBrowser,
                         onSelectionModeChange = onFilesSelectingChange,
                         controller = fileController,
+                        onOpenScanner = onOpenScanner,
                     )
                 }
             }
@@ -286,6 +291,7 @@ private fun DownloadsShellMaterial(
     pagerState: androidx.compose.foundation.pager.PagerState,
     swipeEnabled: Boolean,
     onOpenDownloadsFolder: () -> Unit,
+    onOpenScanner: () -> Unit,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
@@ -303,6 +309,8 @@ private fun DownloadsShellMaterial(
                 onBack = { onTabChange(0) },
                 onOpenInBrowser = onOpenInBrowser,
                 onSelectionModeChange = onFilesSelectingChange,
+                controller = fileController,
+                onOpenScanner = onOpenScanner,
             )
         }
 
