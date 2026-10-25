@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -62,22 +63,29 @@ class FileOpService : Service() {
                 false
             }
 
+            val text = when (action) {
+                ACTION_COPY -> "复制完成"
+                ACTION_MOVE -> "移动完成"
+                ACTION_DELETE -> "删除完成"
+                ACTION_COMPRESS -> "压缩完成"
+                else -> "解压完成"
+            }
             if (ok) {
-                val text = when (action) {
-                    ACTION_COPY -> "复制完成"
-                    ACTION_MOVE -> "移动完成"
-                    ACTION_DELETE -> "删除完成"
-                    ACTION_COMPRESS -> "压缩完成"
-                    else -> "解压完成"
-                }
                 FileOpState.message.value = text
-                notificationManager()?.notify(
-                    NOTIFICATION_ID,
-                    buildNotification(text, 100, 100, false)
-                )
             }
             FileOpState.running.value = false
-            stopForeground(STOP_FOREGROUND_DETACH)
+
+            // 先移除前台通知，再发一条「完成」通知，短暂展示后自动消失
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            notificationManager()?.notify(
+                NOTIFICATION_ID,
+                buildNotification(
+                    if (ok) text else FileOpState.message.value ?: "操作失败",
+                    100, 100, indeterminate = false, ongoing = false,
+                )
+            )
+            delay(2_500)
+            notificationManager()?.cancel(NOTIFICATION_ID)
             stopSelf()
         }
         return START_NOT_STICKY
@@ -335,7 +343,13 @@ class FileOpService : Service() {
         }
     }
 
-    private fun buildNotification(text: String, progress: Int, max: Int, indeterminate: Boolean): Notification {
+    private fun buildNotification(
+        text: String,
+        progress: Int,
+        max: Int,
+        indeterminate: Boolean,
+        ongoing: Boolean = indeterminate,
+    ): Notification {
         val intent = Intent(this, com.torachen.mote.ui.MainActivity::class.java)
         val pending = PendingIntent.getActivity(
             this, 0, intent,
@@ -345,7 +359,9 @@ class FileOpService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("文件管理")
             .setContentText(text)
-            .setOngoing(indeterminate)
+            .setOngoing(ongoing)
+            .setAutoCancel(!ongoing)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setProgress(if (indeterminate) 0 else max, progress, indeterminate)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_LOW)
