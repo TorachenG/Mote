@@ -794,13 +794,6 @@ private fun FileManagerMiuix(
     )
     val backCardMaterialModifier = if (progressiveTitleBlur) {
         buildBackCardMaterialModifier(materialStyle, blurSupported, backdrop, themeIsDark)
-            // 返回按钮卡片再压一层表面色，降低透明度、提高可读性
-            .then(
-                Modifier.background(
-                    color = surface.copy(alpha = 0.45f),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                )
-            )
     } else {
         Modifier
     }
