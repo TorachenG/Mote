@@ -167,7 +167,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp),
+                        .padding(16.dp),
                 ) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -234,7 +234,7 @@ internal fun FileManagerHomeHeaderMiuix(
                         Spacer(Modifier.height(6.dp))
                         Text(
                             text = entry.category.label,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             color = onSurface,
                             maxLines = 1,
                             softWrap = false,
@@ -288,7 +288,7 @@ private fun FmToolCellMiuix(
         Spacer(Modifier.height(6.dp))
         Text(
             text = tool.label,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             color = onSurface,
             maxLines = 1,
             softWrap = false,
@@ -370,7 +370,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp),
+                        .padding(16.dp),
                 ) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -437,7 +437,7 @@ internal fun FileManagerHomeHeaderMaterial(
                         Spacer(Modifier.height(6.dp))
                         M3Text(
                             text = entry.category.label,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             color = scheme.onSurface,
                             maxLines = 1,
                             softWrap = false,
