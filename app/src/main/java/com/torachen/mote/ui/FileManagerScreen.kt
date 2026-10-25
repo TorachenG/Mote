@@ -908,24 +908,10 @@ private fun FileManagerMiuix(
             if (controller.category != null) {
                 CategoryListMiuix(controller, topPadding)
             } else {
-            AnimatedContent(
+            androidx.compose.animation.Crossfade(
                 targetState = controller.currentDir,
                 modifier = Modifier.fillMaxSize(),
-                transitionSpec = {
-                    val forward = targetState.absolutePath.length > initialState.absolutePath.length
-                    val slide = tween<androidx.compose.ui.unit.IntOffset>(
-                        durationMillis = 320,
-                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                    )
-                    val fade = tween<Float>(durationMillis = 200)
-                    if (forward) {
-                        (slideInHorizontally(slide) { it } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { -it / 3 } + fadeOut(fade))
-                    } else {
-                        (slideInHorizontally(slide) { -it / 3 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { it } + fadeOut(fade))
-                    }
-                },
+                animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
                 label = "dir",
             ) { dir ->
                 val listState = remember(dir.absolutePath) { controller.listStateFor(dir.absolutePath) }
@@ -1711,24 +1697,10 @@ private fun FileManagerMaterial(
             if (controller.category != null) {
                 CategoryListMaterial(controller, topPadding)
             } else {
-            AnimatedContent(
+            androidx.compose.animation.Crossfade(
                 targetState = controller.currentDir,
                 modifier = Modifier.weight(1f),
-                transitionSpec = {
-                    val forward = targetState.absolutePath.length > initialState.absolutePath.length
-                    val slide = tween<androidx.compose.ui.unit.IntOffset>(
-                        durationMillis = 320,
-                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                    )
-                    val fade = tween<Float>(durationMillis = 200)
-                    if (forward) {
-                        (slideInHorizontally(slide) { it } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { -it / 3 } + fadeOut(fade))
-                    } else {
-                        (slideInHorizontally(slide) { -it / 3 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { it } + fadeOut(fade))
-                    }
-                },
+                animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
                 label = "m3dir",
             ) { dir ->
                 val materialFileListState = rememberLazyListState()
