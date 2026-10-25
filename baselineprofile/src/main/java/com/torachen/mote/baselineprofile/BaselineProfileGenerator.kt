@@ -179,6 +179,68 @@ class BaselineProfileGenerator {
      * 只采冷启动路径，作为 startup profile（决定 primary dex 布局）。
      * 产出 xxx-startup-prof.txt。
      */
+    /** 只采集「下载管理 + 文件管理」路径 */
+    @Test
+    fun downloadsProfile() {
+        rule.collect(packageName = targetAppId, includeInStartupProfile = false) {
+            coldStart(settleMs = 2_000L)
+            step("downloads") {
+                openToolSheetByCoordinate(device)
+                tap(device, 601, 1572)          // 下载管理
+                device.waitForIdle(1_000L)
+                sleep(800)
+                swipeUpDown(device, 2)
+
+                tap(device, 717, 2503)          // 文件 页签
+                device.waitForIdle(1_000L)
+                sleep(800)
+                swipeUpDown(device, 3)
+
+                // 进入首个文件夹再返回
+                tap(device, 400, 800)
+                device.waitForIdle(1_000L)
+                sleep(700)
+                swipeUpDown(device, 2)
+                device.pressBack()
+                sleep(800)
+                device.pressBack()
+                sleep(800)
+            }
+        }
+    }
+
+    /** 只采集「扫一扫」路径（相机预览 + 权限弹窗） */
+    @Test
+    fun scannerProfile() {
+        rule.collect(packageName = targetAppId, includeInStartupProfile = false) {
+            coldStart(settleMs = 2_000L)
+            step("scanner") {
+                tap(device, 879, 1337)          // 主页搜索栏右侧扫一扫
+                device.waitForIdle(1_000L)
+                dismissFirstRunDialogs(device)
+                sleep(1_500)
+                dismissFirstRunDialogs(device)
+                sleep(1_500)
+                device.pressBack()
+                sleep(800)
+            }
+        }
+    }
+
+    /** 按坐标打开工具弹窗 */
+    private fun openToolSheetByCoordinate(device: UiDevice) {
+        tap(device, 1076, 2567)
+        device.waitForIdle(1_000L)
+        sleep(700)
+        dismissFirstRunDialogs(device)
+    }
+
+    /** 按坐标点击并等待 */
+    private fun tap(device: UiDevice, x: Int, y: Int) {
+        device.click(x, y)
+        device.waitForIdle(500L)
+    }
+
     @Test
     fun startupProfile() {
         rule.collect(
