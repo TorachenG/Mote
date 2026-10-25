@@ -180,8 +180,7 @@ internal class FileManagerController(
     var pickDir by mutableStateOf<java.io.File?>(null)
     var needsAllFiles by mutableStateOf(false)
 
-    // 主页 / 分类浏览
-    var home by mutableStateOf(true)
+    // 分类浏览
     var category by mutableStateOf<FileCategory?>(null)
     var categoryFiles by mutableStateOf<List<FsEntry>>(emptyList())
     var categoryLoading by mutableStateOf(false)
@@ -191,20 +190,7 @@ internal class FileManagerController(
 
     val selecting: Boolean get() = selected.isNotEmpty()
 
-    fun openList() {
-        home = false
-        category = null
-        selected = emptyList()
-    }
-
-    fun openHome() {
-        home = true
-        category = null
-        selected = emptyList()
-    }
-
     fun openCategory(target: FileCategory) {
-        home = false
         category = target
         categoryLoading = true
         categoryFiles = emptyList()
@@ -219,7 +205,6 @@ internal class FileManagerController(
 
     fun closeCategory() {
         category = null
-        home = true
     }
 
     /** 返回键/返回按钮统一处理：返回 true 表示已消费 */
@@ -234,10 +219,6 @@ internal class FileManagerController(
         }
         if (currentDir != root) {
             up()
-            return true
-        }
-        if (!home) {
-            openHome()
             return true
         }
         return false
@@ -543,7 +524,7 @@ internal fun FileManagerPage(
         controller.reload()
     }
 
-    BackHandler(enabled = controller.selecting || !controller.home) {
+    BackHandler(enabled = controller.selecting || controller.category != null || controller.currentDir != controller.root) {
         controller.onBackPressed()
     }
 
@@ -590,8 +571,7 @@ internal fun FileManagerPage(
     val onTool: (FmTool) -> Unit = { tool ->
         when (tool) {
             FmTool.COMPRESS, FmTool.EXTRACT -> {
-                controller.openList()
-                Toast.makeText(context, "请在列表中选择文件后使用底部操作", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "请在下方列表中选择文件后使用底部操作", Toast.LENGTH_SHORT).show()
             }
             FmTool.SCAN -> onOpenScanner()
             FmTool.TRASH -> Toast.makeText(context, "回收站暂未开放", Toast.LENGTH_SHORT).show()
@@ -792,10 +772,8 @@ private fun FileManagerMiuix(
                 .fillMaxSize()
                 .then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier),
         ) {
-            if (controller.home) {
-                FileManagerHomeMiuix(controller, contentTopPadding = topPadding, onOpenList = { controller.openList() }, onTool = onTool)
-            } else if (controller.category != null) {
-                CategoryListMiuix(controller, topPadding, onTool)
+            if (controller.category != null) {
+                CategoryListMiuix(controller, topPadding)
             } else {
             AnimatedContent(
                 targetState = controller.currentDir,
@@ -832,6 +810,11 @@ private fun FileManagerMiuix(
                     contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
                     overscrollEffect = null,
                 ) {
+                    if (controller.currentDir == controller.root) {
+                        item(key = "home_header") {
+                            FileManagerHomeHeaderMiuix(controller, onTool)
+                        }
+                    }
                     if (controller.needsAllFiles) {
                         item {
                             Card(
@@ -1012,9 +995,8 @@ private fun MiuixBreadcrumb(
             highlightIndex = items.lastIndex,
             onItemClick = { index ->
                 if (category != null) {
-                    controller.openList()
+                    controller.closeCategory()
                 } else {
-                    controller.openList()
                     segments.getOrNull(index)?.let {
                         if (controller.pendingOp != null) controller.pickDir = it else controller.enter(it)
                     }
@@ -1030,7 +1012,6 @@ private fun MiuixBreadcrumb(
 private fun CategoryListMiuix(
     controller: FileManagerController,
     topPadding: androidx.compose.ui.unit.Dp,
-    onTool: (FmTool) -> Unit,
 ) {
     val listState = rememberLazyListState()
     LazyColumn(
@@ -1060,7 +1041,6 @@ private fun CategoryListMiuix(
 private fun CategoryListMaterial(
     controller: FileManagerController,
     topPadding: androidx.compose.ui.unit.Dp,
-    onTool: (FmTool) -> Unit,
 ) {
     val listState = rememberLazyListState()
     LazyColumn(
@@ -1326,10 +1306,8 @@ private fun FileManagerMaterial(
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
             MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
 
-            if (controller.home) {
-                FileManagerHomeMaterial(controller, contentTopPadding = topPadding, onOpenList = { controller.openList() }, onTool = onTool)
-            } else if (controller.category != null) {
-                CategoryListMaterial(controller, topPadding, onTool)
+            if (controller.category != null) {
+                CategoryListMaterial(controller, topPadding)
             } else {
             AnimatedContent(
                 targetState = controller.currentDir,
@@ -1364,6 +1342,11 @@ private fun FileManagerMaterial(
                     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
                     contentPadding = PaddingValues(bottom = 96.dp),
                 ) {
+                    if (controller.currentDir == controller.root) {
+                        item(key = "home_header") {
+                            FileManagerHomeHeaderMaterial(controller, onTool)
+                        }
+                    }
                     if (controller.needsAllFiles) {
                         item {
                             Column(
