@@ -3601,7 +3601,7 @@ private fun RenderPageContent(
                     FileManagerDirRequest.title = title
                     FileManagerDirRequest.token = System.nanoTime()
                     // 若上一次的目录页还在栈顶（退出动画未完成），先正常出栈再入栈，避免被路由去重拦截
-                    if (pageStack.lastOrNull()?.route == "file_manager_dir") {
+                    if (PageNavigationStateHolder.pageStack.lastOrNull()?.route == "file_manager_dir") {
                         onPop()
                     }
                     onPush("file_manager_dir")
