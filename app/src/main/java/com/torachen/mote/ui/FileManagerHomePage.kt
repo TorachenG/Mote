@@ -238,7 +238,7 @@ internal fun FileManagerHomePage(
                                         )
                                     }
                                 },
-                                onClick = { controller.enterList(controller.root) },
+                                onClick = { controller.onOpenDir(controller.root.absolutePath, null) },
                             )
                         }
 
