@@ -34,12 +34,19 @@ import kotlin.math.abs
  * 顶部下拉超过 74dp 触发刷新，指示器为 18dp 的 InfiniteProgressIndicator，
  * 内容按拉动距离的一半位移。
  */
+/** 供页面把刷新状态渲染到列表内部（例如目录轴与文件之间） */
+internal class PullRefreshUiState {
+    var offset by mutableFloatStateOf(0f)
+    var refreshing by mutableStateOf(false)
+}
+
 @Composable
 internal fun PullRefreshContainer(
     canPull: () -> Boolean,
     onRefresh: suspend () -> Unit,
     modifier: Modifier = Modifier,
     indicatorTopPadding: androidx.compose.ui.unit.Dp = 0.dp,
+    uiState: PullRefreshUiState? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
@@ -57,6 +64,8 @@ internal fun PullRefreshContainer(
     )
 
     val indicatorProgress = if (isRefreshing) 1f else (animatedOffset / triggerPx).coerceIn(0f, 1f)
+    uiState?.offset = animatedOffset
+    uiState?.refreshing = isRefreshing
 
     Box(
         modifier = modifier
@@ -126,7 +135,7 @@ internal fun PullRefreshContainer(
             content()
         }
 
-        if (pullDistance > 0f || isRefreshing) {
+        if (uiState == null && (pullDistance > 0f || isRefreshing)) {
             val indicatorScale = 1f + indicatorProgress * 0.6f
             val indicatorColor = if (indicatorProgress >= 1f) {
                 MiuixTheme.colorScheme.primary

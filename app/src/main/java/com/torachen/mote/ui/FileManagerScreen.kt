@@ -48,6 +48,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.graphicsLayer
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Archive
@@ -693,6 +695,7 @@ private fun FileManagerMiuix(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val listState = rememberLazyListState()
+    val pullUi = remember { PullRefreshUiState() }
     val surface = MiuixTheme.colorScheme.surface
 
     val blurSupported = isRuntimeShaderSupported()
@@ -801,6 +804,7 @@ private fun FileManagerMiuix(
                     },
                     onRefresh = { controller.reload() },
                     indicatorTopPadding = 52.dp,
+                    uiState = pullUi,
                 ) {
                 LazyColumn(
                     state = listState,
@@ -819,6 +823,7 @@ private fun FileManagerMiuix(
                             MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
                         }
                     }
+                    item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
                     if (controller.needsAllFiles) {
                         item {
                             Card(
@@ -942,7 +947,17 @@ private fun FileManagerMiuix(
                     }
                 },
             )
-            if (controller.currentDir != controller.root) {
+            AnimatedVisibility(
+                visible = controller.currentDir != controller.root,
+                enter = slideInVertically(
+                    animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                    initialOffsetY = { -it / 2 },
+                ) + fadeIn(tween(220)),
+                exit = slideOutVertically(
+                    animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                    targetOffsetY = { -it / 2 },
+                ) + fadeOut(tween(160)),
+            ) {
                 MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
             }
             }
@@ -1011,6 +1026,38 @@ private fun MiuixBreadcrumb(
             insideMargin = PaddingValues(start = startPadding, end = 16.dp),
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+@Composable
+private fun PullIndicatorItem(state: PullRefreshUiState) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dp = with(density) { state.offset.toDp() }
+    val triggerPx = with(density) { 74.dp.toPx() }
+    val progress = if (state.refreshing) 1f else (state.offset / triggerPx).coerceIn(0f, 1f)
+    if (dp > 0.dp || state.refreshing) {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(dp.coerceAtLeast(if (state.refreshing) 36.dp else 0.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .graphicsLayer {
+                        val s = 1f + progress * 0.6f
+                        scaleX = s
+                        scaleY = s
+                    },
+            ) {
+                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                    color = if (progress >= 1f) MiuixTheme.colorScheme.primary else Color(0xFF666666),
+                    size = 22.dp,
+                    strokeWidth = 2.5.dp,
+                )
+            }
+        }
+    } else {
+        Spacer(Modifier.height(0.dp))
     }
 }
 
@@ -1311,7 +1358,17 @@ private fun FileManagerMaterial(
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            if (controller.currentDir != controller.root) {
+            AnimatedVisibility(
+                visible = controller.currentDir != controller.root,
+                enter = slideInVertically(
+                    animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                    initialOffsetY = { -it / 2 },
+                ) + fadeIn(tween(220)),
+                exit = slideOutVertically(
+                    animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                    targetOffsetY = { -it / 2 },
+                ) + fadeOut(tween(160)),
+            ) {
                 MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
             }
 
@@ -1339,6 +1396,7 @@ private fun FileManagerMaterial(
                 label = "m3dir",
             ) { dir ->
                 val materialFileListState = rememberLazyListState()
+    val materialPullUi = remember { PullRefreshUiState() }
                 PullRefreshContainer(
                     canPull = {
                         materialFileListState.firstVisibleItemIndex == 0 &&
@@ -1346,6 +1404,7 @@ private fun FileManagerMaterial(
                     },
                     onRefresh = { controller.reload() },
                     indicatorTopPadding = 52.dp,
+                    uiState = materialPullUi,
                 ) {
                 LazyColumn(
                     state = materialFileListState,
@@ -1360,6 +1419,7 @@ private fun FileManagerMaterial(
                             MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
                         }
                     }
+                    item(key = "pull_indicator") { PullIndicatorItem(materialPullUi) }
                     if (controller.needsAllFiles) {
                         item {
                             Column(

@@ -74,7 +74,7 @@ internal val fmTools = listOf(
     FmToolEntry(FmTool.COMPRESS, "文件压缩", Icons.Rounded.FolderZip, Color(0xFFFFFFFF), usePrimary = true),
     FmToolEntry(FmTool.EXTRACT, "文件解压", Icons.Rounded.FolderOpen, Color(0xFFFFFFFF), usePrimary = true),
     FmToolEntry(FmTool.CONVERT, "格式转换", Icons.Rounded.SwapHoriz, Color(0xFF6B7A99)),
-    FmToolEntry(FmTool.OCR, "提取文字", Icons.Rounded.TextFields, Color(0xFF7E6BD6)),
+    FmToolEntry(FmTool.OCR, "提取文字", Icons.Rounded.TextFields, Color(0xFF7767F9)),
     FmToolEntry(
         FmTool.QQ, "QQ文件", Icons.Rounded.Chat, Color(0xFF12B7F5),
         remoteIcon = "https://img.icons8.com/color/96/qq.png",
@@ -82,7 +82,7 @@ internal val fmTools = listOf(
         whiteMask = true,
     ),
     FmToolEntry(
-        FmTool.WECHAT, "微信文件", Icons.Rounded.Forum, Color(0xFF07C160),
+        FmTool.WECHAT, "微信文件", Icons.Rounded.Forum, Color(0xFF1DCD3A),
         remoteIcon = "https://img.icons8.com/color/96/wechat.png",
     ),
     FmToolEntry(FmTool.SCAN, "拍照扫描", Icons.Rounded.QrCodeScanner, Color(0xFF16C060)),
@@ -93,15 +93,16 @@ internal data class FmCategoryEntry(
     val category: FileCategory,
     val icon: ImageVector,
     val color: Color,
+    val usePrimary: Boolean = false,
 )
 
 internal val fmCategories = listOf(
     FmCategoryEntry(FileCategory.DOCUMENT, Icons.Rounded.Description, Color(0xFFFFD966)),
-    FmCategoryEntry(FileCategory.IMAGE, Icons.Rounded.Image, Color(0xFF8B5CF6)),
-    FmCategoryEntry(FileCategory.VIDEO, Icons.Rounded.Movie, Color(0xFF7C4DFF)),
+    FmCategoryEntry(FileCategory.IMAGE, Icons.Rounded.Image, Color(0xFF7767F9)),
+    FmCategoryEntry(FileCategory.VIDEO, Icons.Rounded.Movie, Color(0xFF7767F9)),
     FmCategoryEntry(FileCategory.AUDIO, Icons.Rounded.MusicNote, Color(0xFFE8452C)),
-    FmCategoryEntry(FileCategory.ARCHIVE, Icons.Rounded.FolderZip, Color(0xFF3B6EF6)),
-    FmCategoryEntry(FileCategory.APK, Icons.Rounded.Android, Color(0xFF16C060)),
+    FmCategoryEntry(FileCategory.ARCHIVE, Icons.Rounded.FolderZip, Color(0xFFFFFFFF), usePrimary = true),
+    FmCategoryEntry(FileCategory.APK, Icons.Rounded.Android, Color(0xFF1DCD3A)),
 )
 
 internal fun fmStorageUsage(): Pair<Long, Long> {
@@ -208,7 +209,10 @@ internal fun FileManagerHomeHeaderMiuix(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(entry.color, RoundedCornerShape(10.dp)),
+                                .background(
+                                    if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
+                                    RoundedCornerShape(10.dp),
+                                ),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
@@ -303,16 +307,26 @@ private fun FmStorageCardMiuix(
         Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             Spacer(Modifier.weight(1f))
             Text(text = "已用", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(text = fmFormatGb(used), fontSize = 20.sp, color = MiuixTheme.colorScheme.onSurface)
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = " GB/${fmFormatGb(total)}GB",
-                    fontSize = 9.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier.padding(bottom = 2.dp),
+                    text = fmFormatGb(used),
+                    fontSize = 24.sp,
+                    color = MiuixTheme.colorScheme.onSurface,
                 )
+                Column(modifier = Modifier.padding(start = 2.dp)) {
+                    Text(
+                        text = "GB",
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    Text(
+                        text = "/${fmFormatGb(total)}GB",
+                        fontSize = 9.sp,
+                        lineHeight = 11.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
             }
         }
     }
@@ -384,7 +398,10 @@ internal fun FileManagerHomeHeaderMaterial(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(entry.color, RoundedCornerShape(10.dp)),
+                                .background(
+                                    if (entry.usePrimary) scheme.primary else entry.color,
+                                    RoundedCornerShape(10.dp),
+                                ),
                             contentAlignment = Alignment.Center,
                         ) {
                             M3Icon(
@@ -479,16 +496,12 @@ private fun FmStorageCardMaterial(
         Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             Spacer(Modifier.weight(1f))
             M3Text(text = "已用", fontSize = 12.sp, color = scheme.onSurfaceVariant)
-            Row(verticalAlignment = Alignment.Bottom) {
-                M3Text(text = fmFormatGb(used), fontSize = 20.sp, color = scheme.onSurface)
-                M3Text(
-                    text = " GB/${fmFormatGb(total)}GB",
-                    fontSize = 9.sp,
-                    color = scheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier.padding(bottom = 2.dp),
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                M3Text(text = fmFormatGb(used), fontSize = 24.sp, color = scheme.onSurface)
+                Column(modifier = Modifier.padding(start = 2.dp)) {
+                    M3Text(text = "GB", fontSize = 9.sp, lineHeight = 11.sp, color = scheme.onSurfaceVariant)
+                    M3Text(text = "/${fmFormatGb(total)}GB", fontSize = 9.sp, lineHeight = 11.sp, color = scheme.onSurfaceVariant)
+                }
             }
         }
     }
