@@ -881,6 +881,7 @@ private fun FileManagerMiuix(
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .dragSelectModifier(controller, listState, rememberCoroutineScope())
+                        .graphicsLayer { alpha = if (controller.reloading) 0f else 1f }
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
@@ -1664,7 +1665,10 @@ private fun FileManagerMaterial(
                 ) {
                 LazyColumn(
                     state = materialFileListState,
-                    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .graphicsLayer { alpha = if (controller.reloading) 0f else 1f },
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
                     if (controller.currentDir == controller.root) {
