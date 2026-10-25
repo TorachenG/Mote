@@ -209,6 +209,8 @@ internal class FileManagerController(
     var safPath by mutableStateOf("")
     var safEntries by mutableStateOf<List<FmSafStore.Entry>>(emptyList())
     var safFailed by mutableStateOf(false)
+    /** 由页面注入：请求 SAF 目录授权 */
+    var onRequestSafGrant: (() -> Unit)? = null
 
     /** 是否显示主页（与目录列表互斥） */
     var showHome by mutableStateOf(true)
@@ -693,7 +695,35 @@ internal fun FileManagerPage(
     onSubPageChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
-    val controller = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
+    val realController = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
+    val controller = realController
+    val safLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            FmSafStore.treeUri = uri
+            controller.loadSaf()
+        }
+    }
+    androidx.compose.runtime.SideEffect {
+        controller.onRequestSafGrant = {
+            val docId = "primary:" + controller.safPath
+            runCatching {
+                safLauncher.launch(
+                    android.provider.DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents",
+                        docId,
+                    )
+                )
+            }
+        }
+    }
 
     LaunchedEffect(controller.currentDir) { controller.reload() }
     LaunchedEffect(Unit) { controller.purgeRecycleBin() }
@@ -1066,10 +1096,17 @@ private fun FileManagerMiuix(
                                         Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
                                         Spacer(Modifier.height(4.dp))
                                         Text(
-                                            "系统未授予该目录的访问权限，请先授予「所有文件访问权限」，或使用系统文件管理器。",
+                                            "系统未授予该目录的访问权限。可先授予「所有文件访问权限」，或点击下方按钮选择该目录授权。",
                                             fontSize = 12.sp,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
+                                        Spacer(Modifier.height(10.dp))
+                                        top.yukonga.miuix.kmp.basic.Button(
+                                            onClick = { controller.onRequestSafGrant?.invoke() },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Text("选择目录授权")
+                                        }
                                     }
                                 }
                             }
@@ -1086,7 +1123,7 @@ private fun FileManagerMiuix(
                     if (controller.currentDir != controller.root) {
                         item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
                     }
-                    if (controller.dirUnreadable) {
+                    if (controller.dirUnreadable && !controller.safMode) {
                         item(key = "unreadable_hint") {
                             Card(
                                 modifier = Modifier
@@ -1258,7 +1295,7 @@ private fun FileManagerMiuix(
                     }
                 },
             )
-            val subPage = controller.currentDir != controller.root
+            val subPage = controller.currentDir != controller.root && !controller.safMode
             val breadcrumbShift by animateDpAsState(
                 targetValue = if (subPage) 0.dp else headerHeightDp,
                 animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
@@ -1931,7 +1968,7 @@ private fun FileManagerMaterial(
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            val subPageM = controller.currentDir != controller.root
+            val subPageM = controller.currentDir != controller.root && !controller.safMode
             val breadcrumbShiftM by animateDpAsState(
                 targetValue = if (subPageM) 0.dp else headerHeightDp,
                 animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
@@ -2012,10 +2049,17 @@ private fun FileManagerMaterial(
                                     M3Text("无法读取该目录", fontSize = 15.sp, color = M3MaterialTheme.colorScheme.onSurface)
                                     Spacer(Modifier.height(4.dp))
                                     M3Text(
-                                        "系统未授予该目录的访问权限，请先授予「所有文件访问权限」。",
+                                        "系统未授予该目录的访问权限，可点击下方按钮选择该目录授权。",
                                         fontSize = 12.sp,
                                         color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    Spacer(Modifier.height(10.dp))
+                                    androidx.compose.material3.Button(
+                                        onClick = { controller.onRequestSafGrant?.invoke() },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        M3Text("选择目录授权")
+                                    }
                                 }
                             }
                         }

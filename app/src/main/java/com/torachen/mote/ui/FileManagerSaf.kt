@@ -21,6 +21,9 @@ internal object FmSafStore {
 
     private const val AUTHORITY = "com.android.externalstorage.documents"
 
+    /** 用户通过 ACTION_OPEN_DOCUMENT_TREE 授权后的树 URI */
+    var treeUri: Uri? = null
+
     private fun parentDocId(relativePath: String): String {
         val clean = relativePath.trim('/')
         return if (clean.isEmpty()) "primary:" else "primary:$clean"
@@ -29,10 +32,10 @@ internal object FmSafStore {
     /** 列举目录内容；无权限或失败返回 null */
     fun list(context: Context, relativePath: String): List<Entry>? {
         return try {
-            val childrenUri = DocumentsContract.buildChildDocumentsUri(
-                AUTHORITY,
-                parentDocId(relativePath),
-            )
+            val docId = parentDocId(relativePath)
+            val childrenUri = treeUri
+                ?.let { DocumentsContract.buildChildDocumentsUriUsingTree(it, docId) }
+                ?: DocumentsContract.buildChildDocumentsUri(AUTHORITY, docId)
             val projection = arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                 DocumentsContract.Document.COLUMN_DISPLAY_NAME,
