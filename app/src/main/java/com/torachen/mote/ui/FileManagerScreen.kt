@@ -10,6 +10,8 @@ import android.os.Environment
 import android.provider.Settings
 import android.widget.Toast
 import android.webkit.MimeTypeMap
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -1358,6 +1360,76 @@ private fun Modifier.dragSelectModifier(
         autoScroll = 0f
         autoJob?.cancel()
     }
+}
+
+/** 独立的文件目录窗口：与主页分离，但仍在同一文件内 */
+class FileManagerDirActivity : androidx.activity.ComponentActivity() {
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        val initialPath = intent.getStringExtra(EXTRA_PATH)
+        val initialCategory = intent.getStringExtra(EXTRA_CATEGORY)
+        setContent {
+            com.torachen.mote.ui.MoteThemeWrapper {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val controller = androidx.compose.runtime.remember {
+                    FileManagerController(
+                        context = context,
+                        onOpenInBrowser = { url ->
+                            val i = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(url),
+                            ).apply {
+                                setClass(context, MainActivity::class.java)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(i)
+                        },
+                        onBack = { finish() },
+                    )
+                }
+                androidx.compose.runtime.LaunchedEffect(initialPath, initialCategory) {
+                    controller.showHome = false
+                    initialPath?.let { controller.currentDir = java.io.File(it) }
+                    initialCategory?.let { name ->
+                        runCatching { FileCategory.valueOf(name) }.getOrNull()?.let { controller.openCategory(it) }
+                    }
+                }
+                FileManagerPage(
+                    onBack = { finish() },
+                    onOpenInBrowser = { url ->
+                        val i = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(url),
+                        ).apply {
+                            setClass(context, MainActivity::class.java)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(i)
+                    },
+                    controller = controller,
+                )
+            }
+        }
+    }
+
+    companion object {
+        const val EXTRA_PATH = "path"
+        const val EXTRA_CATEGORY = "category"
+    }
+}
+
+internal fun startDirActivity(
+    context: android.content.Context,
+    path: String?,
+    category: String?,
+) {
+    val intent = android.content.Intent(context, FileManagerDirActivity::class.java).apply {
+        putExtra(FileManagerDirActivity.EXTRA_PATH, path)
+        putExtra(FileManagerDirActivity.EXTRA_CATEGORY, category)
+        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(intent)
 }
 
 @Composable

@@ -243,7 +243,15 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-    </application>
+    
+        <activity
+            android:name=".ui.FileManagerDirActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Mote"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|fontScale|density"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
+</application>
 
 
     <queries>

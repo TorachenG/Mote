@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -165,7 +166,7 @@ internal fun FileManagerHomePage(
                                                 when (tool.tool) {
                                                     FmTool.SCAN -> onOpenScanner()
                                                     FmTool.TRASH -> controller.openRecycleBin()
-                                                    else -> controller.enterList(controller.root)
+                                                    else -> startDirActivity(controller.context, controller.root.absolutePath, null)
                                                 }
                                             }
                                         }
@@ -273,7 +274,13 @@ internal fun FileManagerHomePage(
                                                         )
                                                     }
                                                 },
-                                                onClick = { controller.openCategory(entry.category) },
+                                                onClick = {
+                                                    startDirActivity(
+                                                        controller.context,
+                                                        controller.root.absolutePath,
+                                                        entry.category.name,
+                                                    )
+                                                },
                                             )
                                         }
                                     }
@@ -295,22 +302,39 @@ internal fun FileManagerHomePage(
                                                 android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
                                             ),
                                             startAction = {
+                                                val logo = rememberRemoteIcon(app.iconUrl)
                                                 Box(
                                                     modifier = Modifier
                                                         .size(34.dp)
-                                                        .background(app.color, RoundedCornerShape(9.dp)),
+                                                        .clip(RoundedCornerShape(9.dp)),
                                                     contentAlignment = Alignment.Center,
                                                 ) {
-                                                    Text(
-                                                        text = app.name.take(1),
-                                                        fontSize = 15.sp,
-                                                        color = Color.White,
-                                                    )
+                                                    if (logo != null) {
+                                                        Image(
+                                                            bitmap = logo,
+                                                            contentDescription = app.name,
+                                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                                            modifier = Modifier.fillMaxSize(),
+                                                        )
+                                                    } else {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxSize()
+                                                                .background(app.color),
+                                                            contentAlignment = Alignment.Center,
+                                                        ) {
+                                                            Text(
+                                                                text = app.name.take(1),
+                                                                fontSize = 15.sp,
+                                                                color = Color.White,
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             },
                                             onClick = {
                                                 if (exists) {
-                                                    controller.enterList(java.io.File(app.dirPath))
+                                                    startDirActivity(controller.context, app.dirPath, null)
                                                 } else {
                                                     android.widget.Toast.makeText(
                                                         controller.context,
@@ -329,31 +353,27 @@ internal fun FileManagerHomePage(
             }
         }
 
-        // 顶部模糊 + 标题栏（与下载管理页一致）
-        if (blurSupported && backdrop != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(contentTopPadding)
-                    .align(Alignment.TopCenter)
-                    .progressiveTextureBlur(
-                        backdrop = backdrop,
-                        shape = RectangleShape,
-                        blurRadius = 25f,
-                        gradient = ProgressiveBlur(
-                            angle = 90f,
-                            startFraction = 0.6f,
-                            endFraction = 1f,
-                        ),
-                        colors = BlurDefaults.blurColors(
-                            blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.8f))),
-                        ),
-                    ),
-            )
-        }
-
+        // 顶部模糊 + 标题栏（与下载管理页完全一致）
         Box(
-            modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding()
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .then(
+                    if (blurSupported && backdrop != null) {
+                        Modifier.progressiveTextureBlur(
+                            backdrop = backdrop,
+                            shape = RectangleShape,
+                            blurRadius = 25f,
+                            gradient = ProgressiveBlur.Top,
+                            colors = BlurDefaults.blurColors(
+                                blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.8f))),
+                            ),
+                        )
+                    } else {
+                        Modifier.background(surface)
+                    }
+                )
+                .statusBarsPadding()
                 .onGloballyPositioned { coords ->
                     val bottom = coords.boundsInWindow().bottom.toInt()
                     if (bottom != barBottomPx) barBottomPx = bottom
@@ -441,7 +461,12 @@ internal fun fmStorageHint(fraction: Float): String = when {
     else -> "当前存储空间十分充裕"
 }
 
-internal data class FmDetectedApp(val name: String, val dirPath: String, val color: Color)
+internal data class FmDetectedApp(
+    val name: String,
+    val dirPath: String,
+    val color: Color,
+    val iconUrl: String,
+)
 
 internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedApp> {
     val pm = context.packageManager
@@ -451,12 +476,14 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
         val name: String,
         val pkg: String,
         val color: Color,
+        val iconUrl: String,
         val paths: List<String>,
     )
 
     val defs = listOf(
         Def(
             "QQ", "com.tencent.mobileqq", Color(0xFF12B7F5),
+            "https://wiki.connect.qq.com/wp-content/uploads/2013/10/03_qq_symbol-1-768x921.png",
             listOf(
                 "Android/data/com.tencent.mobileqq/tencent/QQfile_recv",
                 "tencent/QQfile_recv",
@@ -464,6 +491,7 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
         ),
         Def(
             "微信", "com.tencent.mm", Color(0xFF07C160),
+            "https://file.market.xiaomi.com/thumbnail/PNG/l114/AppStore/069c660eaecea4fa8ba4eb72a384cff1c813c2602",
             listOf(
                 "Android/data/com.tencent.mm/MicroMsg/Download",
                 "tencent/MicroMsg/Download",
@@ -471,6 +499,7 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
         ),
         Def(
             "X", "com.twitter.android", Color(0xFF1A1A1A),
+            "https://img.magnific.com/premium-vector/new-twitter-x-logo-vector-twitter-x-sign-vector_952796-6.jpg",
             listOf(
                 "Android/data/com.twitter.android/files",
                 "Pictures/Twitter",
@@ -478,6 +507,7 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
         ),
         Def(
             "哔哩哔哩", "tv.danmaku.bili", Color(0xFFFB7299),
+            "https://www.tapafun.com/wp-content/uploads/2024/11/bilibili.png",
             listOf(
                 "Android/data/tv.danmaku.bili/download",
                 "Android/data/tv.danmaku.bili/Download",
@@ -493,7 +523,7 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
             .firstOrNull { it.exists() }
             ?: java.io.File(root, def.paths.first())
         if (installed || resolved.exists()) {
-            out.add(FmDetectedApp(def.name, resolved.absolutePath, def.color))
+            out.add(FmDetectedApp(def.name, resolved.absolutePath, def.color, def.iconUrl))
         }
     }
     return out

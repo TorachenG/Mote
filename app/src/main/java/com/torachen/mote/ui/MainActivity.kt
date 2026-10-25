@@ -2979,7 +2979,7 @@ class MainActivity : ComponentActivity() {
 // ============================================================
 
 @Composable
-private fun MoteThemeWrapper(content: @Composable () -> Unit) {
+internal fun MoteThemeWrapper(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
