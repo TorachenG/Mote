@@ -201,16 +201,15 @@ private fun DownloadsShellMiuix(
                         top.yukonga.miuix.kmp.basic.Icon(
                             imageVector = MiuixIcons.FileDownloads,
                             contentDescription = "下载",
-                            tint = if (tab == 0) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            // 选中态交给底栏的液体指示器着色，不要提前变蓝
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             modifier = Modifier.size(22.dp),
                         )
                         top.yukonga.miuix.kmp.basic.Text(
                             "下载",
                             fontSize = 11.sp,
                             lineHeight = 14.sp,
-                            color = if (tab == 0) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             maxLines = 1,
                             softWrap = false,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
@@ -223,16 +222,14 @@ private fun DownloadsShellMiuix(
                         top.yukonga.miuix.kmp.basic.Icon(
                             imageVector = MiuixIcons.FolderFill,
                             contentDescription = "文件",
-                            tint = if (tab == 1) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             modifier = Modifier.size(22.dp),
                         )
                         top.yukonga.miuix.kmp.basic.Text(
                             "文件",
                             fontSize = 11.sp,
                             lineHeight = 14.sp,
-                            color = if (tab == 1) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             maxLines = 1,
                             softWrap = false,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
