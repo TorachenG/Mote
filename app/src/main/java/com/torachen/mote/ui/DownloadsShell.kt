@@ -194,6 +194,17 @@ private fun DownloadsShellMiuix(
                     tabsCount = 2,
                     isBlurEnabled = true,
                 ) {
+                    // 与液体指示器位置同步：指示器靠近多少，图标就蓝多少
+                    val pillPos = com.torachen.mote.ui.floating.LocalFloatingBottomBarPillPosition.current
+                    val idleColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    val activeColor = MiuixTheme.colorScheme.primary
+                    val downloadCoverage =
+                        (1f - kotlin.math.abs(pillPos() - 0f)).coerceIn(0f, 1f)
+                    val fileCoverage =
+                        (1f - kotlin.math.abs(pillPos() - 1f)).coerceIn(0f, 1f)
+                    val downloadTint = androidx.compose.ui.graphics.lerp(idleColor, activeColor, downloadCoverage)
+                    val fileTint = androidx.compose.ui.graphics.lerp(idleColor, activeColor, fileCoverage)
+
                     FloatingBottomBarItem(
                         onClick = { onTabChange(0) },
                         modifier = Modifier.defaultMinSize(minWidth = 76.dp),
@@ -201,15 +212,14 @@ private fun DownloadsShellMiuix(
                         top.yukonga.miuix.kmp.basic.Icon(
                             imageVector = MiuixIcons.FileDownloads,
                             contentDescription = "下载",
-                            // 选中态交给底栏的液体指示器着色，不要提前变蓝
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            tint = downloadTint,
                             modifier = Modifier.size(22.dp),
                         )
                         top.yukonga.miuix.kmp.basic.Text(
                             "下载",
                             fontSize = 11.sp,
                             lineHeight = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            color = downloadTint,
                             maxLines = 1,
                             softWrap = false,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Visible,
@@ -222,14 +232,14 @@ private fun DownloadsShellMiuix(
                         top.yukonga.miuix.kmp.basic.Icon(
                             imageVector = MiuixIcons.FolderFill,
                             contentDescription = "文件",
-                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            tint = fileTint,
                             modifier = Modifier.size(22.dp),
                         )
                         top.yukonga.miuix.kmp.basic.Text(
                             "文件",
                             fontSize = 11.sp,
                             lineHeight = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            color = fileTint,
                             maxLines = 1,
                             softWrap = false,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Visible,

@@ -75,6 +75,9 @@ import kotlin.math.sqrt
 
 val LocalFloatingBottomBarTabScale = staticCompositionLocalOf { { 1f } }
 
+/** 当前液体指示器所在位置（以 tab 为单位，0..tabsCount-1），供子项做同步着色 */
+val LocalFloatingBottomBarPillPosition = staticCompositionLocalOf<() -> Float> { { 0f } }
+
 private val iosIndicatorSpecular: Highlight = Highlight(
     width = 1.dp,
     alpha = 1f,
@@ -284,6 +287,9 @@ fun FloatingBottomBar(
 
     val combinedBackdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop)
 
+    CompositionLocalProvider(
+        LocalFloatingBottomBarPillPosition provides { dampedDragAnimation.value },
+    ) {
     Box(
         modifier = modifier.width(IntrinsicSize.Min),
         contentAlignment = Alignment.CenterStart
@@ -444,5 +450,6 @@ fun FloatingBottomBar(
                 )
             }
         }
+    }
     }
 }

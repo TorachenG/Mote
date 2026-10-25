@@ -77,13 +77,18 @@ internal fun PullRefreshContainer(
                             val dx = ch.position.x - startX
                             val dy = ch.position.y - startY
 
-                            if (!pulled && dy > 5f && abs(dy) > abs(dx) * 1.2f) {
+                            // 只有明确的竖直下拉才接管手势，横向滑动留给 pager
+                            if (!pulled && dy > 14f && dy > abs(dx) * 1.8f) {
                                 if (canPull()) {
                                     pulled = true
                                     isDragging = true
                                 } else {
                                     break
                                 }
+                            }
+                            // 一旦横向位移占优，立刻放弃（交还给横向滑页）
+                            if (!pulled && abs(dx) > dy * 1.2f && abs(dx) > 14f) {
+                                break
                             }
                             if (pulled) {
                                 maxPull = dy.coerceAtLeast(0f)

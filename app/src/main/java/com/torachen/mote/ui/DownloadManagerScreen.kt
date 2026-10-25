@@ -1099,12 +1099,6 @@ private fun DownloadManagerScreenMiuix(
     CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navOwner) {
         Box(modifier = Modifier.fillMaxSize().background(surfaceColor)) {
             Box(modifier = Modifier.fillMaxSize().then(if (blurSupported && backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)) {
-                PullRefreshContainer(
-                    canPull = {
-                        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-                    },
-                    onRefresh = { MoteDownloader.refreshFileStatus(context) },
-                ) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize()
@@ -1224,7 +1218,6 @@ private fun DownloadManagerScreenMiuix(
                             Spacer(Modifier.height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + WindowInsets.captionBar.asPaddingValues().calculateBottomPadding()))
                         }
                     }
-                }
                 }
             }
 
@@ -2081,12 +2074,6 @@ private fun DownloadManagerScreenMaterial(
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 val materialListState = rememberLazyListState()
-                PullRefreshContainer(
-                    canPull = {
-                        materialListState.firstVisibleItemIndex == 0 && materialListState.firstVisibleItemScrollOffset == 0
-                    },
-                    onRefresh = { MoteDownloader.refreshFileStatus(context) },
-                ) {
                 LazyColumn(state = materialListState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     if (tasks.isEmpty()) {
                         item(key = "empty") { M3DownloadEmptyState() }
@@ -2184,7 +2171,6 @@ private fun DownloadManagerScreenMaterial(
                             }
                         }
                     }
-                }
                 }
 
                 val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
