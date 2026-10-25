@@ -346,7 +346,8 @@ internal class FileManagerController(
     fun entriesOf(dir: java.io.File): List<FsEntry> = dirEntries[dir.absolutePath].orEmpty()
 
     suspend fun reload() {
-        reloading = true
+        // 已有缓存时不再遮盖，避免切回目录瞬间出现“闪白/闪内容”
+        reloading = entriesOf(currentDir).isEmpty()
         val dir = currentDir
         val list = withContext(Dispatchers.IO) {
             dir.listFiles()?.map { file ->
@@ -908,10 +909,24 @@ private fun FileManagerMiuix(
             if (controller.category != null) {
                 CategoryListMiuix(controller, topPadding)
             } else {
-            androidx.compose.animation.Crossfade(
+            AnimatedContent(
                 targetState = controller.currentDir,
                 modifier = Modifier.fillMaxSize(),
-                animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                transitionSpec = {
+                    val forward = targetState.absolutePath.length > initialState.absolutePath.length
+                    val slide = tween<androidx.compose.ui.unit.IntOffset>(
+                        durationMillis = 320,
+                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
+                    )
+                    val fade = tween<Float>(durationMillis = 200)
+                    if (forward) {
+                        (slideInHorizontally(slide) { it } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { -it / 3 } + fadeOut(fade))
+                    } else {
+                        (slideInHorizontally(slide) { -it / 3 } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { it } + fadeOut(fade))
+                    }
+                },
                 label = "dir",
             ) { dir ->
                 val listState = remember(dir.absolutePath) { controller.listStateFor(dir.absolutePath) }
@@ -1462,7 +1477,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                     onDragCancel = { paintDy = 0f; controller.endPaint() },
                 )
             }
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .clickable(onClick = onClick)
             .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1697,10 +1712,24 @@ private fun FileManagerMaterial(
             if (controller.category != null) {
                 CategoryListMaterial(controller, topPadding)
             } else {
-            androidx.compose.animation.Crossfade(
+            AnimatedContent(
                 targetState = controller.currentDir,
                 modifier = Modifier.weight(1f),
-                animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                transitionSpec = {
+                    val forward = targetState.absolutePath.length > initialState.absolutePath.length
+                    val slide = tween<androidx.compose.ui.unit.IntOffset>(
+                        durationMillis = 320,
+                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
+                    )
+                    val fade = tween<Float>(durationMillis = 200)
+                    if (forward) {
+                        (slideInHorizontally(slide) { it } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { -it / 3 } + fadeOut(fade))
+                    } else {
+                        (slideInHorizontally(slide) { -it / 3 } + fadeIn(fade)) togetherWith
+                            (slideOutHorizontally(slide) { it } + fadeOut(fade))
+                    }
+                },
                 label = "m3dir",
             ) { dir ->
                 val materialFileListState = rememberLazyListState()
