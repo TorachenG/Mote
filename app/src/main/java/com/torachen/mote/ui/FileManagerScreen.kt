@@ -50,6 +50,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.graphicsLayer
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Archive
@@ -186,6 +187,8 @@ internal class FileManagerController(
     var category by mutableStateOf<FileCategory?>(null)
     var categoryFiles by mutableStateOf<List<FsEntry>>(emptyList())
     var categoryLoading by mutableStateOf(false)
+    /** 每个目录的滚动位置记忆（firstVisibleIndex to offset） */
+    val scrollMemory = mutableMapOf<String, Pair<Int, Int>>()
     private val scanScope = kotlinx.coroutines.CoroutineScope(
         kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
     )
@@ -728,7 +731,20 @@ private fun FileManagerMiuix(
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val listState = rememberLazyListState()
+    var headerHeightDp by remember { mutableStateOf(0.dp) }
     val pullUi = remember { PullRefreshUiState() }
+    var lastDirPath by remember { mutableStateOf(controller.currentDir.absolutePath) }
+    LaunchedEffect(controller.currentDir) {
+        val path = controller.currentDir.absolutePath
+        if (path != lastDirPath) {
+            controller.scrollMemory[lastDirPath] =
+                listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
+            val saved = controller.scrollMemory[path]
+            if (saved != null) listState.scrollToItem(saved.first, saved.second)
+            else listState.scrollToItem(0)
+            lastDirPath = path
+        }
+    }
     val surface = MiuixTheme.colorScheme.surface
 
     val blurSupported = isRuntimeShaderSupported()
@@ -850,7 +866,12 @@ private fun FileManagerMiuix(
                 ) {
                     if (controller.currentDir == controller.root) {
                         item(key = "home_header") {
-                            FileManagerHomeHeaderMiuix(controller, onTool)
+                            val density = androidx.compose.ui.platform.LocalDensity.current
+                            Box(modifier = Modifier.onGloballyPositioned {
+                                headerHeightDp = with(density) { it.size.height.toDp() }
+                            }) {
+                                FileManagerHomeHeaderMiuix(controller, onTool)
+                            }
                         }
                         item(key = "home_breadcrumb") {
                             MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
@@ -980,18 +1001,16 @@ private fun FileManagerMiuix(
                     }
                 },
             )
-            AnimatedVisibility(
-                visible = controller.currentDir != controller.root,
-                enter = slideInVertically(
-                    animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                    initialOffsetY = { -it / 2 },
-                ) + fadeIn(tween(220)),
-                exit = slideOutVertically(
-                    animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                    targetOffsetY = { -it / 2 },
-                ) + fadeOut(tween(160)),
-            ) {
-                MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
+            val subPage = controller.currentDir != controller.root
+            val breadcrumbShift by animateDpAsState(
+                targetValue = if (subPage) 0.dp else headerHeightDp,
+                animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                label = "breadcrumbShift",
+            )
+            if (subPage) {
+                Box(modifier = Modifier.graphicsLayer { translationY = breadcrumbShift.toPx() }) {
+                    MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
+                }
             }
             }
         }
@@ -1394,6 +1413,7 @@ private fun FileManagerMaterial(
     val surface = M3MaterialTheme.colorScheme.surface
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
+    var headerHeightDp by remember { mutableStateOf(0.dp) }
 
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var barPending by remember { mutableStateOf<PendingOp?>(null) }
@@ -1407,18 +1427,16 @@ private fun FileManagerMaterial(
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            AnimatedVisibility(
-                visible = controller.currentDir != controller.root,
-                enter = slideInVertically(
-                    animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                    initialOffsetY = { -it / 2 },
-                ) + fadeIn(tween(220)),
-                exit = slideOutVertically(
-                    animationSpec = tween(220, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                    targetOffsetY = { -it / 2 },
-                ) + fadeOut(tween(160)),
-            ) {
-                MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
+            val subPageM = controller.currentDir != controller.root
+            val breadcrumbShiftM by animateDpAsState(
+                targetValue = if (subPageM) 0.dp else headerHeightDp,
+                animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                label = "breadcrumbShiftM",
+            )
+            if (subPageM) {
+                Box(modifier = Modifier.graphicsLayer { translationY = breadcrumbShiftM.toPx() }) {
+                    MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
+                }
             }
 
             if (controller.category != null) {
@@ -1446,6 +1464,18 @@ private fun FileManagerMaterial(
             ) { dir ->
                 val materialFileListState = rememberLazyListState()
     val materialPullUi = remember { PullRefreshUiState() }
+    var lastDirPathM by remember { mutableStateOf(controller.currentDir.absolutePath) }
+    LaunchedEffect(controller.currentDir) {
+        val path = controller.currentDir.absolutePath
+        if (path != lastDirPathM) {
+            controller.scrollMemory[lastDirPathM] =
+                materialFileListState.firstVisibleItemIndex to materialFileListState.firstVisibleItemScrollOffset
+            val saved = controller.scrollMemory[path]
+            if (saved != null) materialFileListState.scrollToItem(saved.first, saved.second)
+            else materialFileListState.scrollToItem(0)
+            lastDirPathM = path
+        }
+    }
                 PullRefreshContainer(
                     canPull = {
                         materialFileListState.firstVisibleItemIndex == 0 &&
@@ -1462,7 +1492,12 @@ private fun FileManagerMaterial(
                 ) {
                     if (controller.currentDir == controller.root) {
                         item(key = "home_header") {
-                            FileManagerHomeHeaderMaterial(controller, onTool)
+                            val density = androidx.compose.ui.platform.LocalDensity.current
+                            Box(modifier = Modifier.onGloballyPositioned {
+                                headerHeightDp = with(density) { it.size.height.toDp() }
+                            }) {
+                                FileManagerHomeHeaderMaterial(controller, onTool)
+                            }
                         }
                         item(key = "home_breadcrumb") {
                             MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)

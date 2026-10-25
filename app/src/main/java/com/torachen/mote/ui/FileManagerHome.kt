@@ -163,7 +163,11 @@ internal fun FileManagerHomeHeaderMiuix(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Card(modifier = Modifier.weight(2.3f).fillMaxHeight()) {
-                Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 0.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
+                ) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
                     fmTools.chunked(3).forEachIndexed { rowIndex, row ->
@@ -197,7 +201,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 .padding(start = 26.dp, end = 12.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 fmCategories.forEach { entry ->
@@ -244,7 +248,7 @@ private fun FmToolCellMiuix(
     val bg = if (tool.usePrimary) MiuixTheme.colorScheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
     ) {
         Box(
             modifier = Modifier
@@ -353,7 +357,11 @@ internal fun FileManagerHomeHeaderMaterial(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             M3Card(modifier = Modifier.weight(2.3f).fillMaxHeight()) {
-                Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 0.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
+                ) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
                     fmTools.chunked(3).forEachIndexed { rowIndex, row ->
@@ -387,7 +395,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 .padding(start = 26.dp, end = 12.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 fmCategories.forEach { entry ->
@@ -434,7 +442,7 @@ private fun FmToolCellMaterial(
     val bg = if (tool.usePrimary) scheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = Alignment.Start,
     ) {
         Box(
             modifier = Modifier
