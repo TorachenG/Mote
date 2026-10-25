@@ -8,6 +8,11 @@ import kotlinx.coroutines.withContext
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -189,8 +194,12 @@ private fun DownloadsShellMiuix(
 
         AnimatedVisibility(
             visible = navBarVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(220)) +
+                slideInVertically(tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it / 2 } +
+                scaleIn(tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.32f, 0.72f, 0f, 1f)), initialScale = 0.86f),
+            exit = fadeOut(tween(160)) +
+                slideOutVertically(tween(220, easing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 1f, 1f))) { it / 3 } +
+                scaleOut(tween(220), targetScale = 0.9f),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             if (backdrop != null) {

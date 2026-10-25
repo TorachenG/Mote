@@ -210,9 +210,9 @@ internal fun FileManagerHomeHeaderMiuix(
             ) {
                 fmCategories.forEach { entry ->
                     Column(
-                        horizontalAlignment = Alignment.Start,
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .weight(1f)
+                            .width(50.dp)
                             .clickable { controller.openCategory(entry.category) },
                     ) {
                         Box(
@@ -252,7 +252,7 @@ private fun FmToolCellMiuix(
     val bg = if (tool.usePrimary) MiuixTheme.colorScheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.Start,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
@@ -407,9 +407,9 @@ internal fun FileManagerHomeHeaderMaterial(
             ) {
                 fmCategories.forEach { entry ->
                     Column(
-                        horizontalAlignment = Alignment.Start,
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .weight(1f)
+                            .width(50.dp)
                             .clickable { controller.openCategory(entry.category) },
                     ) {
                         Box(
@@ -449,7 +449,7 @@ private fun FmToolCellMaterial(
     val bg = if (tool.usePrimary) scheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.Start,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier

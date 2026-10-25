@@ -56,6 +56,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.FolderZip
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Android
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -83,6 +89,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -737,16 +744,20 @@ private fun FileManagerMiuix(
     val listState = rememberLazyListState()
     var headerHeightDp by remember { mutableStateOf(0.dp) }
     val pullUi = remember { PullRefreshUiState() }
-    var lastDirPath by remember { mutableStateOf(controller.currentDir.absolutePath) }
+    var pendingScroll by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { controller.scrollMemory[controller.currentDir.absolutePath] = it }
+    }
     LaunchedEffect(controller.currentDir) {
-        val path = controller.currentDir.absolutePath
-        if (path != lastDirPath) {
-            controller.scrollMemory[lastDirPath] =
-                listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
-            val saved = controller.scrollMemory[path]
-            if (saved != null) listState.scrollToItem(saved.first, saved.second)
-            else listState.scrollToItem(0)
-            lastDirPath = path
+        pendingScroll = controller.scrollMemory[controller.currentDir.absolutePath]
+    }
+    LaunchedEffect(controller.dirEntries, pendingScroll) {
+        val target = pendingScroll ?: return@LaunchedEffect
+        val count = listState.layoutInfo.totalItemsCount
+        if (count > 0) {
+            listState.scrollToItem(target.first.coerceIn(0, count - 1), target.second)
+            pendingScroll = null
         }
     }
     val surface = MiuixTheme.colorScheme.surface
@@ -911,13 +922,13 @@ private fun FileManagerMiuix(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = topPadding + 8.dp)
+                    .padding(top = topPadding + 2.dp)
                     .size(22.dp)
                     .graphicsLayer {
                         val sc = progress * 1.6f
                         scaleX = sc
                         scaleY = sc
-                        translationY = pullUi.offset * 0.9f
+                        translationY = pullUi.offset * 0.35f
                     },
             ) {
                 top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
@@ -1142,6 +1153,26 @@ private fun PullIndicatorItem(state: PullRefreshUiState) {
     }
 }
 
+/** 按扩展名返回与主页一致的图标与配色；null 表示使用通用文件图标 */
+internal fun fmTypeIcon(file: java.io.File): Pair<androidx.compose.ui.graphics.vector.ImageVector, Color>? {
+    val ext = file.extension.lowercase()
+    return when {
+        ext in FileCategory.ARCHIVE.extensions ->
+            androidx.compose.material.icons.Icons.Rounded.FolderZip to Color(0xFF3B6EF6)
+        ext in FileCategory.DOCUMENT.extensions ->
+            androidx.compose.material.icons.Icons.Rounded.Description to Color(0xFFFFD966)
+        ext in FileCategory.IMAGE.extensions ->
+            androidx.compose.material.icons.Icons.Rounded.Image to Color(0xFF7767F9)
+        ext in FileCategory.VIDEO.extensions ->
+            androidx.compose.material.icons.Icons.Rounded.Movie to Color(0xFF7767F9)
+        ext in FileCategory.AUDIO.extensions ->
+            androidx.compose.material.icons.Icons.Rounded.MusicNote to Color(0xFFE8452C)
+        ext in FileCategory.APK.extensions ->
+            androidx.compose.material.icons.Icons.Rounded.Android to Color(0xFF1DCD3A)
+        else -> null
+    }
+}
+
 @Composable
 private fun CategoryListMiuix(
     controller: FileManagerController,
@@ -1333,12 +1364,19 @@ private fun EntryThumb(entry: FsEntry) {
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
+            val typed = if (entry.isDir) null else fmTypeIcon(entry.file)
             Icon(
-                imageVector = if (entry.isDir || isArchive(entry.file.name)) MiuixIcons.FolderFill
-                else MiuixIcons.FileIcon,
+                imageVector = when {
+                    entry.isDir -> MiuixIcons.FolderFill
+                    typed != null -> typed.first
+                    else -> MiuixIcons.FileIcon
+                },
                 contentDescription = null,
-                tint = if (entry.isDir) Color(0xFFFFD966)
-                else MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                tint = when {
+                    entry.isDir -> Color(0xFFFFD966)
+                    typed != null -> typed.second
+                    else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                },
                 modifier = Modifier.size(if (entry.isDir) 30.dp else 26.dp),
             )
         }
@@ -1519,16 +1557,23 @@ private fun FileManagerMaterial(
             ) { dir ->
                 val materialFileListState = rememberLazyListState()
     val materialPullUi = remember { PullRefreshUiState() }
-    var lastDirPathM by remember { mutableStateOf(controller.currentDir.absolutePath) }
+    var pendingScrollM by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    LaunchedEffect(materialFileListState) {
+        snapshotFlow {
+            materialFileListState.firstVisibleItemIndex to materialFileListState.firstVisibleItemScrollOffset
+        }.collect {
+            controller.scrollMemory[controller.currentDir.absolutePath] = it
+        }
+    }
     LaunchedEffect(controller.currentDir) {
-        val path = controller.currentDir.absolutePath
-        if (path != lastDirPathM) {
-            controller.scrollMemory[lastDirPathM] =
-                materialFileListState.firstVisibleItemIndex to materialFileListState.firstVisibleItemScrollOffset
-            val saved = controller.scrollMemory[path]
-            if (saved != null) materialFileListState.scrollToItem(saved.first, saved.second)
-            else materialFileListState.scrollToItem(0)
-            lastDirPathM = path
+        pendingScrollM = controller.scrollMemory[controller.currentDir.absolutePath]
+    }
+    LaunchedEffect(controller.dirEntries, pendingScrollM) {
+        val target = pendingScrollM ?: return@LaunchedEffect
+        val count = materialFileListState.layoutInfo.totalItemsCount
+        if (count > 0) {
+            materialFileListState.scrollToItem(target.first.coerceIn(0, count - 1), target.second)
+            pendingScrollM = null
         }
     }
                 PullRefreshContainer(
