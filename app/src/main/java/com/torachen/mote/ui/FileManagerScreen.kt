@@ -51,6 +51,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.graphicsLayer
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Archive
@@ -871,6 +876,7 @@ private fun FileManagerMiuix(
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
+                        .dragSelectModifier(controller, listState, rememberCoroutineScope())
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
@@ -1052,19 +1058,26 @@ private fun FileManagerMiuix(
             }
         }
 
+        val liveBarItems = if (controller.selected.isNotEmpty()) controller.selected else barItems
         AnimatedVisibility(
             visible = controller.selecting || controller.pendingOp != null || controller.selected.isNotEmpty(),
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = slideInVertically(
+                animationSpec = tween(280, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
+                initialOffsetY = { it },
+            ) + fadeIn(tween(180)),
+            exit = slideOutVertically(
+                animationSpec = tween(200, easing = CubicBezierEasing(0.4f, 0f, 1f, 1f)),
+                targetOffsetY = { it },
+            ) + fadeOut(tween(140)),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp),
         ) {
             if (barPending != null) {
                 MiuixPickBar(controller)
-            } else if (barItems.isNotEmpty()) {
+            } else if (liveBarItems.isNotEmpty()) {
                 MiuixActionBar(
-                    items = barItems,
-                    onAbout = { onAbout(barItems) },
-                    onShare = { onShare(barItems) },
+                    items = liveBarItems,
+                    onAbout = { onAbout(liveBarItems) },
+                    onShare = { onShare(liveBarItems) },
                     onOpen = { one -> controller.open(one); controller.selected = emptyList() },
                     onCopy = { controller.beginMove(PendingOp.COPY) },
                     onMove = { controller.beginMove(PendingOp.MOVE) },
@@ -1170,6 +1183,66 @@ internal fun fmTypeIcon(file: java.io.File): Pair<androidx.compose.ui.graphics.v
         ext in FileCategory.APK.extensions ->
             androidx.compose.material.icons.Icons.Rounded.Android to Color(0xFF1DCD3A)
         else -> null
+    }
+}
+
+/** 多选态下按住 checkbox 拖动：沿路切换选中状态，靠近上下边缘自动滚动 */
+private fun Modifier.dragSelectModifier(
+    controller: FileManagerController,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    scope: kotlinx.coroutines.CoroutineScope,
+): Modifier = this.pointerInput(controller.selecting) {
+    if (!controller.selecting) return@pointerInput
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        var target: Boolean? = null
+        var autoScroll = 0f
+        var autoJob: kotlinx.coroutines.Job? = null
+
+        fun rowAt(y: Float): FsEntry? {
+            val info = listState.layoutInfo
+            val entryCount = controller.entriesOf(controller.currentDir).size
+            val startIndex = info.totalItemsCount - entryCount
+            val item = info.visibleItemsInfo.firstOrNull { y >= it.offset && y <= it.offset + it.size } ?: return null
+            val row = item.index - startIndex
+            return controller.entriesOf(controller.currentDir).getOrNull(row)
+        }
+
+        fun applyAt(y: Float) {
+            val entry = rowAt(y) ?: return
+            if (target == null) target = !controller.isSelected(entry)
+            if (controller.isSelected(entry) != target) controller.toggle(entry)
+        }
+
+        applyAt(down.position.y)
+        var lastY = down.position.y
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed) break
+            lastY = change.position.y
+            applyAt(lastY)
+            val info = listState.layoutInfo
+            val top = info.viewportStartOffset + 140f
+            val bottom = info.viewportEndOffset - 160f
+            autoScroll = when {
+                lastY < top -> -16f
+                lastY > bottom -> 16f
+                else -> 0f
+            }
+            if (autoScroll != 0f && autoJob == null) {
+                autoJob = scope.launch {
+                    while (autoScroll != 0f) {
+                        listState.scrollBy(autoScroll)
+                        applyAt(lastY)
+                        kotlinx.coroutines.delay(16)
+                    }
+                }
+            }
+            change.consume()
+        }
+        autoScroll = 0f
+        autoJob?.cancel()
     }
 }
 

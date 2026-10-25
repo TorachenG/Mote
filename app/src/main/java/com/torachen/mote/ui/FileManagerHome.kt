@@ -167,7 +167,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(14.dp),
+                        .padding(start = 8.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
                 ) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -180,12 +180,12 @@ internal fun FileManagerHomeHeaderMiuix(
                             row.forEach { tool ->
                                 FmToolCellMiuix(
                                     tool = tool,
-                                    modifier = Modifier.width(76.dp),
+                                    modifier = Modifier.width(44.dp),
                                     onSurface = onSurface,
                                     onClick = { onTool(tool.tool) },
                                 )
                             }
-                            repeat(3 - row.size) { Spacer(Modifier.width(76.dp)) }
+                            repeat(3 - row.size) { Spacer(Modifier.width(44.dp)) }
                         }
                     }
                 }
@@ -282,7 +282,7 @@ private fun FmToolCellMiuix(
         Spacer(Modifier.height(6.dp))
         Text(
             text = tool.label,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             color = onSurface,
             maxLines = 1,
             softWrap = false,
@@ -364,7 +364,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(14.dp),
+                        .padding(start = 8.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
                 ) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -377,12 +377,12 @@ internal fun FileManagerHomeHeaderMaterial(
                             row.forEach { tool ->
                                 FmToolCellMaterial(
                                     tool = tool,
-                                    modifier = Modifier.width(76.dp),
+                                    modifier = Modifier.width(44.dp),
                                     scheme = scheme,
                                     onClick = { onTool(tool.tool) },
                                 )
                             }
-                            repeat(3 - row.size) { Spacer(Modifier.width(76.dp)) }
+                            repeat(3 - row.size) { Spacer(Modifier.width(44.dp)) }
                         }
                     }
                 }
