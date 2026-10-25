@@ -199,6 +199,8 @@ internal class FileManagerController(
     var category by mutableStateOf<FileCategory?>(null)
     var categoryFiles by mutableStateOf<List<FsEntry>>(emptyList())
     var categoryLoading by mutableStateOf(false)
+    /** 目录切换/重新扫描期间为 true，界面先不渲染旧列表，避免闪回顶部 */
+    var reloading by mutableStateOf(false)
     /** 每个目录的滚动位置记忆（firstVisibleIndex to offset） */
     val scrollMemory = mutableMapOf<String, Pair<Int, Int>>()
     private val scanScope = kotlinx.coroutines.CoroutineScope(
@@ -294,6 +296,7 @@ internal class FileManagerController(
     fun entriesOf(dir: java.io.File): List<FsEntry> = dirEntries[dir.absolutePath].orEmpty()
 
     suspend fun reload() {
+        reloading = true
         val dir = currentDir
         val list = withContext(Dispatchers.IO) {
             dir.listFiles()?.map { file ->
@@ -304,6 +307,7 @@ internal class FileManagerController(
         dirEntries = dirEntries + (dir.absolutePath to list)
         val path = dir.absolutePath
         needsAllFiles = !hasAllFiles(context)
+        reloading = false
     }
 
     fun enter(dir: java.io.File) {
@@ -1254,6 +1258,42 @@ private fun CategoryListMiuix(
     val listState = rememberLazyListState()
     var appeared by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { appeared = true }
+    if (controller.categoryLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    size = 18.dp,
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "正在加载...",
+                    style = MiuixTheme.textStyles.body1,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
+        return
+    }
+    if (controller.categoryLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    size = 18.dp,
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "正在加载...",
+                    style = MiuixTheme.textStyles.body1,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                )
+            }
+        }
+        return
+    }
     AnimatedVisibility(
         visible = appeared,
         enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
@@ -1263,25 +1303,7 @@ private fun CategoryListMiuix(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
     ) {
-        if (controller.categoryLoading) {
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
-                        color = MiuixTheme.colorScheme.primary,
-                        size = 18.dp,
-                        strokeWidth = 2.dp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "正在加载...",
-                        style = MiuixTheme.textStyles.body1,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-                }
-            }
+        if (false) {
         } else if (controller.categoryFiles.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
@@ -1313,25 +1335,7 @@ private fun CategoryListMaterial(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
     ) {
-        if (controller.categoryLoading) {
-            item {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
-                        color = M3MaterialTheme.colorScheme.primary,
-                        size = 18.dp,
-                        strokeWidth = 2.dp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    M3Text(
-                        "正在加载...",
-                        fontSize = 14.sp,
-                        color = M3MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+        if (false) {
         } else if (controller.categoryFiles.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
