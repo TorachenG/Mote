@@ -202,6 +202,8 @@ internal class FileManagerController(
     var pendingOp by mutableStateOf<PendingOp?>(null)
     var pickDir by mutableStateOf<java.io.File?>(null)
     var needsAllFiles by mutableStateOf(false)
+    /** 当前目录存在但无法读取（典型：其它应用的 Android/data） */
+    var dirUnreadable by mutableStateOf(false)
 
     /** 是否显示主页（与目录列表互斥） */
     var showHome by mutableStateOf(true)
@@ -389,6 +391,7 @@ internal class FileManagerController(
             )
                 ?: emptyList()
         }
+        dirUnreadable = dir.exists() && dir.listFiles() == null
         dirEntries = dirEntries + (dir.absolutePath to list)
         val path = dir.absolutePath
         needsAllFiles = !hasAllFiles(context)
@@ -1006,6 +1009,29 @@ private fun FileManagerMiuix(
                     }
                     if (controller.currentDir != controller.root) {
                         item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
+                    }
+                    if (controller.dirUnreadable) {
+                        item(key = "unreadable_hint") {
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                                    Text(
+                                        "受系统限制，Mote 无法读取该目录",
+                                        fontSize = 15.sp,
+                                        color = MiuixTheme.colorScheme.onSurface,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        "Android 11 起，普通应用不能访问其它应用的 Android/data 目录，可在系统「文件管理」中查看。",
+                                        fontSize = 12.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
+                            }
+                        }
                     }
                     if (controller.needsAllFiles) {
                         item {

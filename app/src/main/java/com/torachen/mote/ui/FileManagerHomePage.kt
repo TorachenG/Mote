@@ -294,7 +294,7 @@ internal fun FileManagerHomePage(
                                         val exists = java.io.File(app.dirPath).exists()
                                         ArrowPreference(
                                             title = app.name,
-                                            summary = app.dirPath.removePrefix(
+                                            summary = if (app.restricted) "受系统限制，无法直接访问" else app.dirPath.removePrefix(
                                                 android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
                                             ),
                                             startAction = {
@@ -329,10 +329,14 @@ internal fun FileManagerHomePage(
                                                 }
                                             },
                                             onClick = {
-                                                if (exists) {
-                                                    controller.onOpenDir(app.dirPath, null)
-                                                } else {
-                                                    android.widget.Toast.makeText(
+                                                when {
+                                                    app.restricted -> android.widget.Toast.makeText(
+                                                        controller.context,
+                                                        "Android 11+ 不允许访问其它应用的 Android/data 目录，可先在 ${app.name} 内保存到相册/Download",
+                                                        android.widget.Toast.LENGTH_LONG,
+                                                    ).show()
+                                                    exists -> controller.onOpenDir(app.dirPath, null)
+                                                    else -> android.widget.Toast.makeText(
                                                         controller.context,
                                                         "${app.name} 的下载目录不存在",
                                                         android.widget.Toast.LENGTH_SHORT,
@@ -462,6 +466,8 @@ internal data class FmDetectedApp(
     val dirPath: String,
     val color: Color,
     val iconUrl: String,
+    /** 目录位于其它应用的 Android/data 下，Android 11+ 无法读取 */
+    val restricted: Boolean = false,
 )
 
 internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedApp> {
@@ -483,6 +489,8 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
             listOf(
                 "Android/data/com.tencent.mobileqq/tencent/QQfile_recv",
                 "tencent/QQfile_recv",
+                "Tencent/QQfile_recv",
+                "Download/QQ",
             ),
         ),
         Def(
@@ -491,14 +499,17 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
             listOf(
                 "Android/data/com.tencent.mm/MicroMsg/Download",
                 "tencent/MicroMsg/Download",
+                "Tencent/MicroMsg/Download",
+                "Pictures/WeiXin",
+                "Download/WeChat",
             ),
         ),
         Def(
             "X", "com.twitter.android", Color(0xFF1A1A1A),
             "https://img.magnific.com/premium-vector/new-twitter-x-logo-vector-twitter-x-sign-vector_952796-6.jpg",
             listOf(
-                "Android/data/com.twitter.android/files",
                 "Pictures/Twitter",
+                "Android/data/com.twitter.android/files",
             ),
         ),
         Def(
@@ -507,6 +518,8 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
             listOf(
                 "Android/data/tv.danmaku.bili/download",
                 "Android/data/tv.danmaku.bili/Download",
+                "Movies/BiliDownload",
+                "Download/bilibili",
             ),
         ),
     )
@@ -514,12 +527,22 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
     val out = mutableListOf<FmDetectedApp>()
     defs.forEach { def ->
         val installed = runCatching { pm.getPackageInfo(def.pkg, 0) }.isSuccess
-        val resolved = def.paths
-            .map { java.io.File(root, it) }
-            .firstOrNull { it.exists() }
-            ?: java.io.File(root, def.paths.first())
-        if (installed || resolved.exists()) {
-            out.add(FmDetectedApp(def.name, resolved.absolutePath, def.color, def.iconUrl))
+        val files = def.paths.map { java.io.File(root, it) }
+        // 优先可读且存在的目录；其次存在但不可读；最后退回第一个候选
+        val readable = files.firstOrNull { it.exists() && it.canRead() && it.listFiles() != null }
+        val existing = readable ?: files.firstOrNull { it.exists() }
+        val resolved = existing ?: files.first()
+        val restricted = existing != null && readable == null
+        if (installed || existing != null) {
+            out.add(
+                FmDetectedApp(
+                    name = def.name,
+                    dirPath = resolved.absolutePath,
+                    color = def.color,
+                    iconUrl = def.iconUrl,
+                    restricted = restricted,
+                )
+            )
         }
     }
     return out
