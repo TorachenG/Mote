@@ -207,7 +207,7 @@ internal fun FileManagerHomePage(
                             Row(
                                 modifier = Modifier.fillMaxWidth()
                                     .clickable { controller.enterList(controller.root) }
-                                    .padding(14.dp),
+                                    .padding(10.5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
@@ -242,7 +242,7 @@ internal fun FileManagerHomePage(
                                             Row(
                                                 modifier = Modifier.fillMaxWidth()
                                                     .clickable { controller.openCategory(entry.category) }
-                                                    .padding(12.dp),
+                                                    .padding(13.5.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 Box(
