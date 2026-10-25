@@ -3594,7 +3594,6 @@ private fun RenderPageContent(
                     PendingOpenInNewWindowStore.pending = uri
                     onPopToRoot()
                 },
-                initialTab = 0,
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }
@@ -3605,16 +3604,6 @@ private fun RenderPageContent(
             "settings_space_management" -> SettingsSpaceManagementPage(
                 onBack = { onPop() },
                 onOpenCacheSettings = { onPush("settings_cache_settings") }
-            )
-            "file_manager" -> DownloadsShell(
-                onBack = { onPop() },
-                onOpenDownloadSettings = { onPush("download_settings") },
-                onOpenTaskDetail = { onPush("download_task_detail") },
-                onOpenInBrowser = { uri ->
-                    PendingOpenInNewWindowStore.pending = uri
-                    onPopToRoot()
-                },
-                initialTab = 1,
             )
             "settings_sync_browsers" -> SettingsSyncBrowsersPage(
                 onBack = { onPop() },

@@ -1,4 +1,4 @@
-*.iml
+﻿*.iml
 .gradle
 /local.properties
 /.idea/caches
@@ -14,7 +14,7 @@
 .cxx
 local.properties
 
-# IDE ����
+# IDE
 .kotlin/
 .idea/
 *.log
@@ -23,11 +23,13 @@ local.properties
 /baselineprofile/build
 /app/src/release/generated
 cloudbase/admin/
+/app/build/
 
 # build outputs
 *.apk
 *.aab
 
+# 签名相关（切勿提交）
 keystore.properties
 *.jks
 *.keystore

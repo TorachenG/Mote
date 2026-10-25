@@ -4,7 +4,6 @@
 package com.torachen.mote.ui
 
 import android.Manifest
-import android.app.DownloadManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -20,7 +19,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.Settings
@@ -30,8 +28,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -40,23 +36,17 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -76,10 +66,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -920,7 +907,6 @@ fun DownloadManagerScreen(
     onBack: () -> Unit,
     onOpenDownloadSettings: () -> Unit = {},
     onOpenTaskDetail: () -> Unit = {},
-    onOpenFileManager: () -> Unit = {},
     onSelectionModeChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -935,8 +921,8 @@ fun DownloadManagerScreen(
     MonitorFileStatus(context)
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager, onSelectionModeChange)
-        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail, onOpenFileManager, onSelectionModeChange)
+        UiMode.Miuix -> DownloadManagerScreenMiuix(onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange)
+        UiMode.Material -> DownloadManagerScreenMaterial(onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange)
     }
 }
 
@@ -949,7 +935,6 @@ private fun DownloadManagerScreenMiuix(
     onBack: () -> Unit,
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
-    onOpenFileManager: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
@@ -1929,7 +1914,6 @@ private fun DownloadManagerScreenMaterial(
     onBack: () -> Unit,
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
-    onOpenFileManager: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
