@@ -56,6 +56,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Archive
@@ -219,6 +222,36 @@ internal class FileManagerController(
     fun enterSelection(entry: FsEntry) {
         selectionMode = true
         if (!isSelected(entry)) selected = selected + entry
+    }
+
+    var paintStartIndex = -1
+    private var paintTarget = false
+    private var paintRowHeightPx = 0f
+
+    fun beginPaint(index: Int, rowHeightPx: Float) {
+        val list = entriesOf(currentDir)
+        val entry = list.getOrNull(index) ?: return
+        paintStartIndex = index
+        paintRowHeightPx = rowHeightPx.coerceAtLeast(1f)
+        paintTarget = !isSelected(entry)
+        applyPaint(index)
+    }
+
+    fun paintBy(offsetPx: Float) {
+        if (paintStartIndex < 0) return
+        val list = entriesOf(currentDir)
+        val index = (paintStartIndex + (offsetPx / paintRowHeightPx).roundToInt())
+            .coerceIn(0, (list.size - 1).coerceAtLeast(0))
+        applyPaint(index)
+    }
+
+    fun endPaint() {
+        paintStartIndex = -1
+    }
+
+    private fun applyPaint(index: Int) {
+        val entry = entriesOf(currentDir).getOrNull(index) ?: return
+        if (isSelected(entry) != paintTarget) toggle(entry)
     }
 
     fun exitSelection() {
@@ -1416,9 +1449,33 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
         if (controller.pendingOp == null) controller.toggle(entry)
     }
 
+    val rowIndex = remember(entry.file.absolutePath, controller.currentDir) {
+        controller.entriesOf(controller.currentDir).indexOfFirst {
+            it.file.absolutePath == entry.file.absolutePath
+        }
+    }
+    var rowHeightPx by remember { mutableFloatStateOf(1f) }
+    var paintDy by remember { mutableFloatStateOf(0f) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { rowHeightPx = it.size.height.toFloat().coerceAtLeast(1f) }
+            .pointerInput(entry.file.absolutePath) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        controller.enterSelection(entry)
+                        controller.beginPaint(rowIndex, rowHeightPx)
+                    },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        paintDy += amount.y
+                        controller.paintBy(paintDy)
+                    },
+                    onDragEnd = { paintDy = 0f; controller.endPaint() },
+                    onDragCancel = { paintDy = 0f; controller.endPaint() },
+                )
+            }
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -168,7 +168,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(14.dp),
+                        .padding(15.7.dp),
                 ) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -207,7 +207,7 @@ internal fun FileManagerHomeHeaderMiuix(
             insideMargin = PaddingValues(0.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(15.7.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 fmCategories.forEach { entry ->
@@ -372,7 +372,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(14.dp),
+                        .padding(15.7.dp),
                 ) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
