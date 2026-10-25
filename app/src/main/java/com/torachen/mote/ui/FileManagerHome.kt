@@ -154,11 +154,11 @@ internal fun FileManagerHomeHeaderMiuix(
     val storage = remember { fmStorageUsage() }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 26.dp, end = 12.dp)
+                .padding(horizontal = 12.dp)
                 .height(268.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -166,7 +166,7 @@ internal fun FileManagerHomeHeaderMiuix(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 0.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
+                        .padding(14.dp),
                 ) {
                     Text(text = "实用功能", fontSize = 15.sp, color = onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -198,10 +198,10 @@ internal fun FileManagerHomeHeaderMiuix(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 26.dp, end = 12.dp),
+                .padding(horizontal = 12.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 fmCategories.forEach { entry ->
@@ -248,7 +248,7 @@ private fun FmToolCellMiuix(
     val bg = if (tool.usePrimary) MiuixTheme.colorScheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.Start,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
@@ -348,11 +348,11 @@ internal fun FileManagerHomeHeaderMaterial(
     val storage = remember { fmStorageUsage() }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 26.dp, end = 12.dp)
+                .padding(horizontal = 12.dp)
                 .height(268.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -360,7 +360,7 @@ internal fun FileManagerHomeHeaderMaterial(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 0.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
+                        .padding(14.dp),
                 ) {
                     M3Text(text = "实用功能", fontSize = 15.sp, color = scheme.onSurface)
                     Spacer(Modifier.height(12.dp))
@@ -392,10 +392,10 @@ internal fun FileManagerHomeHeaderMaterial(
         M3Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 26.dp, end = 12.dp),
+                .padding(horizontal = 12.dp),
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 fmCategories.forEach { entry ->
@@ -442,7 +442,7 @@ private fun FmToolCellMaterial(
     val bg = if (tool.usePrimary) scheme.primary else tool.color
     Column(
         modifier = modifier.clickable(onClick = onClick),
-        horizontalAlignment = Alignment.Start,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
             modifier = Modifier
