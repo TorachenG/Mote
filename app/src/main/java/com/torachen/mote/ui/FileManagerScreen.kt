@@ -1782,7 +1782,9 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = {
                         lastLongPressAt = System.currentTimeMillis()
-                        controller.enterSelection(entry)
+                        // 已进入多选：再次长按先翻转该项，后续涂抹以翻转后的状态为准
+                        if (controller.selecting) controller.toggle(entry)
+                        else controller.enterSelection(entry)
                         controller.beginPaint(rowIndex, rowHeightPx)
                     },
                     onDrag = { change, amount ->
