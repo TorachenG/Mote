@@ -201,6 +201,7 @@ internal fun FileManagerHomePage(
                         // 手机存储目录 + 回收站（同一卡片）
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            insideMargin = PaddingValues(0.dp),
                         ) {
                             ArrowPreference(
                                 title = "手机存储目录",
@@ -209,7 +210,7 @@ internal fun FileManagerHomePage(
                                         modifier = Modifier
                                             .size(34.dp)
                                             .background(
-                                                MiuixTheme.colorScheme.surfaceContainer,
+                                                MiuixTheme.colorScheme.primary,
                                                 RoundedCornerShape(9.dp),
                                             ),
                                         contentAlignment = Alignment.Center,
@@ -217,8 +218,8 @@ internal fun FileManagerHomePage(
                                         Icon(
                                             imageVector = Icons.Rounded.PhoneAndroid,
                                             contentDescription = null,
-                                            tint = onSurface,
-                                            modifier = Modifier.size(22.dp),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(26.dp),
                                         )
                                     }
                                 },
@@ -231,7 +232,7 @@ internal fun FileManagerHomePage(
                                         modifier = Modifier
                                             .size(34.dp)
                                             .background(
-                                                MiuixTheme.colorScheme.surfaceContainer,
+                                                Color(0xFFE8452C),
                                                 RoundedCornerShape(9.dp),
                                             ),
                                         contentAlignment = Alignment.Center,
@@ -239,8 +240,8 @@ internal fun FileManagerHomePage(
                                         Icon(
                                             imageVector = Icons.Rounded.Delete,
                                             contentDescription = null,
-                                            tint = onSurface,
-                                            modifier = Modifier.size(22.dp),
+                                            tint = Color.White,
+                                            modifier = Modifier.size(26.dp),
                                         )
                                     }
                                 },
@@ -280,7 +281,7 @@ internal fun FileManagerHomePage(
                                                             imageVector = entry.icon,
                                                             contentDescription = entry.category.label,
                                                             tint = Color.White,
-                                                            modifier = Modifier.size(22.dp),
+                                                            modifier = Modifier.size(26.dp),
                                                         )
                                                     }
                                                 },
