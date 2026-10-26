@@ -772,9 +772,10 @@ internal fun FileManagerPage(
         controller.reload()
     }
 
+    val atRouteRoot = controller.routeMode && controller.currentDir == controller.root
     BackHandler(
         enabled = controller.selecting || controller.category != null ||
-            controller.currentDir != controller.root || !controller.showHome
+            controller.currentDir != controller.root || (!controller.showHome && !atRouteRoot)
     ) {
         controller.onBackPressed()
     }
@@ -1041,6 +1042,7 @@ private fun FileManagerMiuix(
 
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
+    val hasBreadcrumbRow = !controller.safMode && controller.category == null
 
     // 退出多选时用上一次的选择渲染，保证胶囊栏有完整的退出动画
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
@@ -1097,7 +1099,7 @@ private fun FileManagerMiuix(
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .graphicsLayer { alpha = 1f }
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = topPadding + 44.dp, bottom = navBottom + 96.dp),
+                    contentPadding = PaddingValues(top = if (hasBreadcrumbRow) topPadding + 44.dp else topPadding, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
                 ) {
                     if (controller.safMode) {
@@ -1207,8 +1209,8 @@ private fun FileManagerMiuix(
         // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
         // 整段标题栏满强度模糊，渐变带收在标题栏底部之内，避免糊到第一条选项
         val fadeBand = 24.dp
-        val blurTotalHeight = topPadding
-        val headerFraction = ((topPadding - fadeBand) / topPadding).coerceIn(0f, 0.95f)
+        val blurTotalHeight = if (hasBreadcrumbRow) topPadding + 44.dp else topPadding
+        val headerFraction = ((blurTotalHeight - fadeBand) / blurTotalHeight).coerceIn(0f, 0.95f)
         if (blurSupported && backdrop != null && materialStyle != 0) {
             Box(
                 modifier = Modifier
@@ -1307,7 +1309,7 @@ private fun FileManagerMiuix(
         }
 
         // 目录轴固定在标题栏下方（不参与标题栏高度测量）
-        Box(
+        if (hasBreadcrumbRow) Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
