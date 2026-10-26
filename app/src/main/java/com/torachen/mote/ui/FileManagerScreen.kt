@@ -331,9 +331,9 @@ internal class FileManagerController(
     /** 返回键/返回按钮统一处理：返回 true 表示已消费 */
     fun enterSaf(absolutePath: String) {
         safMode = true
-        safPath = absolutePath
-            .removePrefix(root.absolutePath)
-            .trim('/')
+        safPath = absolutePath.removePrefix(root.absolutePath).trim('/')
+        // 列表仍展示可读的父目录，避免同一个 AnimatedContent 同时做“目录切换”和 SAF 模式切换
+        currentDir = java.io.File(absolutePath).parentFile ?: root
         loadSaf()
     }
 
@@ -406,6 +406,7 @@ internal class FileManagerController(
         if (safMode) {
             if (safUp()) return true
             safMode = false
+            shizukuMode = false
             return true
         }
         if (selectionMode) {
@@ -508,8 +509,6 @@ internal class FileManagerController(
         dirUnreadable = dir.exists() && dir.listFiles() == null
         if (dirUnreadable) {
             enterSaf(dir.absolutePath)
-        } else {
-            safMode = false
         }
         dirEntries = dirEntries + (dir.absolutePath to list)
         val path = dir.absolutePath
@@ -1217,7 +1216,11 @@ private fun FileManagerMiuix(
                                         Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
                                         Spacer(Modifier.height(4.dp))
                                         Text(
-                                            "系统未授予该目录的访问权限。可先授予「所有文件访问权限」，或点击下方按钮选择该目录授权。",
+                                            if (ShizukuBridge.binderAlive()) {
+                                                "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
+                                            } else {
+                                                "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
+                                            },
                                             fontSize = 12.sp,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
