@@ -3595,10 +3595,11 @@ private fun RenderPageContent(
                     onPopToRoot()
                 },
                 onOpenScanner = { onPush("scanner") },
-                onOpenDir = { path, category, title ->
+                onOpenDir = { path, category, title, fromShortcut ->
                     FileManagerDirRequest.path = path
                     FileManagerDirRequest.category = category
                     FileManagerDirRequest.title = title
+                    FileManagerDirRequest.fromShortcut = fromShortcut
                     FileManagerDirRequest.token = System.nanoTime()
                     onPush("file_manager_dir")
                 },
@@ -3613,6 +3614,7 @@ private fun RenderPageContent(
                 initialCategory = FileManagerDirRequest.category,
                 pageTitle = FileManagerDirRequest.title ?: "手机存储目录",
                 requestToken = FileManagerDirRequest.token,
+                fromShortcut = FileManagerDirRequest.fromShortcut,
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }

@@ -65,7 +65,7 @@ fun DownloadsShell(
     onOpenTaskDetail: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onOpenScanner: () -> Unit = {},
-    onOpenDir: (String?, String?, String?) -> Unit = { _, _, _ -> },
+    onOpenDir: (String?, String?, String?, Boolean) -> Unit = { _, _, _, _ -> },
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
     val tab = pagerState.currentPage
@@ -80,8 +80,11 @@ fun DownloadsShell(
             onOpenDir,
         )
     }
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) { fileController.reload() }
+    // 只有在切到文件页时才扫描目录，避免进入下载页时被文件扫描拖慢
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage == 1) {
+            withContext(Dispatchers.IO) { fileController.reload() }
+        }
     }
     val openDownloadsFolder: () -> Unit = {
         val target = java.io.File(

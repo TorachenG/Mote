@@ -192,7 +192,7 @@ internal class FileManagerController(
     val context: Context,
     val onOpenInBrowser: (String) -> Unit,
     val onBack: () -> Unit,
-    val onOpenDir: (path: String?, category: String?, title: String?) -> Unit = { _, _, _ -> },
+    val onOpenDir: (path: String?, category: String?, title: String?, fromShortcut: Boolean) -> Unit = { _, _, _, _ -> },
 ) {
     val root: java.io.File = Environment.getExternalStorageDirectory()
 
@@ -219,6 +219,12 @@ internal class FileManagerController(
 
     /** 独立路由页模式：返回根目录的上一级应退出页面，而不是切回主页 */
     var routeMode by mutableStateOf(false)
+
+    /** 从快捷方式直接进入时：未点过目录轴前，返回直接退出页面 */
+    var upNavEnabled by mutableStateOf(false)
+
+    /** 标题覆盖（点过目录轴后改为「手机存储目录」） */
+    var titleOverride by mutableStateOf<String?>(null)
 
     fun enterList(dir: java.io.File) {
         showHome = false
@@ -695,6 +701,8 @@ internal object FileManagerDirRequest {
     var title: String? = null
     /** 每次进入递增，确保路由页面重新创建状态 */
     var token: Long = 0L
+    /** 来自主页快捷方式（应用卡 / 分类 / 手机存储目录）：返回直接退出页面 */
+    var fromShortcut: Boolean = false
 }
 
 @Composable
@@ -772,10 +780,12 @@ internal fun FileManagerPage(
         controller.reload()
     }
 
+    // 快捷方式进入且未点过目录轴：不拦截返回，直接由路由出栈（含预见式返回）
+    val shortcutNoUp = controller.routeMode && !controller.upNavEnabled
     val atRouteRoot = controller.routeMode && controller.currentDir == controller.root
     BackHandler(
-        enabled = controller.selecting || controller.category != null ||
-            controller.currentDir != controller.root || (!controller.showHome && !atRouteRoot)
+        enabled = !shortcutNoUp && (controller.selecting || controller.category != null ||
+            controller.currentDir != controller.root || (!controller.showHome && !atRouteRoot))
     ) {
         controller.onBackPressed()
     }
@@ -1256,8 +1266,8 @@ private fun FileManagerMiuix(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
             TopAppBar(
-                title = if (controller.pendingOp != null) "选择目标目录" else pageTitle,
-                largeTitle = if (controller.pendingOp != null) "选择目标目录" else pageTitle,
+                title = if (controller.pendingOp != null) "选择目标目录" else (controller.titleOverride ?: pageTitle),
+                largeTitle = if (controller.pendingOp != null) "选择目标目录" else (controller.titleOverride ?: pageTitle),
                 color = Color.Transparent,
                 defaultWindowInsetsPadding = false,
                 scrollBehavior = scrollBehavior,
@@ -1359,6 +1369,7 @@ private fun MiuixBreadcrumb(
     dir: java.io.File,
     startPadding: androidx.compose.ui.unit.Dp,
     category: FileCategory? = null,
+    onNavigate: () -> Unit = {},
 ) {
     val inRecycle = dir.absolutePath.startsWith(controller.recycleRoot.absolutePath)
     val segments = remember(dir) {
@@ -1382,6 +1393,7 @@ private fun MiuixBreadcrumb(
             items = items,
             highlightIndex = items.lastIndex,
             onItemClick = { index ->
+                onNavigate()
                 if (category != null) {
                     controller.closeCategory()
                 } else {
@@ -1530,12 +1542,14 @@ internal fun FileManagerDirPage(
     initialCategory: String? = null,
     pageTitle: String = "文件管理",
     requestToken: Long = 0L,
+    fromShortcut: Boolean = false,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // 首帧前就落到目标目录，避免先渲染主页再动画切换（那会产生额外的淡入淡出）
     val controller = androidx.compose.runtime.remember(initialPath, initialCategory, requestToken) {
         FileManagerController(context, onOpenInBrowser, onBack).apply {
             routeMode = true
+            upNavEnabled = !fromShortcut
             showHome = false
             initialPath?.let { currentDir = java.io.File(it) }
             initialCategory?.let { name ->
