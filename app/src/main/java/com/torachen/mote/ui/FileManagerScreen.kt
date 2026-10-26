@@ -1146,6 +1146,7 @@ private fun FileManagerMiuix(
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
     val hasBreadcrumbRow = !controller.safMode && controller.category == null && !controller.isInRecycle
+    var breadcrumbHeightDp by remember { mutableStateOf(44.dp) }
 
     // 退出多选时用上一次的选择渲染，保证胶囊栏有完整的退出动画
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
@@ -1202,7 +1203,10 @@ private fun FileManagerMiuix(
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .graphicsLayer { alpha = 1f }
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = if (hasBreadcrumbRow) topPadding + 44.dp else topPadding, bottom = navBottom + 96.dp),
+                    contentPadding = PaddingValues(
+                        top = if (hasBreadcrumbRow) topPadding + breadcrumbHeightDp else topPadding,
+                        bottom = navBottom + 96.dp,
+                    ),
                     overscrollEffect = null,
                 ) {
                     if (controller.safMode) {
@@ -1330,7 +1334,7 @@ private fun FileManagerMiuix(
         // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
         // 整段标题栏满强度模糊，渐变带收在标题栏底部之内，避免糊到第一条选项
         val fadeBand = 24.dp
-        val blurTotalHeight = if (hasBreadcrumbRow) topPadding + 44.dp else topPadding
+        val blurTotalHeight = if (hasBreadcrumbRow) topPadding + breadcrumbHeightDp else topPadding
         val headerFraction = ((blurTotalHeight - fadeBand) / blurTotalHeight).coerceIn(0f, 0.95f)
         if (blurSupported && backdrop != null && materialStyle != 0) {
             Box(
