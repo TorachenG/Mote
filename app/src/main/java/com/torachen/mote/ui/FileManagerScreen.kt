@@ -1086,7 +1086,7 @@ private fun FileManagerMiuix(
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .graphicsLayer { alpha = if (controller.reloading) 0f else 1f }
+                        .graphicsLayer { alpha = 1f }
                         .overScrollVertical(),
                     contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
@@ -1514,25 +1514,6 @@ private fun Modifier.dragSelectModifier(
         autoScroll = 0f
         autoJob?.cancel()
     }
-}
-
-/** 文件管理主页（独立路由页） */
-@Composable
-internal fun FileManagerHomeRoutePage(
-    onBack: () -> Unit,
-    onOpenScanner: () -> Unit,
-    onOpenDir: (String?, String?, String?) -> Unit,
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val controller = androidx.compose.runtime.remember {
-        FileManagerController(
-            context = context,
-            onOpenInBrowser = { },
-            onBack = onBack,
-            onOpenDir = onOpenDir,
-        )
-    }
-    FileManagerHomePage(controller, onOpenScanner)
 }
 
 /** 文件管理目录页（作为应用内路由，带进入/退出动画与预测性返回） */
@@ -2067,7 +2048,7 @@ private fun FileManagerMaterial(
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .graphicsLayer { alpha = if (controller.reloading) 0f else 1f },
+                        .graphicsLayer { alpha = 1f },
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
                     if (controller.safMode) {
