@@ -3615,6 +3615,10 @@ private fun RenderPageContent(
                 pageTitle = FileManagerDirRequest.title ?: "手机存储目录",
                 requestToken = FileManagerDirRequest.token,
                 fromShortcut = FileManagerDirRequest.fromShortcut,
+                onOpenFileBrowser = { onPush("file_browser") },
+            )
+            "file_browser" -> com.torachen.mote.ui.filemanager.LocalFileBrowserPage(
+                onBack = { onPop() },
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }

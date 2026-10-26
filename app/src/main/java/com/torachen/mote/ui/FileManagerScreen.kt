@@ -2,6 +2,7 @@ package com.torachen.mote.ui
 
 import com.torachen.mote.ui.filemanager.FileManagerHomePage
 import com.torachen.mote.ui.filemanager.ShizukuBridge
+import com.torachen.mote.ui.filemanager.LocalFileBrowserRequest
 
 import android.content.Context
 import android.content.Intent
@@ -195,6 +196,7 @@ internal class FileManagerController(
     val onOpenInBrowser: (String) -> Unit,
     val onBack: () -> Unit,
     val onOpenDir: (path: String?, category: String?, title: String?, fromShortcut: Boolean) -> Unit = { _, _, _, _ -> },
+    val onOpenFileBrowser: () -> Unit = {},
 ) {
     val root: java.io.File = Environment.getExternalStorageDirectory()
 
@@ -334,6 +336,16 @@ internal class FileManagerController(
      * 备用路径：在 /0 后插入不可见字符（LRM），利用路径规范化差异绕过 Android/data 的 java.io 限制。
      * 仅在常规访问失败时尝试；失败返回 null。
      */
+    private var altBase: String? = null
+
+    /** 若已确定备用基址，把任意路径规范化为带不可见字符的等价路径 */
+    private fun canonical(dir: java.io.File): java.io.File {
+        val base = altBase ?: return dir
+        if (dir.absolutePath.contains("\u200E")) return dir
+        val rel = dir.absolutePath.removePrefix(root.absolutePath)
+        return java.io.File(base + rel)
+    }
+
     private fun altAccessDir(dir: java.io.File): java.io.File? {
         val p = dir.absolutePath
         val marker = "/0/"
@@ -522,8 +534,13 @@ internal class FileManagerController(
             )
                 ?: emptyList()
         }
-        dirUnreadable = list.isEmpty() && dir.exists()&& dir.listFiles() == null
+        dirUnreadable = list.isEmpty() && dir.exists() && dir.listFiles() == null
         if (dirUnreadable) {
+            val alt = altAccessDir(dir)
+            if (alt != null) {
+                currentDir = alt
+                return reload()
+            }
             enterSaf(dir.absolutePath)
         }
         dirEntries = dirEntries + (dir.absolutePath to list)
@@ -533,8 +550,9 @@ internal class FileManagerController(
     }
 
     fun enter(dir: java.io.File) {
-        if (!dir.isDirectory) return
-        currentDir = dir
+        val target = if (altBase != null) canonical(dir) else dir
+        if (!target.isDirectory) return
+        currentDir = target
         selected = emptyList()
         pickDir = dir
     }
@@ -689,7 +707,7 @@ internal class FileManagerController(
             enter(item.file)
             return
         }
-        openFile(context, item.file, onOpenInBrowser)
+        openFile(context, item.file, onOpenInBrowser) { onOpenFileBrowser() }
     }
 }
 
@@ -718,7 +736,12 @@ private fun mimeOf(file: java.io.File): String {
     return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
 }
 
-private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (String) -> Unit) {
+private fun openFile(
+    context: Context,
+    file: java.io.File,
+    onOpenInBrowser: (String) -> Unit,
+    onOpenFileBrowser: () -> Unit,
+) {
     val mime = mimeOf(file)
     val name = file.name.lowercase()
     val uri = try {
@@ -740,30 +763,16 @@ private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (Str
     }
 
     if (mime.startsWith("image/")) {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mime)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            intent.addCategory(Intent.CATEGORY_BROWSABLE)
-            context.startActivity(intent)
-        } catch (_: Exception) {
-        }
+        LocalFileBrowserRequest.url = uri.toString()
+        LocalFileBrowserRequest.title = file.name
+        onOpenFileBrowser()
         return
     }
 
     if (mime == "text/html" || name.endsWith(".html") || name.endsWith(".htm")) {
-        try {
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "text/html")
-                addCategory(Intent.CATEGORY_BROWSABLE)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(intent)
-        } catch (_: Exception) {
-        }
+        LocalFileBrowserRequest.url = uri.toString()
+        LocalFileBrowserRequest.title = file.name
+        onOpenFileBrowser()
         return
     }
 
@@ -1697,11 +1706,17 @@ internal fun FileManagerDirPage(
     pageTitle: String = "文件管理",
     requestToken: Long = 0L,
     fromShortcut: Boolean = false,
+    onOpenFileBrowser: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     // 首帧前就落到目标目录，避免先渲染主页再动画切换（那会产生额外的淡入淡出）
     val controller = androidx.compose.runtime.remember(initialPath, initialCategory, requestToken) {
-        FileManagerController(context, onOpenInBrowser, onBack).apply {
+        FileManagerController(
+            context = context,
+            onOpenInBrowser = onOpenInBrowser,
+            onBack = onBack,
+            onOpenFileBrowser = onOpenFileBrowser,
+        ).apply {
             routeMode = true
             upNavEnabled = !fromShortcut
             showHome = false
@@ -1734,7 +1749,7 @@ private fun MiuixBreadcrumbSaf(controller: FileManagerController) {
                 controller.safPath = segments.take(index).joinToString("/")
                 controller.loadSaf()
             },
-            insideMargin = PaddingValues(start = 26.dp, end = 16.dp),
+            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
             modifier = Modifier.fillMaxWidth(),
         )
     }
