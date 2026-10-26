@@ -1157,7 +1157,6 @@ private fun FileManagerMiuix(
                             SafEntryRow(entry) { controller.safOpen(entry) }
                         }
                     }
-                    item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
                     if (controller.dirUnreadable && !controller.safMode) {
                         item(key = "unreadable_hint") {
                             Card(
@@ -1798,6 +1797,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
     }
     var rowHeightPx by remember { mutableFloatStateOf(1f) }
     var paintDy by remember { mutableFloatStateOf(0f) }
+    var longPressHandled by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -1806,6 +1806,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
             .pointerInput(entry.file.absolutePath) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = {
+                        longPressHandled = true
                         controller.enterSelection(entry)
                         controller.beginPaint(rowIndex, rowHeightPx)
                     },
@@ -1876,8 +1877,7 @@ private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp
     Box(
         modifier = Modifier
             .size(size)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MiuixTheme.colorScheme.surfaceContainer),
+            .clip(RoundedCornerShape(10.dp)),
         contentAlignment = Alignment.Center,
     ) {
         if (bitmap != null) {
@@ -1901,7 +1901,7 @@ private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp
                     typed != null -> typed.second
                     else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
                 },
-                modifier = Modifier.size(size * if (entry.isDir) 0.7f else 0.58f),
+                modifier = Modifier.fillMaxSize(),
             )
         }
     }
@@ -2144,7 +2144,6 @@ private fun FileManagerMaterial(
                             SafEntryRow(entry) { controller.safOpen(entry) }
                         }
                     }
-                    item(key = "pull_indicator") { PullIndicatorItem(materialPullUi) }
                     if (controller.needsAllFiles) {
                         item {
                             Column(
