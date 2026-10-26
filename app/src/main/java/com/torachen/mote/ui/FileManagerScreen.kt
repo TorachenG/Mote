@@ -1057,19 +1057,7 @@ private fun FileManagerMiuix(
                 targetState = controller.currentDir,
                 modifier = Modifier.fillMaxSize(),
                 transitionSpec = {
-                    val forward = targetState.absolutePath.length > initialState.absolutePath.length
-                    val slide = tween<androidx.compose.ui.unit.IntOffset>(
-                        durationMillis = 320,
-                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                    )
-                    val fade = tween<Float>(durationMillis = 200)
-                    if (forward) {
-                        (slideInHorizontally(slide) { it } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { -it / 3 } + fadeOut(fade))
-                    } else {
-                        (slideInHorizontally(slide) { -it / 3 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { it } + fadeOut(fade))
-                    }
+                    androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
                 },
                 label = "dir",
             ) { dir ->
@@ -1302,15 +1290,8 @@ private fun FileManagerMiuix(
                 },
             )
             val subPage = controller.currentDir != controller.root && !controller.safMode
-            val breadcrumbShift by animateDpAsState(
-                targetValue = if (subPage) 0.dp else headerHeightDp,
-                animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                label = "breadcrumbShift",
-            )
             if (subPage) {
-                Box(modifier = Modifier.graphicsLayer { translationY = breadcrumbShift.toPx() }) {
-                    MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
-                }
+                MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
             }
             }
         }
@@ -1979,15 +1960,8 @@ private fun FileManagerMaterial(
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
             val subPageM = controller.currentDir != controller.root && !controller.safMode
-            val breadcrumbShiftM by animateDpAsState(
-                targetValue = if (subPageM) 0.dp else headerHeightDp,
-                animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                label = "breadcrumbShiftM",
-            )
             if (subPageM) {
-                Box(modifier = Modifier.graphicsLayer { translationY = breadcrumbShiftM.toPx() }) {
-                    MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
-                }
+                MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
             }
 
             if (controller.category != null) {
@@ -1997,19 +1971,7 @@ private fun FileManagerMaterial(
                 targetState = controller.currentDir,
                 modifier = Modifier.weight(1f),
                 transitionSpec = {
-                    val forward = targetState.absolutePath.length > initialState.absolutePath.length
-                    val slide = tween<androidx.compose.ui.unit.IntOffset>(
-                        durationMillis = 320,
-                        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                    )
-                    val fade = tween<Float>(durationMillis = 200)
-                    if (forward) {
-                        (slideInHorizontally(slide) { it } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { -it / 3 } + fadeOut(fade))
-                    } else {
-                        (slideInHorizontally(slide) { -it / 3 } + fadeIn(fade)) togetherWith
-                            (slideOutHorizontally(slide) { it } + fadeOut(fade))
-                    }
+                    androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
                 },
                 label = "m3dir",
             ) { dir ->
