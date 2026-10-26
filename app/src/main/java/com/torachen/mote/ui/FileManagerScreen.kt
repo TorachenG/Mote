@@ -801,10 +801,12 @@ internal fun FileManagerPage(
 
     // 快捷方式进入且未点过目录轴：不拦截返回，直接由路由出栈（含预见式返回）
     val shortcutNoUp = controller.routeMode && !controller.upNavEnabled
-    val atRouteRoot = controller.routeMode && controller.currentDir == controller.root
     BackHandler(
-        enabled = !shortcutNoUp && (controller.selecting || controller.category != null ||
-            controller.currentDir != controller.root || (!controller.showHome && !atRouteRoot))
+        enabled = controller.selecting ||
+            (controller.category == null &&
+                !controller.isInRecycle &&
+                controller.currentDir != controller.root &&
+                !shortcutNoUp)
     ) {
         controller.onBackPressed()
     }
@@ -1381,11 +1383,9 @@ private fun FileManagerMiuix(
 private fun RevealIn(index: Int, active: Boolean, content: @Composable () -> Unit) {
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(active) {
-        if (!active) {
-            shown = false
-        } else {
-            shown = false
-            kotlinx.coroutines.delay((index.coerceAtMost(14) * 26).toLong())
+        shown = false
+        if (active) {
+            kotlinx.coroutines.delay(40L + (index.coerceAtMost(14) * 26).toLong())
             shown = true
         }
     }

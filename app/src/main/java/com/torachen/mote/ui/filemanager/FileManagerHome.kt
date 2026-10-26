@@ -478,9 +478,9 @@ internal val fmHomeTools: List<FmToolEntry> = listOf(
     FmToolEntry(FmTool.WECHAT, "微信文件", Icons.Rounded.Forum, Color(0xFF1DCD3A)),
     FmToolEntry(FmTool.OCR, "文字提取", Icons.Rounded.TextFields, Color(0xFF7767F9)),
     FmToolEntry(FmTool.SCAN, "扫描文档", Icons.Rounded.QrCodeScanner, Color(0xFF1DCD3A)),
-    FmToolEntry(FmTool.TRASH, "回收站", Icons.Rounded.Delete, Color(0xFFE8452C)),
     FmToolEntry(FmTool.CONVERT, "拍照扫描", Icons.Rounded.QrCodeScanner, Color(0xFF16C060)),
     FmToolEntry(FmTool.OCR, "更多功能", Icons.Rounded.SwapHoriz, Color(0xFF9AA0A6)),
+    FmToolEntry(FmTool.TRASH, "回收站", Icons.Rounded.Delete, Color(0xFFE8452C)),
 )
 
 internal fun fmStorageHint(fraction: Float): String = when {
