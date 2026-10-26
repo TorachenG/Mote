@@ -558,13 +558,34 @@ internal class FileManagerController(
     fun deleteSelected() {
         val items = selected
         if (items.isEmpty()) return
-        val bucket = java.io.File(recycleRoot, System.currentTimeMillis().toString())
-        bucket.mkdirs()
-        val moved = items.count { item ->
-            runCatching { item.file.renameTo(java.io.File(bucket, item.file.name)) }.getOrDefault(false)
+        val inRecycle = isInRecycle
+        scanScope.launch(Dispatchers.IO) {
+            if (inRecycle) {
+                // 回收站内删除：直接物理删除
+                items.forEach { item -> runCatching { item.file.deleteRecursively() } }
+            } else {
+                val bucket = java.io.File(recycleRoot, System.currentTimeMillis().toString())
+                bucket.mkdirs()
+                items.forEach { item ->
+                    val target = java.io.File(bucket, item.file.name)
+                    runCatching {
+                        // 跨分区 renameTo 会失败，改用复制后删除
+                        if (!item.file.renameTo(target)) {
+                            if (item.file.isDirectory) {
+                                item.file.copyRecursively(target, overwrite = true)
+                            } else {
+                                item.file.copyTo(target, overwrite = true)
+                            }
+                            item.file.deleteRecursively()
+                        }
+                    }
+                }
+            }
+            withContext(Dispatchers.Main) {
+                selected = emptyList()
+                reload()
+            }
         }
-        selected = emptyList()
-        FileOpState.message.value = "已移入回收站（保留 7 天）：$moved 项"
     }
 
     fun purgeRecycleBin() {
@@ -847,7 +868,6 @@ internal fun FileManagerPage(
             }
             shareFile(context, zip)
             controller.exitSelection()
-            delay(60000)
             withContext(Dispatchers.IO) { zip.delete() }
         }
     }
@@ -1939,6 +1959,7 @@ private fun MiuixActionBar(
         CapsuleAction(MiuixIcons.Copy, "复制", enabled = true) { onCopy() }
         CapsuleAction(MiuixIcons.MoveFile, "移动", enabled = true) { onMove() }
         CapsuleAction(MiuixIcons.Delete, "删除", enabled = true) { onDelete() }
+        val context = LocalContext.current
         var showMore by remember { mutableStateOf(false) }
         Box {
             CapsuleAction(MiuixIcons.More, "更多", enabled = true) { showMore = true }
@@ -1949,6 +1970,10 @@ private fun MiuixActionBar(
                         items = listOf(
                             DropdownItem(text = "关于", onClick = { showMore = false; onAbout() }),
                             DropdownItem(text = "分享", onClick = { showMore = false; onShare() }),
+                            DropdownItem(text = "用其它应用打开", onClick = {
+                                showMore = false
+                                items.firstOrNull()?.let { openWithOtherApp(context, it.file) }
+                            }),
                         )
                     )
                 ),
@@ -2442,6 +2467,21 @@ private fun InfoRow(label: String, value: @Composable () -> Unit) {
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
         Box(modifier = Modifier.weight(1f)) { value() }
+    }
+}
+
+/** 用其它应用打开（即使 Mote 支持该类型也走系统选择器） */
+private fun openWithOtherApp(context: android.content.Context, file: java.io.File) {
+    runCatching {
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/octet-stream")
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = android.content.Intent.createChooser(intent, "用其它应用打开").apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(chooser)
     }
 }
 
