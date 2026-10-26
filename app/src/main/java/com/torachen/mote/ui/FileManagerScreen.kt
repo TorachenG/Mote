@@ -329,6 +329,21 @@ internal class FileManagerController(
     }
 
     /** 返回键/返回按钮统一处理：返回 true 表示已消费 */
+
+    /**
+     * 备用路径：在 /0 后插入不可见字符（LRM），利用路径规范化差异绕过 Android/data 的 java.io 限制。
+     * 仅在常规访问失败时尝试；失败返回 null。
+     */
+    private fun altAccessDir(dir: java.io.File): java.io.File? {
+        val p = dir.absolutePath
+        val marker = "/0/"
+        val idx = p.indexOf(marker)
+        if (idx < 0) return null
+        val alt = p.substring(0, idx + 2) + "‎" + p.substring(idx + 2)
+        val altFile = java.io.File(alt)
+        return if (altFile.listFiles() != null) altFile else null
+    }
+
     fun enterSaf(absolutePath: String) {
         safMode = true
         safPath = absolutePath.removePrefix(root.absolutePath).trim('/')
@@ -490,7 +505,8 @@ internal class FileManagerController(
         reloading = entriesOf(currentDir).isEmpty()
         val dir = currentDir
         val list = withContext(Dispatchers.IO) {
-            dir.listFiles()?.map { file ->
+            val sourceDir = dir.takeIf { it.listFiles() != null } ?: altAccessDir(dir) ?: dir
+            sourceDir.listFiles()?.map { file ->
                 FsEntry(file, file.isDirectory, if (file.isFile) file.length() else 0L, file.lastModified())
             }?.sortedWith(
                 compareByDescending<FsEntry> { it.isDir }
@@ -506,7 +522,7 @@ internal class FileManagerController(
             )
                 ?: emptyList()
         }
-        dirUnreadable = dir.exists() && dir.listFiles() == null
+        dirUnreadable = list.isEmpty() && dir.exists()&& dir.listFiles() == null
         if (dirUnreadable) {
             enterSaf(dir.absolutePath)
         }
