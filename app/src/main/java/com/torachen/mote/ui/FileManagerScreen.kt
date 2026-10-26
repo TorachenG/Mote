@@ -739,6 +739,19 @@ private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (Str
         return
     }
 
+    if (mime.startsWith("image/")) {
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mime)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(Intent.createChooser(intent, "用浏览器打开").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
+        }
+        return
+    }
+
     if (mime == "text/html" || name.endsWith(".html") || name.endsWith(".htm")) {
         onOpenInBrowser(uri.toString())
         return
@@ -1519,7 +1532,7 @@ private fun MiuixBreadcrumb(
             )
         }
     }
-    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Box(modifier = Modifier.fillMaxWidth()) {
         BreadcrumbBar(
             items = items,
             highlightIndex = items.lastIndex,
