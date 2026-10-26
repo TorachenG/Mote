@@ -638,7 +638,7 @@ private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (Str
     }
 }
 
-private fun fmFormatSize(bytes: Long): String {
+internal fun fmFormatSize(bytes: Long): String {
     if (bytes <= 0) return ""
     val kb = bytes / 1024.0
     if (kb < 1024) return String.format("%.0f KB", kb)
@@ -647,7 +647,7 @@ private fun fmFormatSize(bytes: Long): String {
     return String.format("%.2f GB", mb / 1024)
 }
 
-private fun fmFormatTime(ms: Long): String {
+internal fun fmFormatTime(ms: Long): String {
     if (ms <= 0) return ""
     return java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         .format(java.util.Date(ms))
