@@ -159,6 +159,7 @@ import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.File as FileIcon
 import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
+import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
@@ -1891,13 +1892,13 @@ private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp
                 imageVector = when {
                     entry.isDir -> MiuixIcons.FolderFill
                     typed != null -> typed.first
-                    else -> MiuixIcons.FileIcon
+                    else -> androidx.compose.material.icons.Icons.Rounded.Description
                 },
                 contentDescription = null,
                 tint = when {
                     entry.isDir -> Color(0xFFFFD966)
                     typed != null -> typed.second
-                    else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    else -> MiuixTheme.colorScheme.primary
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -1938,7 +1939,7 @@ private fun MiuixActionBar(
         CapsuleAction(MiuixIcons.Delete, "删除", enabled = true) { onDelete() }
         var showMore by remember { mutableStateOf(false) }
         Box {
-            CapsuleAction(androidx.compose.material.icons.Icons.Rounded.MoreVert, "更多", enabled = true) { showMore = true }
+            CapsuleAction(MiuixIcons.More, "更多", enabled = true) { showMore = true }
             WindowCascadingListPopup(
                 show = showMore,
                 entries = listOf(
