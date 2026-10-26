@@ -1090,7 +1090,7 @@ private fun FileManagerMiuix(
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .graphicsLayer { alpha = 1f }
                         .overScrollVertical(),
-                    contentPadding = PaddingValues(top = topPadding, bottom = navBottom + 96.dp),
+                    contentPadding = PaddingValues(top = topPadding + 44.dp, bottom = navBottom + 96.dp),
                     overscrollEffect = null,
                 ) {
                     if (controller.safMode) {
@@ -1123,14 +1123,7 @@ private fun FileManagerMiuix(
                             SafEntryRow(entry) { controller.safOpen(entry) }
                         }
                     }
-                    if (controller.currentDir == controller.root) {
-                        item(key = "home_breadcrumb") {
-                            MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
-                        }
-                    }
-                    if (controller.currentDir != controller.root) {
-                        item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
-                    }
+                    item(key = "pull_indicator") { PullIndicatorItem(pullUi) }
                     if (controller.dirUnreadable && !controller.safMode) {
                         item(key = "unreadable_hint") {
                             Card(
@@ -1303,16 +1296,14 @@ private fun FileManagerMiuix(
                     }
                 },
             )
-            val subPage = controller.currentDir != controller.root && !controller.safMode
-            val breadcrumbShift by animateDpAsState(
-                targetValue = if (subPage) 0.dp else headerHeightDp,
-                animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
-                label = "breadcrumbShift",
-            )
-            if (subPage) {
-                Box(modifier = Modifier.graphicsLayer { translationY = breadcrumbShift.toPx() }) {
-                    MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
-                }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = topPadding)
+                    .height(44.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
             }
             }
         }
@@ -2079,14 +2070,7 @@ private fun FileManagerMaterial(
                             SafEntryRow(entry) { controller.safOpen(entry) }
                         }
                     }
-                    if (controller.currentDir == controller.root) {
-                        item(key = "home_breadcrumb") {
-                            MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
-                        }
-                    }
-                    if (controller.currentDir != controller.root) {
-                        item(key = "pull_indicator") { PullIndicatorItem(materialPullUi) }
-                    }
+                    item(key = "pull_indicator") { PullIndicatorItem(materialPullUi) }
                     if (controller.needsAllFiles) {
                         item {
                             Column(
