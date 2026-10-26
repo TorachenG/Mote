@@ -1296,16 +1296,19 @@ private fun FileManagerMiuix(
                     }
                 },
             )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = topPadding)
-                    .height(44.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
             }
-            }
+        }
+
+        // 目录轴固定在标题栏下方（不参与标题栏高度测量）
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(top = topPadding)
+                .height(44.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            MiuixBreadcrumb(controller, controller.currentDir, 26.dp, controller.category)
         }
 
         val liveBarItems = if (controller.selected.isNotEmpty()) controller.selected else barItems
