@@ -256,6 +256,13 @@ internal fun FileManagerHomePage(
                         Spacer(Modifier.height(12.dp))
 
                         // 2 列分类
+                        Spacer(Modifier.height(18.dp))
+                        Text(
+                            text = "文件分类",
+                            fontSize = 13.sp,
+                            color = summary,
+                            modifier = Modifier.padding(horizontal = 26.dp, vertical = 6.dp),
+                        )
                         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                             fmCategories.chunked(2).forEachIndexed { index, pair ->
                                 if (index > 0) Spacer(Modifier.height(10.dp))
@@ -296,7 +303,13 @@ internal fun FileManagerHomePage(
                         }
 
                         if (apps.isNotEmpty()) {
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(18.dp))
+                            Text(
+                                text = "第三方应用文件",
+                                fontSize = 13.sp,
+                                color = summary,
+                                modifier = Modifier.padding(horizontal = 26.dp, vertical = 6.dp),
+                            )
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             ) {
