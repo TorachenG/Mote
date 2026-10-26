@@ -746,14 +746,24 @@ private fun openFile(context: Context, file: java.io.File, onOpenInBrowser: (Str
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(Intent.createChooser(intent, "用浏览器打开").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            intent.addCategory(Intent.CATEGORY_BROWSABLE)
+            context.startActivity(intent)
         } catch (_: Exception) {
         }
         return
     }
 
     if (mime == "text/html" || name.endsWith(".html") || name.endsWith(".htm")) {
-        onOpenInBrowser(uri.toString())
+        try {
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "text/html")
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+        }
         return
     }
 
@@ -1528,7 +1538,7 @@ private fun MiuixBreadcrumb(
         segments.map {
             BreadcrumbItem(
                 path = it.absolutePath,
-                text = if (it == controller.root) "内部存储" else it.name,
+                text = if (it == controller.root) "内部存储" else it.name.replace("\u200E", "").ifBlank { "Android" },
             )
         }
     }

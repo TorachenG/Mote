@@ -295,7 +295,7 @@ internal fun FileManagerHomePage(
 
                         if (apps.isNotEmpty()) {
                             Spacer(Modifier.height(12.dp))
-                            top.yukonga.miuix.kmp.basic.SmallTitle("第三方应用文件")
+                            top.yukonga.miuix.kmp.basic.SmallTitle("应用文件")
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             ) {
@@ -304,9 +304,7 @@ internal fun FileManagerHomePage(
                                         val exists = java.io.File(app.dirPath).exists()
                                         ArrowPreference(
                                             title = app.name,
-                                            summary = if (app.restricted) "受系统限制，无法直接访问" else app.dirPath.removePrefix(
-                                                android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
-                                            ),
+
                                             startAction = {
                                                 val logo = rememberRemoteIcon(app.iconUrl)
                                                 Box(
