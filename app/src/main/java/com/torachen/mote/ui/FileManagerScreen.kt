@@ -825,7 +825,13 @@ internal fun FileManagerPage(
         targetState = controller.showHome,
         modifier = Modifier.fillMaxSize(),
         transitionSpec = {
-            androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+            if (targetState) {
+                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { -it / 3 } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(160)))
+            } else {
+                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it } + fadeIn(tween(200))) togetherWith
+                    (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(160)))
+            }
         },
         label = "home",
     ) { home ->
@@ -1508,6 +1514,25 @@ private fun Modifier.dragSelectModifier(
         autoScroll = 0f
         autoJob?.cancel()
     }
+}
+
+/** 文件管理主页（独立路由页） */
+@Composable
+internal fun FileManagerHomeRoutePage(
+    onBack: () -> Unit,
+    onOpenScanner: () -> Unit,
+    onOpenDir: (String?, String?, String?) -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val controller = androidx.compose.runtime.remember {
+        FileManagerController(
+            context = context,
+            onOpenInBrowser = { },
+            onBack = onBack,
+            onOpenDir = onOpenDir,
+        )
+    }
+    FileManagerHomePage(controller, onOpenScanner)
 }
 
 /** 文件管理目录页（作为应用内路由，带进入/退出动画与预测性返回） */

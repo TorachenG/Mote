@@ -3602,6 +3602,18 @@ private fun RenderPageContent(
                     FileManagerDirRequest.token = System.nanoTime()
                     onPush("file_manager_dir")
                 },
+                onOpenFileHome = { onPush("file_manager_home") },
+            )
+            "file_manager_home" -> FileManagerHomeRoutePage(
+                onBack = { onPop() },
+                onOpenScanner = { onPush("scanner") },
+                onOpenDir = { path, category, title ->
+                    FileManagerDirRequest.path = path
+                    FileManagerDirRequest.category = category
+                    FileManagerDirRequest.title = title
+                    FileManagerDirRequest.token = System.nanoTime()
+                    onPush("file_manager_dir")
+                },
             )
             "file_manager_dir" -> FileManagerDirPage(
                 onBack = { onPop() },

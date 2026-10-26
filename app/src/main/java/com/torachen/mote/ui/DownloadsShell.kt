@@ -66,6 +66,7 @@ fun DownloadsShell(
     onOpenInBrowser: (String) -> Unit,
     onOpenScanner: () -> Unit = {},
     onOpenDir: (String?, String?, String?) -> Unit = { _, _, _ -> },
+    onOpenFileHome: () -> Unit = {},
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
     val tab = pagerState.currentPage
@@ -114,6 +115,7 @@ fun DownloadsShell(
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
             onOpenScanner = onOpenScanner,
+            onOpenFileHome = onOpenFileHome,
         )
         UiMode.Material -> DownloadsShellMaterial(
             fileController = fileController,
@@ -132,6 +134,7 @@ fun DownloadsShell(
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
             onOpenScanner = onOpenScanner,
+            onOpenFileHome = onOpenFileHome,
         )
     }
 }
@@ -154,6 +157,7 @@ private fun DownloadsShellMiuix(
     swipeEnabled: Boolean,
     onOpenDownloadsFolder: () -> Unit,
     onOpenScanner: () -> Unit,
+    onOpenFileHome: () -> Unit,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -251,7 +255,7 @@ private fun DownloadsShellMiuix(
                         )
                     }
                     FloatingBottomBarItem(
-                        onClick = { onTabChange(1) },
+                        onClick = { onOpenFileHome() },
                         modifier = Modifier.defaultMinSize(minWidth = 76.dp),
                     ) {
                         top.yukonga.miuix.kmp.basic.Icon(
@@ -285,7 +289,7 @@ private fun DownloadsShellMiuix(
                     )
                     NavigationBarItem(
                         selected = tab == 1,
-                        onClick = { onTabChange(1) },
+                        onClick = { onOpenFileHome() },
                         icon = MiuixIcons.FolderFill,
                         label = "文件",
                     )
@@ -313,6 +317,7 @@ private fun DownloadsShellMaterial(
     swipeEnabled: Boolean,
     onOpenDownloadsFolder: () -> Unit,
     onOpenScanner: () -> Unit,
+    onOpenFileHome: () -> Unit,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
@@ -337,8 +342,12 @@ private fun DownloadsShellMaterial(
 
         AnimatedVisibility(
             visible = navBarVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(220)) +
+                slideInVertically(tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it / 2 } +
+                scaleIn(tween(320, easing = androidx.compose.animation.core.CubicBezierEasing(0.32f, 0.72f, 0f, 1f)), initialScale = 0.86f),
+            exit = fadeOut(tween(160)) +
+                slideOutVertically(tween(220, easing = androidx.compose.animation.core.CubicBezierEasing(0.4f, 0f, 1f, 1f))) { it / 3 } +
+                scaleOut(tween(220), targetScale = 0.9f),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             M3NavigationBar(containerColor = M3MaterialTheme.colorScheme.surfaceContainer) {
