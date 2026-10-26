@@ -1,6 +1,7 @@
 package com.torachen.mote.ui
 
 import com.torachen.mote.ui.filemanager.FileManagerHomePage
+import com.torachen.mote.ui.filemanager.ShizukuBridge
 
 import android.content.Context
 import android.content.Intent
@@ -212,6 +213,9 @@ internal class FileManagerController(
     var safPath by mutableStateOf("")
     var safEntries by mutableStateOf<List<FmSafStore.Entry>>(emptyList())
     var safFailed by mutableStateOf(false)
+    /** Shizuku 通道模式 */
+    var shizukuMode by mutableStateOf(false)
+
     /** 由页面注入：请求 SAF 目录授权 */
     var onRequestSafGrant: (() -> Unit)? = null
 
@@ -345,10 +349,45 @@ internal class FileManagerController(
         }
     }
 
+    fun enterShizuku(path: String) {
+        shizukuMode = true
+        safMode = true
+        safPath = path
+        loadShizuku()
+    }
+
+    fun shizukuAbsolutePath(): String =
+        android.os.Environment.getExternalStorageDirectory().absolutePath + "/" + safPath.trim('/')
+
+    fun loadShizuku() {
+        scanScope.launch {
+            val base = shizukuAbsolutePath()
+            val entries = withContext(Dispatchers.IO) {
+                ShizukuBridge.list(base)?.map { (name, isDir) ->
+                    FmSafStore.Entry(name, isDir, 0L, 0L, base.trimEnd('/') + "/" + name)
+                }
+            }
+            withContext(Dispatchers.Main) {
+                safEntries = entries.orEmpty()
+                safFailed = entries == null
+            }
+        }
+    }
+
     fun safOpen(entry: FmSafStore.Entry) {
         if (entry.isDir) {
-            safPath = entry.docId.removePrefix("primary:").trim('/')
-            loadSaf()
+            if (shizukuMode) {
+                safPath = entry.docId
+                loadShizuku()
+            } else {
+                safPath = entry.docId.removePrefix("primary:").trim('/')
+                loadSaf()
+            }
+        } else if (shizukuMode) {
+            val local = ShizukuBridge.copyToCache(context, entry.docId)
+            if (local == null || !ShizukuBridge.openLocal(context, local)) {
+                android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
+            }
         } else {
             if (!FmSafStore.open(context, entry.docId)) {
                 android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
@@ -558,6 +597,16 @@ internal class FileManagerController(
     fun deleteSelected() {
         val items = selected
         if (items.isEmpty()) return
+        if (shizukuMode) {
+            scanScope.launch(Dispatchers.IO) {
+                selected.forEach { ShizukuBridge.delete(it.file.absolutePath) }
+                withContext(Dispatchers.Main) {
+                    selected = emptyList()
+                    loadShizuku()
+                }
+            }
+            return
+        }
         val inRecycle = isInRecycle
         scanScope.launch(Dispatchers.IO) {
             if (inRecycle) {
@@ -787,6 +836,15 @@ internal fun FileManagerPage(
         }
     }
 
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        val listener = rikka.shizuku.Shizuku.OnRequestPermissionResultListener { code, grant ->
+            if (code == ShizukuBridge.PERMISSION_REQUEST_CODE && grant == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                controller.enterShizuku(controller.safPath)
+            }
+        }
+        runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(listener) }
+        onDispose { runCatching { rikka.shizuku.Shizuku.removeRequestPermissionResultListener(listener) } }
+    }
     LaunchedEffect(controller.currentDir) { controller.reload() }
     LaunchedEffect(Unit) { controller.purgeRecycleBin() }
     LaunchedEffect(controller.currentDir, controller.category) {
@@ -1169,6 +1227,21 @@ private fun FileManagerMiuix(
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             Text("选择目录授权")
+                                        }
+                                        if (ShizukuBridge.binderAlive()) {
+                                            Spacer(Modifier.height(8.dp))
+                                            top.yukonga.miuix.kmp.basic.Button(
+                                                onClick = {
+                                                    if (ShizukuBridge.hasPermission()) {
+                                                        controller.enterShizuku(controller.safPath)
+                                                    } else {
+                                                        ShizukuBridge.requestPermission()
+                                                    }
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Text("使用 Shizuku 访问")
+                                            }
                                         }
                                     }
                                 }

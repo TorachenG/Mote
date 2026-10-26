@@ -184,6 +184,10 @@ tasks.named("preBuild") {
 }
 
 dependencies {
+    // ===== Shizuku（访问 Android/data） =====
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+
     // ===== AndroidX 基础库 =====
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
