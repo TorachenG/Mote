@@ -252,6 +252,7 @@ internal fun FileManagerHomePage(
                         }
 
                         // 2 列分类
+                        Spacer(Modifier.height(12.dp))
                         top.yukonga.miuix.kmp.basic.SmallTitle("文件分类")
                         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                             fmCategories.chunked(2).forEachIndexed { index, pair ->
