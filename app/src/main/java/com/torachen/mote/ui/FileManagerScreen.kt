@@ -1377,32 +1377,6 @@ private fun FileManagerMiuix(
     }
 }
 
-/** 列表项依次出现：轻微上移 + 淡入，带 iOS 式缓动 */
-@Composable
-private fun RevealIn(index: Int, active: Boolean, content: @Composable () -> Unit) {
-    var shown by remember { mutableStateOf(false) }
-    LaunchedEffect(active) {
-        shown = false
-        if (active) {
-            kotlinx.coroutines.delay(40L + (index.coerceAtMost(14) * 26).toLong())
-            shown = true
-        }
-    }
-    val p by animateFloatAsState(
-        targetValue = if (shown) 1f else 0f,
-        animationSpec = tween(340, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
-        label = "reveal",
-    )
-    Box(
-        modifier = Modifier.graphicsLayer {
-            alpha = p
-            translationY = (1f - p) * 26.dp.toPx()
-        },
-    ) {
-        content()
-    }
-}
-
 @Composable
 private fun MiuixBreadcrumb(
     controller: FileManagerController,
@@ -1797,7 +1771,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
     }
     var rowHeightPx by remember { mutableFloatStateOf(1f) }
     var paintDy by remember { mutableFloatStateOf(0f) }
-    var longPressHandled by remember { mutableStateOf(false) }
+    var lastLongPressAt by remember { mutableStateOf(0L) }
 
     Row(
         modifier = Modifier
@@ -1806,7 +1780,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
             .pointerInput(entry.file.absolutePath) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = {
-                        longPressHandled = true
+                        lastLongPressAt = System.currentTimeMillis()
                         controller.enterSelection(entry)
                         controller.beginPaint(rowIndex, rowHeightPx)
                     },
@@ -1815,7 +1789,11 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                         paintDy += amount.y
                         controller.paintBy(paintDy)
                     },
-                    onDragEnd = { paintDy = 0f; controller.endPaint() },
+                    onDragEnd = {
+                        paintDy = 0f
+                        controller.endPaint()
+                        lastLongPressAt = System.currentTimeMillis()
+                    },
                     onDragCancel = { paintDy = 0f; controller.endPaint() },
                 )
             }
@@ -1867,12 +1845,32 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
     }
 }
 
+/** 读取 APK 自身的应用图标 */
+private fun loadApkIcon(context: android.content.Context, file: java.io.File): ImageBitmap? {
+    return try {
+        val pm = context.packageManager
+        val info = pm.getPackageArchiveInfo(file.absolutePath, 0) ?: return null
+        val app = info.applicationInfo ?: return null
+        app.sourceDir = file.absolutePath
+        app.publicSourceDir = file.absolutePath
+        val drawable = app.loadIcon(pm) as? android.graphics.drawable.BitmapDrawable ?: return null
+        drawable.bitmap?.asImageBitmap()
+    } catch (_: Throwable) {
+        null
+    }
+}
+
 @Composable
 private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp) {
+    val context = LocalContext.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, entry.file.absolutePath) {
-        value = if (!entry.isDir && isImage(entry.file.name)) {
-            withContext(Dispatchers.IO) { loadThumbnail(entry.file) }
-        } else null
+        value = when {
+            entry.isDir -> null
+            isImage(entry.file.name) -> withContext(Dispatchers.IO) { loadThumbnail(entry.file) }
+            entry.file.name.endsWith(".apk", ignoreCase = true) ->
+                withContext(Dispatchers.IO) { loadApkIcon(context, entry.file) }
+            else -> null
+        }
     }
     Box(
         modifier = Modifier
