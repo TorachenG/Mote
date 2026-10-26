@@ -220,6 +220,11 @@ internal class FileManagerController(
     /** 独立路由页模式：返回根目录的上一级应退出页面，而不是切回主页 */
     var routeMode by mutableStateOf(false)
 
+    /** 当前是否在回收站目录 */
+    val isInRecycle: Boolean
+        get() = currentDir.absolutePath == recycleRoot.absolutePath ||
+            currentDir.absolutePath.startsWith(recycleRoot.absolutePath + "/")
+
     /** 从快捷方式直接进入时：未点过目录轴前，返回直接退出页面 */
     var upNavEnabled by mutableStateOf(false)
 
@@ -369,6 +374,10 @@ internal class FileManagerController(
         }
         if (category != null) {
             if (routeMode) onBack() else closeCategory()
+            return true
+        }
+        if (isInRecycle && routeMode) {
+            onBack()
             return true
         }
         if (currentDir != root) {
@@ -1056,7 +1065,7 @@ private fun FileManagerMiuix(
 
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
-    val hasBreadcrumbRow = !controller.safMode && controller.category == null
+    val hasBreadcrumbRow = !controller.safMode && controller.category == null && !controller.isInRecycle
 
     // 退出多选时用上一次的选择渲染，保证胶囊栏有完整的退出动画
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
@@ -1369,11 +1378,16 @@ private fun FileManagerMiuix(
 
 /** 列表项依次出现：轻微上移 + 淡入，带 iOS 式缓动 */
 @Composable
-private fun RevealIn(index: Int, content: @Composable () -> Unit) {
+private fun RevealIn(index: Int, active: Boolean, content: @Composable () -> Unit) {
     var shown by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay((index.coerceAtMost(14) * 26).toLong())
-        shown = true
+    LaunchedEffect(active) {
+        if (!active) {
+            shown = false
+        } else {
+            shown = false
+            kotlinx.coroutines.delay((index.coerceAtMost(14) * 26).toLong())
+            shown = true
+        }
     }
     val p by animateFloatAsState(
         targetValue = if (shown) 1f else 0f,

@@ -179,15 +179,14 @@ internal fun FileManagerHomePage(
                                     ) {
                                         row.forEach { tool ->
                                             HomeToolCell(tool, onSurface) {
-                                                when (tool.tool) {
-                                                    FmTool.SCAN -> onOpenScanner()
-                                                    FmTool.TRASH -> controller.onOpenDir(
-                                controller.recycleRoot.absolutePath,
-                                null,
-                                "回收站",
-                                false,
-                            )
-                                                    else -> controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", false)
+                                                // 仅保留回收站，其它功能不执行任何动作
+                                                if (tool.tool == FmTool.TRASH) {
+                                                    controller.onOpenDir(
+                                                        controller.recycleRoot.absolutePath,
+                                                        null,
+                                                        "回收站",
+                                                        false,
+                                                    )
                                                 }
                                             }
                                         }
