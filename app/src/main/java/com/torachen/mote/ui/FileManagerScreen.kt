@@ -217,6 +217,9 @@ internal class FileManagerController(
     /** 是否显示主页（与目录列表互斥） */
     var showHome by mutableStateOf(true)
 
+    /** 独立路由页模式：返回根目录的上一级应退出页面，而不是切回主页 */
+    var routeMode by mutableStateOf(false)
+
     fun enterList(dir: java.io.File) {
         showHome = false
         category = null
@@ -367,7 +370,11 @@ internal class FileManagerController(
             return true
         }
         if (!showHome) {
-            goHome()
+            if (routeMode) {
+                onBack()
+            } else {
+                goHome()
+            }
             return true
         }
         return false
@@ -1526,6 +1533,7 @@ internal fun FileManagerDirPage(
     // 首帧前就落到目标目录，避免先渲染主页再动画切换（那会产生额外的淡入淡出）
     val controller = androidx.compose.runtime.remember(initialPath, initialCategory, requestToken) {
         FileManagerController(context, onOpenInBrowser, onBack).apply {
+            routeMode = true
             showHome = false
             initialPath?.let { currentDir = java.io.File(it) }
             initialCategory?.let { name ->
