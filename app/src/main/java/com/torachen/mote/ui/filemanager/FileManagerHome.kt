@@ -208,10 +208,10 @@ internal fun FileManagerHomePage(
                                 startAction = {
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(27.5.dp)
                                             .background(
                                                 MiuixTheme.colorScheme.primary,
-                                                RoundedCornerShape(9.dp),
+                                                RoundedCornerShape(8.25.dp),
                                             ),
                                         contentAlignment = Alignment.Center,
                                     ) {
@@ -219,7 +219,7 @@ internal fun FileManagerHomePage(
                                             imageVector = Icons.Rounded.PhoneAndroid,
                                             contentDescription = null,
                                             tint = Color.White,
-                                            modifier = Modifier.size(26.dp),
+                                            modifier = Modifier.size(23.dp),
                                         )
                                     }
                                 },
@@ -230,10 +230,10 @@ internal fun FileManagerHomePage(
                                 startAction = {
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(27.5.dp)
                                             .background(
                                                 Color(0xFFE8452C),
-                                                RoundedCornerShape(9.dp),
+                                                RoundedCornerShape(8.25.dp),
                                             ),
                                         contentAlignment = Alignment.Center,
                                     ) {
@@ -241,7 +241,7 @@ internal fun FileManagerHomePage(
                                             imageVector = Icons.Rounded.Delete,
                                             contentDescription = null,
                                             tint = Color.White,
-                                            modifier = Modifier.size(26.dp),
+                                            modifier = Modifier.size(23.dp),
                                         )
                                     }
                                 },
@@ -271,7 +271,7 @@ internal fun FileManagerHomePage(
                                                             .size(34.dp)
                                                             .background(
                                                                 if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
-                                                                RoundedCornerShape(9.dp),
+                                                                RoundedCornerShape(8.25.dp),
                                                             ),
                                                         contentAlignment = Alignment.Center,
                                                     ) {
@@ -279,7 +279,7 @@ internal fun FileManagerHomePage(
                                                             imageVector = entry.icon,
                                                             contentDescription = entry.category.label,
                                                             tint = Color.White,
-                                                            modifier = Modifier.size(26.dp),
+                                                            modifier = Modifier.size(23.dp),
                                                         )
                                                     }
                                                 },

@@ -3617,8 +3617,18 @@ private fun RenderPageContent(
                 fromShortcut = FileManagerDirRequest.fromShortcut,
                 onOpenFileBrowser = { onPush("file_browser") },
             )
-            "file_browser" -> com.torachen.mote.ui.filemanager.LocalFileBrowserPage(
-                onBack = { onPop() },
+            "file_browser" -> BrowserScreen(
+                onOpenSettings = { onPush("settings_main") },
+                onOpenScanner = { onPush("scanner") },
+                onOpenDownloads = { onPush("downloads") },
+                onOpenScripts = { onPush("scripts") },
+                onOpenNewTabCustomization = {
+                    SettingsLayoutNavArgs.initialTab = 1
+                    onPush("settings_layout")
+                },
+                onOpenCrop = { onPush("crop") },
+                initialUrl = com.torachen.mote.ui.filemanager.LocalFileBrowserRequest.url,
+                isTop = isTop,
             )
             "download_task_detail" -> DownloadTaskDetailScreen(
                 onBack = { onPop() }
@@ -3821,6 +3831,7 @@ fun BrowserScreen(
     onOpenScripts: () -> Unit = {},
     onOpenNewTabCustomization: () -> Unit,
     onOpenCrop: () -> Unit = {},
+    initialUrl: String? = null,
     isTop: Boolean
 ) {
     val context = LocalContext.current
@@ -5699,6 +5710,18 @@ fun BrowserScreen(
         val text = raw.trim()
         if (text.isNotBlank()) {
             loadUrlInActive(text)
+        }
+    }
+
+    LaunchedEffect(initialUrl) {
+        val url = initialUrl ?: return@LaunchedEffect
+        var waited = 0
+        while (activeWindowId == null && waited < 3000) {
+            delay(50); waited += 50
+        }
+        activeWindowId?.let { id ->
+            delay(120)
+            runCatching { navigateToUrl(id, url) }
         }
     }
 

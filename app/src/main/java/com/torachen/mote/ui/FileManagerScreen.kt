@@ -342,7 +342,8 @@ internal class FileManagerController(
     private fun canonical(dir: java.io.File): java.io.File {
         val base = altBase ?: return dir
         if (dir.absolutePath.contains("\u200E")) return dir
-        val rel = dir.absolutePath.removePrefix(root.absolutePath)
+        val plain = dir.absolutePath.replace("\u200E", "")
+        val rel = plain.removePrefix(root.absolutePath)
         return java.io.File(base + rel)
     }
 
@@ -1547,7 +1548,8 @@ private fun MiuixBreadcrumb(
         segments.map {
             BreadcrumbItem(
                 path = it.absolutePath,
-                text = if (it == controller.root) "内部存储" else it.name.replace("\u200E", "").ifBlank { "Android" },
+                text = if (it.absolutePath.replace("\u200E", "") == controller.root.absolutePath) "内部存储"
+                else it.name.replace("\u200E", "").ifBlank { "Android" },
             )
         }
     }
