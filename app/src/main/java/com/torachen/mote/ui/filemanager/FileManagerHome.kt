@@ -162,42 +162,6 @@ internal fun FileManagerHomePage(
                             }
                             Spacer(Modifier.height(12.dp))
                         }
-                        // 5×2 功能区
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                            insideMargin = PaddingValues(0.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 14.dp),
-                            ) {
-                                fmHomeTools.chunked(5).forEachIndexed { rowIndex, row ->
-                                    if (rowIndex > 0) Spacer(Modifier.height(14.dp))
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                    ) {
-                                        row.forEach { tool ->
-                                            HomeToolCell(tool, onSurface) {
-                                                // 仅保留回收站，其它功能不执行任何动作
-                                                if (tool.tool == FmTool.TRASH) {
-                                                    controller.onOpenDir(
-                                                        controller.recycleRoot.absolutePath,
-                                                        null,
-                                                        "回收站",
-                                                        false,
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        repeat(5 - row.size) { Spacer(Modifier.width(40.dp)) }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
                         // 存储环
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -264,6 +228,39 @@ internal fun FileManagerHomePage(
 
                         Spacer(Modifier.height(12.dp))
 
+                        // 回收站
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                        ) {
+                            ArrowPreference(
+                                title = "回收站",
+                                summary = "删除的文件保留 30 天",
+                                startAction = {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .background(
+                                                MiuixTheme.colorScheme.surfaceContainer,
+                                                RoundedCornerShape(9.dp),
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Delete,
+                                            contentDescription = null,
+                                            tint = onSurface,
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    controller.onOpenDir(controller.recycleRoot.absolutePath, null, "回收站", false)
+                                },
+                            )
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
                         // 2 列分类
                         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                             fmCategories.chunked(2).forEachIndexed { index, pair ->
@@ -304,66 +301,6 @@ internal fun FileManagerHomePage(
                             }
                         }
 
-                        if (apps.isNotEmpty()) {
-                            Spacer(Modifier.height(12.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    apps.forEach { app ->
-                                        val exists = java.io.File(app.dirPath).exists()
-                                        ArrowPreference(
-                                            title = app.name,
-                                            summary = if (app.restricted) "受系统限制，无法直接访问" else app.dirPath.removePrefix(
-                                                android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
-                                            ),
-                                            startAction = {
-                                                val logo = rememberRemoteIcon(app.iconUrl)
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(34.dp)
-                                                        .clip(RoundedCornerShape(9.dp)),
-                                                    contentAlignment = Alignment.Center,
-                                                ) {
-                                                    if (logo != null) {
-                                                        Image(
-                                                            bitmap = logo,
-                                                            contentDescription = app.name,
-                                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                                                            modifier = Modifier.fillMaxSize(),
-                                                        )
-                                                    } else {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .fillMaxSize()
-                                                                .background(app.color),
-                                                            contentAlignment = Alignment.Center,
-                                                        ) {
-                                                            Text(
-                                                                text = app.name.take(1),
-                                                                fontSize = 15.sp,
-                                                                color = Color.White,
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            onClick = {
-                                                when {
-                                                    app.restricted -> controller.onOpenDir(app.dirPath, null, app.name, true)
-                                                    exists -> controller.onOpenDir(app.dirPath, null, app.name, true)
-                                                    else -> android.widget.Toast.makeText(
-                                                        controller.context,
-                                                        "${app.name} 的下载目录不存在",
-                                                        android.widget.Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }

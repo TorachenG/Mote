@@ -1819,7 +1819,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                 )
             }
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            .padding(start = 26.dp, end = 26.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         EntryThumb(entry)
@@ -1867,13 +1867,19 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
 }
 
 @Composable
-private fun EntryThumb(entry: FsEntry) {
+private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, entry.file.absolutePath) {
         value = if (!entry.isDir && isImage(entry.file.name)) {
             withContext(Dispatchers.IO) { loadThumbnail(entry.file) }
         } else null
     }
-    Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MiuixTheme.colorScheme.surfaceContainer),
+        contentAlignment = Alignment.Center,
+    ) {
         if (bitmap != null) {
             Image(
                 bitmap = bitmap!!,
@@ -1895,7 +1901,7 @@ private fun EntryThumb(entry: FsEntry) {
                     typed != null -> typed.second
                     else -> MiuixTheme.colorScheme.onSurfaceVariantSummary
                 },
-                modifier = Modifier.size(if (entry.isDir) 30.dp else 26.dp),
+                modifier = Modifier.size(size * if (entry.isDir) 0.7f else 0.58f),
             )
         }
     }
