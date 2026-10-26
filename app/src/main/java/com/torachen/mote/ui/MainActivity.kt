@@ -3208,6 +3208,7 @@ fun AppRoot() {
 
         progress = 0f
         pageStack.add(PageEntry(id = UUID.randomUUID().toString(), route = route))
+        android.util.Log.d("MoteNav", "PUSH route=" + route + " stack=" + pageStack.joinToString(" > ") { it.route })
         animJob = scope.launch {
             try {
                 withFrameNanos { }
@@ -3251,6 +3252,7 @@ fun AppRoot() {
                         progress = 1f
                         // ★ 按 id 删，不按 lastIndex 删：栈在此期间变化也不会删错
                         pageStack.removeAll { it.id == target.id }
+                        android.util.Log.d("MoteNav", "POP route=" + target.route + " stack=" + pageStack.joinToString(" > ") { it.route })
                         exitingPageId = null
                     }
                 }
@@ -3600,10 +3602,6 @@ private fun RenderPageContent(
                     FileManagerDirRequest.category = category
                     FileManagerDirRequest.title = title
                     FileManagerDirRequest.token = System.nanoTime()
-                    // 若上一次的目录页还在栈顶（退出动画未完成），先正常出栈再入栈，避免被路由去重拦截
-                    if (PageNavigationStateHolder.pageStack.lastOrNull()?.route == "file_manager_dir") {
-                        onPop()
-                    }
                     onPush("file_manager_dir")
                 },
             )

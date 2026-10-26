@@ -825,13 +825,7 @@ internal fun FileManagerPage(
         targetState = controller.showHome,
         modifier = Modifier.fillMaxSize(),
         transitionSpec = {
-            if (targetState) {
-                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { -it / 3 } + fadeIn(tween(200))) togetherWith
-                    (slideOutHorizontally(tween(260)) { it } + fadeOut(tween(160)))
-            } else {
-                (slideInHorizontally(tween(300, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f))) { it } + fadeIn(tween(200))) togetherWith
-                    (slideOutHorizontally(tween(260)) { -it / 3 } + fadeOut(tween(160)))
-            }
+            androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
         },
         label = "home",
     ) { home ->
