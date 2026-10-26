@@ -368,7 +368,7 @@ internal class FileManagerController(
             return true
         }
         if (category != null) {
-            closeCategory()
+            if (routeMode) onBack() else closeCategory()
             return true
         }
         if (currentDir != root) {
@@ -558,11 +558,21 @@ internal class FileManagerController(
     }
 
     fun purgeRecycleBin() {
-        scanScope.launch {
-            val expire = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+        scanScope.launch(Dispatchers.IO) {
+            val expire = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
             recycleRoot.listFiles()?.forEach { bucket ->
-                val ts = bucket.name.toLongOrNull() ?: return@forEach
-                if (ts < expire) bucket.deleteRecursively()
+                if (!bucket.isDirectory) return@forEach
+                // 每个文件单独按修改时间计算 30 天
+                bucket.walkTopDown().filter { it.isFile }.forEach { file ->
+                    if (file.lastModified() < expire) {
+                        runCatching { file.delete() }
+                    }
+                }
+                // 清理空目录
+                bucket.walkBottomUp().filter { it.isDirectory && it != bucket }.forEach { dir ->
+                    if (dir.listFiles()?.isEmpty() != false) runCatching { dir.delete() }
+                }
+                if (bucket.listFiles()?.isEmpty() != false) runCatching { bucket.delete() }
             }
         }
     }
@@ -831,14 +841,8 @@ internal fun FileManagerPage(
     }
 
     val onTool: (FmTool) -> Unit = { tool ->
-        when (tool) {
-            FmTool.COMPRESS, FmTool.EXTRACT -> {
-                Toast.makeText(context, "请在下方列表中选择文件后使用底部操作", Toast.LENGTH_SHORT).show()
-            }
-            FmTool.SCAN -> onOpenScanner()
-            FmTool.TRASH -> controller.openRecycleBin()
-            else -> Toast.makeText(context, "该功能暂未开放", Toast.LENGTH_SHORT).show()
-        }
+        // 其余功能先不下发任何行为，仅保留回收站
+        if (tool == FmTool.TRASH) controller.openRecycleBin()
     }
 
     AnimatedContent(
@@ -1360,6 +1364,29 @@ private fun FileManagerMiuix(
             }
         }
 
+    }
+}
+
+/** 列表项依次出现：轻微上移 + 淡入，带 iOS 式缓动 */
+@Composable
+private fun RevealIn(index: Int, content: @Composable () -> Unit) {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay((index.coerceAtMost(14) * 26).toLong())
+        shown = true
+    }
+    val p by animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = tween(340, easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)),
+        label = "reveal",
+    )
+    Box(
+        modifier = Modifier.graphicsLayer {
+            alpha = p
+            translationY = (1f - p) * 26.dp.toPx()
+        },
+    ) {
+        content()
     }
 }
 

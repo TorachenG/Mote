@@ -19,6 +19,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -411,8 +414,21 @@ internal fun FileManagerHomePage(
 @Composable
 private fun HomeToolCell(tool: FmToolEntry, onSurface: Color, onClick: () -> Unit) {
     val remote = tool.remoteIcon?.let { rememberRemoteIcon(it) }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.9f else 1f, tween(120), label = "toolScale")
     Column(
-        modifier = Modifier.width(40.dp).clickable(onClick = onClick),
+        modifier = Modifier
+            .width(40.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
