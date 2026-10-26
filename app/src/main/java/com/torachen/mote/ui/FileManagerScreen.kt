@@ -1,5 +1,7 @@
 package com.torachen.mote.ui
 
+import com.torachen.mote.ui.filemanager.FileManagerHomePage
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap

@@ -1,5 +1,18 @@
-package com.torachen.mote.ui
+package com.torachen.mote.ui.filemanager
 
+import com.torachen.mote.ui.FileManagerController
+import com.torachen.mote.ui.fmFormatGb
+import com.torachen.mote.ui.fmFormatSize
+import com.torachen.mote.ui.rememberRemoteIcon
+import com.torachen.mote.ui.requestAllFiles
+import com.torachen.mote.ui.MainActivity
+import com.torachen.mote.ui.fmStorageUsage
+import com.torachen.mote.ui.buildBackCardMaterialModifier
+import com.torachen.mote.ui.FmToolEntry
+import com.torachen.mote.ui.FmTool
+import com.torachen.mote.ui.fmCategories
+import com.torachen.mote.ui.FileCategory
+import com.torachen.mote.ui.SettingsBackButton
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
