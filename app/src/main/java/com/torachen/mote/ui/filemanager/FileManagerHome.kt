@@ -251,10 +251,6 @@ internal fun FileManagerHomePage(
                             )
                         }
 
-                        Spacer(Modifier.height(12.dp))
-
-                        Spacer(Modifier.height(12.dp))
-
                         // 2 列分类
                         top.yukonga.miuix.kmp.basic.SmallTitle("文件分类")
                         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
@@ -297,6 +293,7 @@ internal fun FileManagerHomePage(
                         }
 
                         if (apps.isNotEmpty()) {
+                            Spacer(Modifier.height(12.dp))
                             top.yukonga.miuix.kmp.basic.SmallTitle("第三方应用文件")
                             Card(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
