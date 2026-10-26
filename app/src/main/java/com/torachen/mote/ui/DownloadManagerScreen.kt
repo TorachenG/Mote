@@ -986,7 +986,7 @@ private fun DownloadManagerScreenMiuix(
         ActivityResultContracts.RequestPermission()
     ) { /* 忽略结果 */ }
     LaunchedEffect(Unit) {
-        MoteDownloader.ensureLoaded()
+        withContext(Dispatchers.IO) { MoteDownloader.ensureLoaded() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)

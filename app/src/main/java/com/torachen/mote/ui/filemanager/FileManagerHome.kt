@@ -179,7 +179,7 @@ internal fun FileManagerHomePage(
                                                 when (tool.tool) {
                                                     FmTool.SCAN -> onOpenScanner()
                                                     FmTool.TRASH -> controller.openRecycleBin()
-                                                    else -> controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", true)
+                                                    else -> controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", false)
                                                 }
                                             }
                                         }
@@ -251,7 +251,7 @@ internal fun FileManagerHomePage(
                                         )
                                     }
                                 },
-                                onClick = { controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", true) },
+                                onClick = { controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", false) },
                             )
                         }
 
@@ -288,7 +288,7 @@ internal fun FileManagerHomePage(
                                                     }
                                                 },
                                                 onClick = {
-                                                    controller.onOpenDir(controller.root.absolutePath, entry.category.name, entry.category.label, true)
+                                                    controller.onOpenDir(controller.root.absolutePath, entry.category.name, entry.category.label, false)
                                                 },
                                             )
                                         }

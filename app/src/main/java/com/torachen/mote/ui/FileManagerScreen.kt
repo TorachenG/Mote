@@ -1369,7 +1369,7 @@ private fun MiuixBreadcrumb(
     dir: java.io.File,
     startPadding: androidx.compose.ui.unit.Dp,
     category: FileCategory? = null,
-    onNavigate: () -> Unit = {},
+    onNavigateUp: () -> Unit = {},
 ) {
     val inRecycle = dir.absolutePath.startsWith(controller.recycleRoot.absolutePath)
     val segments = remember(dir) {
@@ -1393,7 +1393,7 @@ private fun MiuixBreadcrumb(
             items = items,
             highlightIndex = items.lastIndex,
             onItemClick = { index ->
-                onNavigate()
+                if (index < items.lastIndex) onNavigateUp()
                 if (category != null) {
                     controller.closeCategory()
                 } else {
