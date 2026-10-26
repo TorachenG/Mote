@@ -181,7 +181,12 @@ internal fun FileManagerHomePage(
                                             HomeToolCell(tool, onSurface) {
                                                 when (tool.tool) {
                                                     FmTool.SCAN -> onOpenScanner()
-                                                    FmTool.TRASH -> controller.openRecycleBin()
+                                                    FmTool.TRASH -> controller.onOpenDir(
+                                controller.recycleRoot.absolutePath,
+                                null,
+                                "回收站",
+                                false,
+                            )
                                                     else -> controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", false)
                                                 }
                                             }
