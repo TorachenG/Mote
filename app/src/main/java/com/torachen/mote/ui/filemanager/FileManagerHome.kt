@@ -208,6 +208,7 @@ internal fun FileManagerHomePage(
                                 startAction = {
                                     Box(
                                         modifier = Modifier
+                                            .padding(end = 6.dp)
                                             .size(27.5.dp)
                                             .background(
                                                 MiuixTheme.colorScheme.primary,
@@ -230,6 +231,7 @@ internal fun FileManagerHomePage(
                                 startAction = {
                                     Box(
                                         modifier = Modifier
+                                            .padding(end = 6.dp)
                                             .size(27.5.dp)
                                             .background(
                                                 Color(0xFFE8452C),
@@ -268,7 +270,8 @@ internal fun FileManagerHomePage(
                                                 startAction = {
                                                     Box(
                                                         modifier = Modifier
-                                                            .size(34.dp)
+                                                            .padding(end = 6.dp)
+                                                            .size(27.5.dp)
                                                             .background(
                                                                 if (entry.usePrimary) MiuixTheme.colorScheme.primary else entry.color,
                                                                 RoundedCornerShape(8.25.dp),
@@ -309,8 +312,9 @@ internal fun FileManagerHomePage(
                                                 val logo = rememberRemoteIcon(app.iconUrl)
                                                 Box(
                                                     modifier = Modifier
-                                                        .size(34.dp)
-                                                        .clip(RoundedCornerShape(9.dp)),
+                                                        .padding(end = 6.dp)
+                                                        .size(27.5.dp)
+                                                        .clip(RoundedCornerShape(8.25.dp)),
                                                     contentAlignment = Alignment.Center,
                                                 ) {
                                                     if (logo != null) {
