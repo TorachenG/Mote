@@ -13,6 +13,9 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -179,6 +182,84 @@ private data class WebSecurityActions(
 // ============================================================
 // 入口
 // ============================================================
+
+
+/** 顶部盾牌与三张统计卡 */
+@Composable
+private fun SecurityShieldHeader() {
+    val context = LocalContext.current
+    val smart = WebSecurityStats.count(context, WebSecurityStats.CATEGORY_SMART)
+    val privacy = WebSecurityStats.count(context, WebSecurityStats.CATEGORY_PRIVACY)
+    val permission = WebSecurityStats.count(context, WebSecurityStats.CATEGORY_PERMISSION)
+    val total = smart + privacy + permission
+    val primary = MiuixTheme.colorScheme.primary
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(top = 10.dp, bottom = 14.dp)
+                .size(148.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(148.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(primary.copy(alpha = 0.22f), Color.Transparent),
+                        ),
+                        CircleShape,
+                    ),
+            )
+            Icon(
+                imageVector = Icons.Rounded.Shield,
+                contentDescription = null,
+                tint = primary,
+                modifier = Modifier.size(112.dp),
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = total.toString(), fontSize = 30.sp, color = Color.White)
+                Text(text = "累计防护", fontSize = 10.sp, color = Color.White.copy(alpha = 0.9f))
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SecurityStatCard("$smart", "智能拦截", Modifier.weight(1f))
+            SecurityStatCard("$privacy", "隐私保护", Modifier.weight(1f))
+            SecurityStatCard("$permission", "权限管控", Modifier.weight(1f))
+        }
+
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun SecurityStatCard(count: String, label: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = "$count 次",
+                fontSize = MiuixTheme.textStyles.body1.fontSize,
+                color = MiuixTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = label,
+                fontSize = MiuixTheme.textStyles.body2.fontSize,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
+    }
+}
 
 @Composable
 fun SettingsWebSecurityPage(
@@ -381,6 +462,8 @@ private fun SettingsWebSecurityMiuix(
                 ) {
                     item(key = "content") {
                         Column(modifier = Modifier.fillMaxWidth()) {
+
+                            SecurityShieldHeader()
 
                             SmallTitle("网页权限")
 

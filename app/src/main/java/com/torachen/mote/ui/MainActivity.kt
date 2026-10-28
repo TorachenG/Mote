@@ -10621,6 +10621,11 @@ private fun createWebView(
                                 if (shouldBlock) {
                                     post {
                                         SecurityStateHolder.onTrackerBlocked(url, trackerCategory)
+                                        WebSecurityStats.bump(
+                                            context,
+                                            if (trackerCategory == "ad") WebSecurityStats.CATEGORY_SMART
+                                            else WebSecurityStats.CATEGORY_PRIVACY,
+                                        )
                                     }
                                     return WebResourceResponse(
                                         "text/plain", "utf-8",
@@ -10665,6 +10670,7 @@ private fun createWebView(
                         val currentHost = view?.url?.let { Uri.parse(it).host.orEmpty() }.orEmpty()
                         val targetHost = request.url.host.orEmpty()
                         if (currentHost.isNotBlank() && targetHost.isNotBlank() && currentHost != targetHost) {
+                            WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_SMART)
                             Toast.makeText(context, "网页重定向已拦截：$targetHost", Toast.LENGTH_SHORT).show()
                             return true
                         }
@@ -10734,6 +10740,13 @@ private fun createWebView(
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
                     if (secPrefs.getBoolean("web_disable_webrtc", false)) {
                         view?.evaluateJavascript(JS_DISABLE_WEBRTC, null)
+                        WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PRIVACY)
+                    }
+                    var permissionBlocks = 0
+                    if (!secPrefs.getBoolean("web_accept_cookie", true)) permissionBlocks++
+                    if (!secPrefs.getBoolean("web_remember_form", true)) permissionBlocks++
+                    if (permissionBlocks > 0) {
+                        WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PERMISSION, permissionBlocks)
                     }
                 } catch (_: Exception) {}
                 if (url != null) onFaviconFromDomain(url)
@@ -11117,6 +11130,7 @@ private fun createWebView(
                 if (riskyExt.any { lowerName.endsWith(it) } ||
                     mimetype.contains("vnd.android.package-archive", true)
                 ) {
+                    WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_SMART)
                     Toast.makeText(
                         context,
                         "下载防护已拦截可疑文件：$fileName",
