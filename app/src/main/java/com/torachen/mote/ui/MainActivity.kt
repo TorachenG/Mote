@@ -11147,6 +11147,9 @@ private fun createWebView(
                     layoutParams = ViewGroup.LayoutParams(1, 1)
                     alpha = 0f
                     settings.javaScriptEnabled = true
+        val permSettings = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+        settings.mediaPlaybackRequiresUserGesture = !permSettings.getBoolean("web_perm_autoplay", true)
+        settings.setGeolocationEnabled(permSettings.getBoolean("web_perm_location", true))
                     settings.domStorageEnabled = true
                 }
                 var handled = false
@@ -11194,6 +11197,16 @@ private fun createWebView(
                     fileChooserCallback.value = null
                     filePathCallback?.onReceiveValue(null); false
                 }
+            }
+
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String?,
+                callback: android.webkit.GeolocationPermissions.Callback?,
+            ) {
+                if (callback == null) return
+                val allow = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+                    .getBoolean("web_perm_location", true)
+                callback.invoke(origin, allow, false)
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {

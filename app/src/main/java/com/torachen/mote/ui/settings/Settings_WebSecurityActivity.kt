@@ -515,18 +515,7 @@ private fun SettingsWebSecurityMiuix(
                                         onCheckedChange = actions.onRememberFormChange,
                                     )
                                 }
-                                SearchableItem(
-                                    title = "网页权限",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_web_permissions",
-                                ) {
-                                    ArrowPreference(
-                                        title = "网页权限",
-                                        summary = "管理相机、定位、剪贴板等权限",
-                                        onClick = actions.onOpenWebPermissions,
-                                    )
-                                }
+
                                 SearchableItem(
                                     title = "接受 Cookie",
                                     pageRoute = "settings_web_security",
@@ -538,6 +527,18 @@ private fun SettingsWebSecurityMiuix(
                                         summary = "允许网站保存和读取 Cookie",
                                         checked = state.acceptCookieEnabled,
                                         onCheckedChange = actions.onAcceptCookieChange,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "网页权限",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_web_permissions",
+                                ) {
+                                    ArrowPreference(
+                                        title = "网页权限",
+                                        summary = "管理相机、定位、剪贴板等权限",
+                                        onClick = actions.onOpenWebPermissions,
                                     )
                                 }
                             }
@@ -840,6 +841,10 @@ private fun SettingsWebSecurityMaterial(
                     .padding(innerPadding),
                 contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
             ) {
+                item(key = "shield_header") {
+                    SecurityShieldHeaderMaterial()
+                }
+
                 item(key = "site_manager") {
                     Column(
                         modifier = Modifier
@@ -848,6 +853,7 @@ private fun SettingsWebSecurityMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentArrowItem(title = "网页管理", onClick = actions.onOpenSiteManager)
@@ -869,6 +875,7 @@ private fun SettingsWebSecurityMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                         {
                                             M3SegmentSwitchItem(
@@ -907,6 +914,7 @@ private fun SettingsWebSecurityMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                         {
                                             M3SegmentSwitchItem(
@@ -1023,6 +1031,7 @@ private fun SettingsWebSecurityMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                         {
                                             M3SegmentArrowItem(title = "跟踪防护白名单", onClick = actions.onOpenWhitelist)
@@ -1050,6 +1059,7 @@ private fun SettingsWebSecurityMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                         {
                                             M3SegmentSwitchItem(
@@ -1064,6 +1074,75 @@ private fun SettingsWebSecurityMaterial(
                 }
 
             }
+        }
+    }
+}
+
+
+@Composable
+private fun SecurityShieldHeaderMaterial() {
+    val context = LocalContext.current
+    val smart = WebSecurityStats.count(context, WebSecurityStats.CATEGORY_SMART)
+    val privacy = WebSecurityStats.count(context, WebSecurityStats.CATEGORY_PRIVACY)
+    val permission = WebSecurityStats.count(context, WebSecurityStats.CATEGORY_PERMISSION)
+    val total = smart + privacy + permission
+    val primary = M3MaterialTheme.colorScheme.primary
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .padding(top = 10.dp, bottom = 14.dp)
+                .size(148.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .size(148.dp)
+                    .background(
+                        Brush.radialGradient(listOf(primary.copy(alpha = 0.20f), Color.Transparent)),
+                        CircleShape,
+                    ),
+            )
+            M3Icon(
+                imageVector = Icons.Rounded.Shield,
+                contentDescription = null,
+                tint = primary,
+                modifier = Modifier.size(124.dp),
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                M3Text("$total", color = M3MaterialTheme.colorScheme.onPrimary, style = M3MaterialTheme.typography.headlineMedium)
+                M3Text("累计防护", color = M3MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f), style = M3MaterialTheme.typography.labelSmall)
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SecurityStatCardMaterial("$smart", "智能拦截", Modifier.weight(1f))
+            SecurityStatCardMaterial("$privacy", "隐私保护", Modifier.weight(1f))
+            SecurityStatCardMaterial("$permission", "权限管控", Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun SecurityStatCardMaterial(count: String, label: String, modifier: Modifier = Modifier) {
+    M3Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = M3MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            M3Text("$count 次", style = M3MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(3.dp))
+            M3Text(label, style = M3MaterialTheme.typography.bodyMedium, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -2510,6 +2589,7 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = sites.map { host ->
                                 {
                                     Box(
@@ -2759,6 +2839,7 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                 ) {
                     MoteSegmentedColumn(
+                        color = M3MaterialTheme.colorScheme.surface,
                         content = listOf(
                             {
                                 M3SegmentSwitchItem(
@@ -2793,6 +2874,7 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                 ) {
                     MoteSegmentedColumn(
+                        color = M3MaterialTheme.colorScheme.surface,
                         content = listOf(
                             {
                                 M3SegmentSwitchItem(
@@ -2860,7 +2942,7 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
 private const val KEY_PERM_CAMERA = "web_perm_camera"
 private const val KEY_PERM_MIC = "web_perm_microphone"
 private const val KEY_PERM_LOCATION = "web_perm_location"
-private const val KEY_PERM_CLIPBOARD = "web_perm_clipboard"
+private const val KEY_PERM_AUTOPLAY = "web_perm_autoplay"
 
 @Composable
 fun WebPermissionsPage(onBack: () -> Unit) {
@@ -2879,7 +2961,7 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
     var camera by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CAMERA, true)) }
     var mic by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_MIC, true)) }
     var location by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_LOCATION, true)) }
-    var clipboard by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CLIPBOARD, true)) }
+    var autoplay by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_AUTOPLAY, true)) }
 
     Column(modifier = Modifier.fillMaxSize().background(surface)) {
         TopAppBar(
@@ -2904,6 +2986,12 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
                     modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
                 ) {
                     SwitchPreference(
+                        title = "定位",
+                        summary = "允许网页获取当前位置",
+                        checked = location,
+                        onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() },
+                    )
+                    SwitchPreference(
                         title = "相机",
                         summary = "允许网页请求使用相机",
                         checked = camera,
@@ -2915,17 +3003,12 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
                         checked = mic,
                         onCheckedChange = { mic = it; prefs.edit().putBoolean(KEY_PERM_MIC, it).apply() },
                     )
+
                     SwitchPreference(
-                        title = "定位",
-                        summary = "允许网页获取当前位置",
-                        checked = location,
-                        onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() },
-                    )
-                    SwitchPreference(
-                        title = "剪贴板",
-                        summary = "允许网页读取剪贴板内容",
-                        checked = clipboard,
-                        onCheckedChange = { clipboard = it; prefs.edit().putBoolean(KEY_PERM_CLIPBOARD, it).apply() },
+                        title = "播放声音",
+                        summary = "允许网页自动播放带声音的媒体",
+                        checked = autoplay,
+                        onCheckedChange = { autoplay = it; prefs.edit().putBoolean(KEY_PERM_AUTOPLAY, it).apply() },
                     )
                 }
             }
@@ -2946,7 +3029,7 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
     var camera by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CAMERA, true)) }
     var mic by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_MIC, true)) }
     var location by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_LOCATION, true)) }
-    var clipboard by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CLIPBOARD, true)) }
+    var autoplay by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_AUTOPLAY, true)) }
 
     M3Scaffold(
         containerColor = bg,
@@ -2975,11 +3058,12 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                 ) {
                     MoteSegmentedColumn(
+                        color = M3MaterialTheme.colorScheme.surface,
                         content = listOf(
                             { M3SegmentSwitchItem(title = "相机", checked = camera, onCheckedChange = { camera = it; prefs.edit().putBoolean(KEY_PERM_CAMERA, it).apply() }) },
                             { M3SegmentSwitchItem(title = "麦克风", checked = mic, onCheckedChange = { mic = it; prefs.edit().putBoolean(KEY_PERM_MIC, it).apply() }) },
                             { M3SegmentSwitchItem(title = "定位", checked = location, onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() }) },
-                            { M3SegmentSwitchItem(title = "剪贴板", checked = clipboard, onCheckedChange = { clipboard = it; prefs.edit().putBoolean(KEY_PERM_CLIPBOARD, it).apply() }) },
+                            { M3SegmentSwitchItem(title = "播放声音", checked = autoplay, onCheckedChange = { autoplay = it; prefs.edit().putBoolean(KEY_PERM_AUTOPLAY, it).apply() }) },
                         ),
                     )
                 }

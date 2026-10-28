@@ -1896,6 +1896,7 @@ private val MOTE_SEG_ITEM_H_PADDING = 16.dp
 internal val M3_SEGMENT_LIST_HORIZONTAL_PADDING = 16.dp
 internal val M3_SEGMENT_GROUP_GAP = 12.dp
 
+internal val LocalMoteSegmentColor = androidx.compose.runtime.compositionLocalOf<androidx.compose.ui.graphics.Color?> { null }
 private val LocalMoteSegmentShape = compositionLocalOf<Shape?> { null }
 
 private fun moteSegmentShapeFor(index: Int, count: Int): Shape {
@@ -1918,6 +1919,7 @@ private fun moteSegmentShapeFor(index: Int, count: Int): Shape {
 @Composable
 internal fun MoteSegmentedColumn(
     modifier: Modifier = Modifier,
+    color: androidx.compose.ui.graphics.Color? = null,
     content: List<@Composable () -> Unit>,
 ) {
     if (content.isEmpty()) return
@@ -1927,7 +1929,8 @@ internal fun MoteSegmentedColumn(
     ) {
         content.forEachIndexed { index, item ->
             CompositionLocalProvider(
-                LocalMoteSegmentShape provides moteSegmentShapeFor(index, content.size)
+                LocalMoteSegmentShape provides moteSegmentShapeFor(index, content.size),
+                LocalMoteSegmentColor provides color,
             ) {
                 item()
             }
@@ -1945,7 +1948,7 @@ internal fun M3SegmentItem(
     onClick: (() -> Unit)? = null,
 ) {
     val shape = LocalMoteSegmentShape.current ?: RoundedCornerShape(12.dp)
-    val color = lerp(
+    val color = LocalMoteSegmentColor.current ?: lerp(
         M3MaterialTheme.colorScheme.surfaceContainerLow,
         M3MaterialTheme.colorScheme.secondaryContainer,
         0.10f,
@@ -2010,7 +2013,7 @@ internal fun M3SegmentDropdownItem(
     val selected = options.getOrElse(selectedIndex) { options.firstOrNull() ?: "" }
 
     val shape = LocalMoteSegmentShape.current ?: RoundedCornerShape(12.dp)
-    val color = lerp(
+    val color = LocalMoteSegmentColor.current ?: lerp(
         M3MaterialTheme.colorScheme.surfaceContainerLow,
         M3MaterialTheme.colorScheme.secondaryContainer,
         0.10f,
