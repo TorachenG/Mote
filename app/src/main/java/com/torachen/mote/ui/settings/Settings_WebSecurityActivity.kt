@@ -2029,8 +2029,33 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
         ) {
             if (sites.isEmpty()) {
                 item(key = "empty") {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                        Text("暂无单独设置的网站", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 12.dp)
+                            .padding(bottom = 12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 56.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    imageVector = MiuixIcons.Link,
+                                    contentDescription = null,
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    modifier = Modifier.size(48.dp),
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Text(
+                                    text = "暂无单独设置的网站",
+                                    fontSize = 14.sp,
+                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2076,8 +2101,43 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
         ) {
             if (sites.isEmpty()) {
                 item(key = "empty") {
-                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
-                        M3Text("暂无单独设置的网站", style = M3MaterialTheme.typography.bodyMedium, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(top = 12.dp, bottom = 12.dp)
+                    ) {
+                        M3Surface(
+                            shape = RoundedCornerShape(25.dp),
+                            color = lerp(
+                                M3MaterialTheme.colorScheme.surfaceContainerLow,
+                                M3MaterialTheme.colorScheme.secondaryContainer,
+                                0.10f,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 56.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    M3Icon(
+                                        imageVector = MiuixIcons.Link,
+                                        contentDescription = null,
+                                        tint = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(48.dp),
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    M3Text(
+                                        text = "暂无单独设置的网站",
+                                        style = M3MaterialTheme.typography.bodyMedium,
+                                        color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
