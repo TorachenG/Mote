@@ -704,7 +704,8 @@ internal object SecurityStateHolder {
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(blockAds = enabled)
         persistSiteProtection()
-        info = info.copy(siteBlockAdsEnabled = enabled)
+        whitelistVersion++
+        info = info.copy(siteManaged = true, siteBlockAdsEnabled = enabled)
     }
 
     fun setSiteTrackingProtection(host: String, enabled: Boolean) {
@@ -714,7 +715,8 @@ internal object SecurityStateHolder {
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(trackingProtection = enabled)
         persistSiteProtection()
-        info = info.copy(siteTrackingProtectionEnabled = enabled)
+        whitelistVersion++
+        info = info.copy(siteManaged = true, siteTrackingProtectionEnabled = enabled)
         whitelistVersion++
     }
 
