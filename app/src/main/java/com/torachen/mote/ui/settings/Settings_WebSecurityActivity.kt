@@ -790,7 +790,7 @@ private fun SettingsWebSecurityMaterial(
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = M3MaterialTheme.colorScheme.surfaceContainer
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -1298,6 +1298,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                                                         }
                                                     }
                                                 )
+                                                .heightIn(min = 56.dp)
                                                 .padding(horizontal = 16.dp, vertical = 13.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
@@ -1553,7 +1554,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
         exitMultiSelect()
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = M3MaterialTheme.colorScheme.surfaceContainer
     val navBarBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -2233,6 +2234,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                                         if (!selected.contains(host)) selected.add(host)
                                     },
                                 )
+                                .heightIn(min = 56.dp)
                                 .padding(horizontal = 16.dp, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -2356,7 +2358,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
 @Composable
 private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
     val context = LocalContext.current
-    val bg = M3MaterialTheme.colorScheme.surface
+    val bg = M3MaterialTheme.colorScheme.surfaceContainer
     val version = SecurityStateHolder.whitelistVersion
     val sites = remember(version) { SecurityStateHolder.getManagedSites() }
 
@@ -2438,7 +2440,7 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
                             M3Surface(
                                 shape = RoundedCornerShape(25.dp),
                                 color = lerp(
-                                    M3MaterialTheme.colorScheme.surfaceContainerLow,
+                                    M3MaterialTheme.colorScheme.surface,
                                     M3MaterialTheme.colorScheme.secondaryContainer,
                                     0.10f,
                                 ),
@@ -2569,7 +2571,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp),
                 ) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 13.dp)) {
                         Text(host, style = MiuixTheme.textStyles.body1, color = MiuixTheme.colorScheme.onSurface)
                     }
                 }
@@ -2664,7 +2666,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
 private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
-    val bg = M3MaterialTheme.colorScheme.surface
+    val bg = M3MaterialTheme.colorScheme.surfaceContainer
 
     val site = remember(host) { SecurityStateHolder.getSiteProtection(host) }
     var siteBlockAds by remember(host) { mutableStateOf(site.blockAds) }
