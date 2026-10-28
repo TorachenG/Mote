@@ -625,6 +625,7 @@ internal object SecurityStateHolder {
     internal data class SiteProtection(
         val blockAds: Boolean = true,
         val trackingProtection: Boolean = true,
+    val downloadProtection: Boolean = true,
     )
 
     var info by mutableStateOf(SecurityInfo())
@@ -663,6 +664,7 @@ internal object SecurityStateHolder {
                     siteProtectionMap[host] = SiteProtection(
                         blockAds = o.optBoolean("ads", true),
                         trackingProtection = o.optBoolean("tracking", true),
+                        downloadProtection = o.optBoolean("download", true),
                     )
                 }
             }
@@ -676,6 +678,7 @@ internal object SecurityStateHolder {
                 json.put(host, JSONObject().apply {
                     put("ads", sp.blockAds)
                     put("tracking", sp.trackingProtection)
+            put("download", sp.downloadProtection)
                 })
             }
             prefsRef?.edit()?.putString("web_site_protection", json.toString())?.apply()
@@ -725,6 +728,70 @@ internal object SecurityStateHolder {
             .keys
             .toList()
             .sorted()
+    }
+
+    private val managedSites = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun addManagedSite(host: String) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        managedSites.add(base)
+        whitelistVersion++
+    }
+
+    fun removeManagedSite(host: String) {
+        val base = getBaseDomain(host)
+        managedSites.remove(base)
+        whitelistVersion++
+    }
+
+    fun getManagedSites(): List<String> =
+        (managedSites + siteProtectionMap.keys).sorted()
+
+    fun setSiteDownloadProtection(host: String, enabled: Boolean) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        siteProtectionMap[base] = cur.copy(downloadProtection = enabled)
+        persistSiteProtection()
+        whitelistVersion++
+    }
+
+    fun getDownloadWhitelist(): List<String> = siteProtectionMap
+        .filter { it.value.downloadProtection == false }
+        .keys.sorted()
+
+    fun addToDownloadWhitelist(host: String) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        if (cur.downloadProtection == false) return
+        siteProtectionMap[base] = cur.copy(downloadProtection = false)
+        persistSiteProtection()
+        whitelistVersion++
+    }
+
+    fun removeFromDownloadWhitelist(host: String) {
+        val base = getBaseDomain(host)
+        val cur = siteProtectionMap[base] ?: return
+        siteProtectionMap[base] = cur.copy(downloadProtection = true)
+        persistSiteProtection()
+        whitelistVersion++
+    }
+
+    fun getAdWhitelist(): List<String> = siteProtectionMap
+        .filter { it.value.blockAds == false }
+        .keys.sorted()
+
+    fun addToAdWhitelist(host: String) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        setSiteBlockAds(base, false)
+    }
+
+    fun removeFromAdWhitelist(host: String) {
+        val base = getBaseDomain(host)
+        setSiteBlockAds(base, true)
     }
 
     fun addToTrackingWhitelist(host: String) {
@@ -3619,6 +3686,8 @@ private fun RenderPageContent(
                 onBack = { onPop() },
                 onOpenWhitelist = { onPush("settings_tracking_whitelist") },
                 onOpenSiteManager = { onPush("settings_web_sites") },
+                onOpenDownloadWhitelist = { onPush("settings_download_whitelist") },
+                onOpenAdWhitelist = { onPush("settings_ad_whitelist") },
             )
             "settings_web_sites" -> WebSiteManagerPage(
                 onBack = { onPop() },
@@ -3632,6 +3701,8 @@ private fun RenderPageContent(
                 onBack = { onPop() },
             )
             "settings_tracking_whitelist" -> TrackingWhitelistPage(onBack = { onPop() })
+            "settings_download_whitelist" -> DownloadWhitelistPage(onBack = { onPop() })
+            "settings_ad_whitelist" -> AdWhitelistPage(onBack = { onPop() })
             "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
             "settings_personal_info" -> SettingsPersonalInfoPage(
                 onBack = { onPop() },
@@ -11143,7 +11214,10 @@ private fun createWebView(
         setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
             val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
             val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-            if (secPrefs.getBoolean("web_download_protection", true)) {
+            val pageHost = SecurityStateHolder.info.host
+            val siteDownloadAllowed = pageHost.isBlank() ||
+                SecurityStateHolder.getSiteProtection(pageHost).downloadProtection
+            if (secPrefs.getBoolean("web_download_protection", true) && siteDownloadAllowed) {
                 val lowerName = fileName.lowercase()
                 val riskyExt = listOf(".apk", ".exe", ".bat", ".cmd", ".sh", ".scr", ".msi", ".jar", ".vbs")
                 if (riskyExt.any { lowerName.endsWith(it) } ||

@@ -17,6 +17,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.foundation.lazy.items
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
@@ -180,6 +184,8 @@ private data class WebSecurityActions(
     val onTrackingLevelChange: (Int) -> Unit,
     val onOpenWhitelist: () -> Unit,
     val onOpenSiteManager: () -> Unit,
+    val onOpenDownloadWhitelist: () -> Unit,
+    val onOpenAdWhitelist: () -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -270,6 +276,8 @@ fun SettingsWebSecurityPage(
     onBack: () -> Unit,
     onOpenWhitelist: () -> Unit = {},
     onOpenSiteManager: () -> Unit = {},
+    onOpenDownloadWhitelist: () -> Unit = {},
+    onOpenAdWhitelist: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -358,6 +366,8 @@ fun SettingsWebSecurityPage(
         },
         onOpenWhitelist = onOpenWhitelist,
         onOpenSiteManager = onOpenSiteManager,
+        onOpenDownloadWhitelist = onOpenDownloadWhitelist,
+        onOpenAdWhitelist = onOpenAdWhitelist,
         onBack = onBack,
     )
 
@@ -658,8 +668,7 @@ private fun SettingsWebSecurityMiuix(
                                 ) {
                                     ArrowPreference(
                                         title = "下载防护白名单",
-                                        enabled = false,
-                                        onClick = {},
+                                        onClick = actions.onOpenDownloadWhitelist,
                                     )
                                 }
                                 SearchableItem(
@@ -670,8 +679,7 @@ private fun SettingsWebSecurityMiuix(
                                 ) {
                                     ArrowPreference(
                                         title = "广告拦截白名单",
-                                        enabled = false,
-                                        onClick = {},
+                                        onClick = actions.onOpenAdWhitelist,
                                     )
                                 }
                             }
@@ -994,6 +1002,12 @@ private fun SettingsWebSecurityMaterial(
                                         {
                                             M3SegmentArrowItem(title = "跟踪防护白名单", onClick = actions.onOpenWhitelist)
                                         },
+                                        {
+                                            M3SegmentArrowItem(title = "下载防护白名单", onClick = actions.onOpenDownloadWhitelist)
+                                        },
+                                        {
+                                            M3SegmentArrowItem(title = "广告拦截白名单", onClick = actions.onOpenAdWhitelist)
+                                        },
                             ),
                         )
                     }
@@ -1046,21 +1060,73 @@ private fun WebSecuritySectionHeader(text: String) {
     )
 }
 
+
 // ============================================================
-// 跟踪防护白名单页
+// 白名单通用（跟踪 / 下载 / 广告）
+// ============================================================
+
+private const val WL_TRACKING = "tracking"
+private const val WL_DOWNLOAD = "download"
+private const val WL_AD = "ad"
+
+private fun whitelistOf(kind: String): List<String> = when (kind) {
+    WL_DOWNLOAD -> SecurityStateHolder.getDownloadWhitelist()
+    WL_AD -> SecurityStateHolder.getAdWhitelist()
+    else -> SecurityStateHolder.getTrackingWhitelist()
+}
+
+private fun whitelistAdd(kind: String, host: String) {
+    when (kind) {
+        WL_DOWNLOAD -> SecurityStateHolder.addToDownloadWhitelist(host)
+        WL_AD -> SecurityStateHolder.addToAdWhitelist(host)
+        else -> whitelistAdd(kind, host)
+    }
+}
+
+private fun whitelistRemove(kind: String, host: String) {
+    when (kind) {
+        WL_DOWNLOAD -> SecurityStateHolder.removeFromDownloadWhitelist(host)
+        WL_AD -> SecurityStateHolder.removeFromAdWhitelist(host)
+        else -> SecurityStateHolder.removeFromTrackingWhitelist(host)
+    }
+}
+
+private fun whitelistTitle(kind: String): String = when (kind) {
+    WL_DOWNLOAD -> "下载防护白名单"
+    WL_AD -> "广告拦截白名单"
+    else -> whitelistTitle(kind)
+}
+
+private fun whitelistEmptyText(kind: String): String = when (kind) {
+    WL_DOWNLOAD -> "暂无下载防护白名单"
+    WL_AD -> "暂无广告拦截白名单"
+    else -> "暂无跟踪防护白名单"
+}
+
+// ============================================================
+// 白名单页
 // ============================================================
 
 @Composable
-fun TrackingWhitelistPage(onBack: () -> Unit) {
+fun TrackingWhitelistPage(onBack: () -> Unit) = WhitelistPage(WL_TRACKING, onBack)
+
+@Composable
+fun DownloadWhitelistPage(onBack: () -> Unit) = WhitelistPage(WL_DOWNLOAD, onBack)
+
+@Composable
+fun AdWhitelistPage(onBack: () -> Unit) = WhitelistPage(WL_AD, onBack)
+
+@Composable
+fun WhitelistPage(kind: String, onBack: () -> Unit) {
     when (LocalUiMode.current) {
-        UiMode.Miuix -> TrackingWhitelistPageMiuix(onBack)
-        UiMode.Material -> TrackingWhitelistPageMaterial(onBack)
+        UiMode.Miuix -> TrackingWhitelistPageMiuix(kind, onBack)
+        UiMode.Material -> TrackingWhitelistPageMaterial(kind, onBack)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
+private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
@@ -1094,7 +1160,7 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    val whitelist = SecurityStateHolder.getTrackingWhitelist()
+    val whitelist = whitelistOf(kind)
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -1203,7 +1269,7 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
                                             )
                                             Spacer(Modifier.height(12.dp))
                                             Text(
-                                                text = "暂无跟踪防护白名单",
+                                                text = whitelistEmptyText(kind),
                                                 fontSize = 14.sp,
                                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                             )
@@ -1298,7 +1364,7 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
                 val barTitle = if (isMultiSelectMode) {
                     if (selectedHosts.isEmpty()) "请选择项目" else "已选择 ${selectedHosts.size} 项"
                 } else {
-                    "跟踪防护白名单"
+                    whitelistTitle(kind)
                 }
                 TopAppBar(
                     title = barTitle,
@@ -1403,7 +1469,7 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
             prefs = prefs,
             onDismiss = { showAddDialog = false },
             onAdd = { host ->
-                SecurityStateHolder.addToTrackingWhitelist(host)
+                whitelistAdd(kind, host)
                 showAddDialog = false
                 Toast.makeText(context, "已添加到白名单", Toast.LENGTH_SHORT).show()
             },
@@ -1438,7 +1504,7 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
                     Button(
                         onClick = {
                             selectedHosts.toList().forEach {
-                                SecurityStateHolder.removeFromTrackingWhitelist(it)
+                                whitelistRemove(kind, it)
                             }
                             Toast.makeText(context, "已移除选中的白名单", Toast.LENGTH_SHORT).show()
                             exitMultiSelect()
@@ -1458,14 +1524,14 @@ private fun TrackingWhitelistPageMiuix(onBack: () -> Unit) {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun TrackingWhitelistPageMaterial(onBack: () -> Unit) {
+private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
     }
 
-    val whitelist = SecurityStateHolder.getTrackingWhitelist()
+    val whitelist = whitelistOf(kind)
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -1511,7 +1577,7 @@ private fun TrackingWhitelistPageMaterial(onBack: () -> Unit) {
                             M3Text(
                                 if (isMultiSelectMode) {
                                     if (selectedHosts.isEmpty()) "请选择项目" else "已选择 ${selectedHosts.size} 项"
-                                } else "跟踪防护白名单"
+                                } else whitelistTitle(kind)
                             )
                         },
                         navigationIcon = {
@@ -1589,7 +1655,7 @@ private fun TrackingWhitelistPageMaterial(onBack: () -> Unit) {
                                                 )
                                                 Spacer(Modifier.height(12.dp))
                                                 M3Text(
-                                                    text = "暂无跟踪防护白名单",
+                                                    text = whitelistEmptyText(kind),
                                                     style = M3MaterialTheme.typography.bodyMedium,
                                                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -1685,7 +1751,7 @@ private fun TrackingWhitelistPageMaterial(onBack: () -> Unit) {
                 prefs = prefs,
                 onDismiss = { showAddDialog = false },
                 onAdd = { host ->
-                    SecurityStateHolder.addToTrackingWhitelist(host)
+                    whitelistAdd(kind, host)
                     showAddDialog = false
                     Toast.makeText(context, "已添加到白名单", Toast.LENGTH_SHORT).show()
                 },
@@ -1701,7 +1767,7 @@ private fun TrackingWhitelistPageMaterial(onBack: () -> Unit) {
                     androidx.compose.material3.TextButton(
                         onClick = {
                             selectedHosts.toList().forEach {
-                                SecurityStateHolder.removeFromTrackingWhitelist(it)
+                                whitelistRemove(kind, it)
                             }
                             Toast.makeText(context, "已移除选中的白名单", Toast.LENGTH_SHORT).show()
                             exitMultiSelect()
@@ -2067,168 +2133,366 @@ fun WebSiteManagerPage(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
     val scrollBehavior = MiuixScrollBehavior()
     val surface = MiuixTheme.colorScheme.surface
-    val sites = remember {
-        SecurityStateHolder.getAllSiteProtections()
-            .filter { !it.value.blockAds || !it.value.trackingProtection }
-            .keys.sorted()
-    }
-    Column(modifier = Modifier.fillMaxSize().background(surface)) {
-        TopAppBar(
-            title = "网页管理",
-            largeTitle = "网页管理",
-            color = Color.Transparent,
-            defaultWindowInsetsPadding = true,
-            scrollBehavior = scrollBehavior,
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "返回", tint = MiuixTheme.colorScheme.onSurface)
-                }
-            },
-        )
-        androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .overScrollVertical(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            overscrollEffect = null,
-        ) {
-            if (sites.isEmpty()) {
-                item(key = "empty") {
-                    Card(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .padding(top = 12.dp)
-                            .padding(bottom = 12.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 56.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = MiuixIcons.Link,
-                                    contentDescription = null,
-                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    modifier = Modifier.size(48.dp),
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                Text(
-                                    text = "暂无单独设置的网站",
-                                    fontSize = 14.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            items(sites) { host ->
-                Card(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp),
-                ) {
-                    ArrowPreference(title = host, onClick = { onOpenSite(host) })
-                }
-            }
-        }
-    }
-}
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-@Composable
-private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
-    val bg = M3MaterialTheme.colorScheme.surface
-    val sites = remember {
-        SecurityStateHolder.getAllSiteProtections()
-            .filter { !it.value.blockAds || !it.value.trackingProtection }
-            .keys.sorted()
-    }
-    M3Scaffold(
-        containerColor = bg,
-        topBar = {
-            M3TopAppBar(
-                title = { M3Text("网页管理") },
+    val version = SecurityStateHolder.whitelistVersion
+    val sites = remember(version) { SecurityStateHolder.getManagedSites() }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var selecting by remember { mutableStateOf(false) }
+    val selected = remember { mutableStateListOf<String>() }
+    fun exitSelect() { selecting = false; selected.clear() }
+    androidx.activity.compose.BackHandler(enabled = selecting) { exitSelect() }
+
+    Box(modifier = Modifier.fillMaxSize().background(surface)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = if (selecting) {
+                    if (selected.isEmpty()) "请选择项目" else "已选择 ${selected.size} 项"
+                } else "网页管理",
+                largeTitle = if (selecting) {
+                    if (selected.isEmpty()) "请选择项目" else "已选择 ${selected.size} 项"
+                } else "网页管理",
+                color = Color.Transparent,
+                defaultWindowInsetsPadding = true,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    M3IconButton(onClick = onBack) {
-                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    IconButton(onClick = { if (selecting) exitSelect() else onBack() }) {
+                        Icon(
+                            imageVector = if (selecting) MiuixIcons.Close else MiuixIcons.ChevronBackward,
+                            contentDescription = "返回",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                        )
                     }
                 },
-                colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+                actions = {
+                    if (selecting) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(
+                                imageVector = MiuixIcons.Delete,
+                                contentDescription = "删除",
+                                tint = Color(0xFFFF3B30),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = { showAddDialog = true }) {
+                            Icon(
+                                imageVector = MiuixIcons.Add,
+                                contentDescription = "添加",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                },
             )
-        },
-    ) { innerPadding ->
-        androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .overScrollVertical(),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            overscrollEffect = null,
-        ) {
-            if (sites.isEmpty()) {
-                item(key = "empty") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                            .padding(top = 12.dp, bottom = 12.dp)
-                    ) {
-                        M3Surface(
-                            shape = RoundedCornerShape(25.dp),
-                            color = lerp(
-                                M3MaterialTheme.colorScheme.surfaceContainerLow,
-                                M3MaterialTheme.colorScheme.secondaryContainer,
-                                0.10f,
-                            ),
-                            modifier = Modifier.fillMaxWidth(),
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .overScrollVertical(),
+                contentPadding = PaddingValues(bottom = 32.dp),
+                overscrollEffect = null,
+            ) {
+                if (sites.isEmpty()) {
+                    item(key = "empty") {
+                        Card(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .padding(top = 12.dp)
+                                .padding(bottom = 12.dp),
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 56.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    M3Icon(
+                                    Icon(
                                         imageVector = MiuixIcons.Link,
                                         contentDescription = null,
-                                        tint = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         modifier = Modifier.size(48.dp),
                                     )
                                     Spacer(Modifier.height(12.dp))
-                                    M3Text(
+                                    Text(
                                         text = "暂无单独设置的网站",
-                                        style = M3MaterialTheme.typography.bodyMedium,
-                                        color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 14.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                     )
                                 }
                             }
                         }
                     }
                 }
-            }
-            item(key = "site_list") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
-                ) {
-                    MoteSegmentedColumn(
-                        content = sites.map { host ->
-                            {
-                                M3SegmentArrowItem(title = host, onClick = { onOpenSite(host) })
+                items(sites) { host ->
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = {
+                                        if (selecting) {
+                                            if (selected.contains(host)) selected.remove(host) else selected.add(host)
+                                        } else {
+                                            onOpenSite(host)
+                                        }
+                                    },
+                                    onLongClick = {
+                                        selecting = true
+                                        if (!selected.contains(host)) selected.add(host)
+                                    },
+                                )
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (selecting) {
+                                Checkbox(
+                                    state = if (selected.contains(host)) ToggleableState.On else ToggleableState.Off,
+                                    onClick = {
+                                        if (selected.contains(host)) selected.remove(host) else selected.add(host)
+                                    },
+                                )
+                                Spacer(Modifier.width(10.dp))
                             }
+                            Text(
+                                text = host,
+                                fontSize = MiuixTheme.textStyles.body1.fontSize,
+                                color = MiuixTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (!selecting) {
+                                Icon(
+                                    imageVector = MiuixIcons.ChevronForward,
+                                    contentDescription = null,
+                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        TrackingWhitelistAddDialogMiuix(
+            show = showAddDialog,
+            prefs = prefs,
+            onDismiss = { showAddDialog = false },
+            onAdd = { host ->
+                SecurityStateHolder.addManagedSite(host)
+                showAddDialog = false
+                Toast.makeText(context, "已添加网站", Toast.LENGTH_SHORT).show()
+            },
+        )
+
+        WindowDialog(
+            show = showDeleteDialog,
+            title = "删除",
+            onDismissRequest = { showDeleteDialog = false },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "确定要移除选中的 ${selected.size} 个网站吗？",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MiuixTheme.textStyles.body1,
+                    color = DialogDefaults.summaryColor(),
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { showDeleteDialog = false }, modifier = Modifier.weight(1f)) { Text("取消") }
+                    Button(
+                        onClick = {
+                            selected.toList().forEach { SecurityStateHolder.removeManagedSite(it) }
+                            exitSelect()
+                            showDeleteDialog = false
                         },
-                    )
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                        ),
+                    ) { Text("删除") }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
+    val context = LocalContext.current
+    val bg = M3MaterialTheme.colorScheme.surface
+    val version = SecurityStateHolder.whitelistVersion
+    val sites = remember(version) { SecurityStateHolder.getManagedSites() }
+
+    var selecting by remember { mutableStateOf(false) }
+    val selected = remember { mutableStateListOf<String>() }
+    fun exitSelect() { selecting = false; selected.clear() }
+    androidx.activity.compose.BackHandler(enabled = selecting) { exitSelect() }
+
+    fun showAddDialog() {
+        val input = android.widget.EditText(context).apply {
+            hint = "example.com"
+            setSingleLine()
+        }
+        android.app.AlertDialog.Builder(context)
+            .setTitle("添加网站")
+            .setView(input)
+            .setPositiveButton("添加") { _, _ ->
+                val host = input.text?.toString()?.trim().orEmpty()
+                if (host.isNotBlank()) SecurityStateHolder.addManagedSite(host)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        M3Scaffold(
+            containerColor = bg,
+            topBar = {
+                M3TopAppBar(
+                    title = {
+                        M3Text(
+                            if (selecting) {
+                                if (selected.isEmpty()) "请选择项目" else "已选择 ${selected.size} 项"
+                            } else "网页管理"
+                        )
+                    },
+                    navigationIcon = {
+                        M3IconButton(onClick = { if (selecting) exitSelect() else onBack() }) {
+                            M3Icon(
+                                if (selecting) Icons.Filled.Close else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    actions = {
+                        if (selecting) {
+                            M3IconButton(onClick = {
+                                selected.toList().forEach { SecurityStateHolder.removeManagedSite(it) }
+                                exitSelect()
+                            }) {
+                                M3Icon(Icons.Filled.Delete, contentDescription = "删除")
+                            }
+                        } else {
+                            M3IconButton(onClick = { showAddDialog() }) {
+                                M3Icon(Icons.Filled.Add, contentDescription = "添加")
+                            }
+                        }
+                    },
+                    colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+                )
+            },
+        ) { innerPadding ->
+            androidx.compose.foundation.lazy.LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .overScrollVertical(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                overscrollEffect = null,
+            ) {
+                if (sites.isEmpty()) {
+                    item(key = "empty") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                .padding(top = 12.dp, bottom = 12.dp)
+                        ) {
+                            M3Surface(
+                                shape = RoundedCornerShape(25.dp),
+                                color = lerp(
+                                    M3MaterialTheme.colorScheme.surfaceContainerLow,
+                                    M3MaterialTheme.colorScheme.secondaryContainer,
+                                    0.10f,
+                                ),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        M3Icon(
+                                            imageVector = MiuixIcons.Link,
+                                            contentDescription = null,
+                                            tint = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(48.dp),
+                                        )
+                                        Spacer(Modifier.height(12.dp))
+                                        M3Text(
+                                            text = "暂无单独设置的网站",
+                                            style = M3MaterialTheme.typography.bodyMedium,
+                                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item(key = "site_list") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            content = sites.map { host ->
+                                {
+                                    Box(
+                                        modifier = Modifier.combinedClickable(
+                                            onClick = {
+                                                if (selecting) {
+                                                    if (selected.contains(host)) selected.remove(host) else selected.add(host)
+                                                } else {
+                                                    onOpenSite(host)
+                                                }
+                                            },
+                                            onLongClick = {
+                                                selecting = true
+                                                if (!selected.contains(host)) selected.add(host)
+                                            },
+                                        ),
+                                    ) {
+                                        if (selecting) {
+                                            androidx.compose.foundation.layout.Row(
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                androidx.compose.material3.Checkbox(
+                                                    checked = selected.contains(host),
+                                                    onCheckedChange = null,
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                M3Text(host, style = M3MaterialTheme.typography.bodyLarge)
+                                            }
+                                        } else {
+                                            M3SegmentArrowItem(title = host, onClick = { onOpenSite(host) })
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
