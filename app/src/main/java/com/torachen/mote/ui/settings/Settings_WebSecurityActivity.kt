@@ -1304,7 +1304,8 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                                         ) {
                                             Text(
                                                 text = host,
-                                                style = MiuixTheme.textStyles.body1,
+                                                style = MiuixTheme.textStyles.headline1,
+                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                                                 color = MiuixTheme.colorScheme.onSurface,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
@@ -2221,6 +2222,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = 56.dp)
                                 .combinedClickable(
                                     onClick = {
                                         if (selecting) {
@@ -2234,22 +2236,20 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                                         if (!selected.contains(host)) selected.add(host)
                                     },
                                 )
-                                .heightIn(min = 56.dp)
                                 .padding(horizontal = 16.dp, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (selecting) {
                                 Checkbox(
                                     state = if (selected.contains(host)) ToggleableState.On else ToggleableState.Off,
-                                    onClick = {
-                                        if (selected.contains(host)) selected.remove(host) else selected.add(host)
-                                    },
+                                    onClick = null,
                                 )
                                 Spacer(Modifier.width(10.dp))
                             }
                             Text(
                                 text = host,
-                                style = MiuixTheme.textStyles.body1,
+                                style = MiuixTheme.textStyles.headline1,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                                 color = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
                             )
@@ -2572,8 +2572,19 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp),
                 ) {
-                    Box(modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 13.dp)) {
-                        Text(host, style = MiuixTheme.textStyles.body1, color = MiuixTheme.colorScheme.onSurface)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Text(
+                            host,
+                            style = MiuixTheme.textStyles.headline1,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurface,
+                        )
                     }
                 }
             }
