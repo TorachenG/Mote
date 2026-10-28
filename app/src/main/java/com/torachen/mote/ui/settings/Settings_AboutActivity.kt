@@ -1723,8 +1723,8 @@ fun AutoUpdateChecker() {
     }
 
     LaunchedEffect(Unit) {
-        // ★ 方案5：延迟 2.5 秒，等首帧渲染完成后再发起网络检查。
-        kotlinx.coroutines.delay(2_500)
+        // 延迟 0.5 秒，等首帧渲染完成后尽快发起网络检查。
+        kotlinx.coroutines.delay(500)
 
         if (!shouldAutoCheck(prefs)) return@LaunchedEffect
         val sourceIndex = prefs

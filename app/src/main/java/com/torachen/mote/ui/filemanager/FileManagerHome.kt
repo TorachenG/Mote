@@ -13,6 +13,10 @@ import com.torachen.mote.ui.FmTool
 import com.torachen.mote.ui.fmCategories
 import com.torachen.mote.ui.FileCategory
 import com.torachen.mote.ui.SettingsBackButton
+import com.torachen.mote.ui.SettingsTopBarAction
+import com.torachen.mote.ui.FileManagerPrefs
+import com.torachen.mote.ui.LocalUiMode
+import com.torachen.mote.ui.UiMode
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -78,6 +82,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastCoerceIn
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
@@ -92,13 +98,25 @@ import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 
 @Composable
 internal fun FileManagerHomePage(
     controller: FileManagerController,
     onOpenScanner: () -> Unit,
+    onOpenFileSettings: () -> Unit = {},
 ) {
+    if (LocalUiMode.current == UiMode.Material) {
+        FileManagerHomeMaterial(
+            controller = controller,
+            onOpenFileSettings = onOpenFileSettings,
+        )
+        return
+    }
+    var showMoreMenu by remember { mutableStateOf(false) }
     val surface = MiuixTheme.colorScheme.surface
     val onSurface = MiuixTheme.colorScheme.onSurface
     val summary = MiuixTheme.colorScheme.onSurfaceVariantSummary
@@ -226,31 +244,33 @@ internal fun FileManagerHomePage(
                                 },
                                 onClick = { controller.onOpenDir(controller.root.absolutePath, null, "手机存储目录", false) },
                             )
-                            ArrowPreference(
-                                title = "回收站",
-                                startAction = {
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(end = 6.dp)
-                                            .size(27.5.dp)
-                                            .background(
-                                                Color(0xFFE8452C),
-                                                RoundedCornerShape(8.25.dp),
-                                            ),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Delete,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(23.dp),
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    controller.onOpenDir(controller.recycleRoot.absolutePath, null, "回收站", false)
-                                },
-                            )
+                            if (FileManagerPrefs.recycleEnabled) {
+                                ArrowPreference(
+                                    title = "回收站",
+                                    startAction = {
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(end = 6.dp)
+                                                .size(27.5.dp)
+                                                .background(
+                                                    Color(0xFFE8452C),
+                                                    RoundedCornerShape(8.25.dp),
+                                                ),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.Delete,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(23.dp),
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        controller.onOpenDir(controller.recycleRoot.absolutePath, null, "回收站", false)
+                                    },
+                                )
+                            }
                         }
 
                         // 2 列分类
@@ -346,7 +366,7 @@ internal fun FileManagerHomePage(
                                                     exists -> controller.onOpenDir(app.dirPath, null, app.name, true)
                                                     else -> android.widget.Toast.makeText(
                                                         controller.context,
-                                                        "${app.name} 的下载目录不存在",
+                                                        "无法访问 ${app.name} 的目录",
                                                         android.widget.Toast.LENGTH_SHORT,
                                                     ).show()
                                                 }
@@ -401,6 +421,35 @@ internal fun FileManagerHomePage(
                         backCardMaterialModifier = backCardModifier,
                         iconTint = onSurface,
                     )
+                },
+                actions = {
+                    Box {
+                        SettingsTopBarAction(
+                            backCardAlpha = backCardAlpha,
+                            backCardMaterialModifier = backCardModifier,
+                            onClick = { showMoreMenu = true },
+                            contentDescription = "更多",
+                            icon = MiuixIcons.More,
+                            tint = onSurface,
+                        )
+                        WindowCascadingListPopup(
+                            show = showMoreMenu,
+                            entries = listOf(
+                                DropdownEntry(
+                                    items = listOf(
+                                        DropdownItem(
+                                            text = "文件管理设置",
+                                            onClick = {
+                                                showMoreMenu = false
+                                                onOpenFileSettings()
+                                            },
+                                        ),
+                                    ),
+                                ),
+                            ),
+                            onDismissRequest = { showMoreMenu = false },
+                        )
+                    }
                 },
             )
         }
@@ -508,10 +557,8 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
             "QQ", "com.tencent.mobileqq", Color(0xFF12B7F5),
             "https://wiki.connect.qq.com/wp-content/uploads/2013/10/03_qq_symbol-1-768x921.png",
             listOf(
+                "Android/data/com.tencent.mobileqq/Tencent/QQfile_recv",
                 "Android/data/com.tencent.mobileqq/tencent/QQfile_recv",
-                "tencent/QQfile_recv",
-                "Tencent/QQfile_recv",
-                "Download/QQ",
             ),
         ),
         Def(
@@ -553,7 +600,10 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
         val readable = files.firstOrNull { it.exists() && it.canRead() && it.listFiles() != null }
         val existing = readable ?: files.firstOrNull { it.exists() }
         val resolved = existing ?: files.first()
-        val restricted = existing != null && readable == null
+        // Android/data、Android/obb 下的目录即使 exists() 为 false（被系统屏蔽 stat）也要当作
+        // 受限目录打开，交给文件管理的 SAF / Shizuku 回退通道，而不是提示「目录不存在」
+        val restricted = isRestrictedAppDir(resolved.absolutePath) ||
+            (existing != null && readable == null)
         if (installed || existing != null) {
             out.add(
                 FmDetectedApp(
@@ -568,6 +618,10 @@ internal fun fmDetectedApps(context: android.content.Context): List<FmDetectedAp
     }
     return out
 }
+
+/** 其它应用的 Android/data、Android/obb 目录，java.io 通常无法直接访问 */
+internal fun isRestrictedAppDir(path: String): Boolean =
+    path.contains("/Android/data/") || path.contains("/Android/obb/")
 
 /** 通过 DocumentsProvider 打开目录：系统文件管理器与 MT 管理器可读取 Android/data */
 internal fun fmOpenWithSystemFileManager(context: android.content.Context, path: String): Boolean {

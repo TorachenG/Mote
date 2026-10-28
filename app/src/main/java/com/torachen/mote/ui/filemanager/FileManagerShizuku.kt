@@ -38,23 +38,45 @@ internal object ShizukuBridge {
         m.invoke(null, arrayOf("sh", "-c", cmd), null, null) as? Process
     }.getOrNull()
 
-    /** 返回 (名称, 是否目录)；失败返回 null */
-    fun list(path: String): List<Pair<String, Boolean>>? {
+    /** 返回目录项；失败返回 null */
+    data class Entry(
+        val name: String,
+        val isDir: Boolean,
+        val size: Long,
+        val modified: Long,
+    )
+
+    fun list(path: String): List<Entry>? {
         if (!hasPermission()) return null
         return runCatching {
             val process = run("ls -lA '" + path.replace("'", "'\\''") + "'") ?: return null
             val out = process.inputStream.bufferedReader().readLines()
             process.waitFor()
-            val result = mutableListOf<Pair<String, Boolean>>()
+            val result = mutableListOf<Entry>()
+            // toybox ls 默认输出 `yyyy-MM-dd HH:mm`
+            val timeFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
             out.forEach { line ->
                 if (line.isBlank() || line.startsWith("total ")) return@forEach
                 val parts = line.split(Regex("\\s+"), 8)
                 if (parts.size < 8) return@forEach
                 val isDir = parts[0].startsWith("d")
                 val name = parts[7]
-                if (name != "." && name != "..") result.add(name to isDir)
+                if (name != "." && name != "..") {
+                    result.add(
+                        Entry(
+                            name = name,
+                            isDir = isDir,
+                            size = parts[4].toLongOrNull() ?: 0L,
+                            modified = runCatching {
+                                timeFormat.parse("${parts[5]} ${parts[6]}")?.time ?: 0L
+                            }.getOrDefault(0L),
+                        )
+                    )
+                }
             }
-            result.sortedWith(compareByDescending<Pair<String, Boolean>> { it.second }.thenBy { it.first.lowercase() })
+            result.sortedWith(
+                compareByDescending<Entry> { it.isDir }.thenBy { it.name.lowercase() }
+            )
         }.getOrNull()
     }
 
@@ -65,7 +87,19 @@ internal object ShizukuBridge {
 
     fun rename(from: String, to: String): Boolean = runCatching {
         if (!hasPermission()) return false
-        run("mv '" + from.replace("'", "'\\''") + "' '" + to.replace("'", "'\\''") + "'")?.waitFor() == 0
+        run("mv -f '" + from.replace("'", "'\\''") + "' '" + to.replace("'", "'\\''") + "'")?.waitFor() == 0
+    }.getOrDefault(false)
+
+    /** 复制 / 移动（回退通道通过 shell 访问受限目录） */
+    fun copyOrMove(sources: List<String>, destDir: String, move: Boolean): Boolean = runCatching {
+        if (!hasPermission()) return false
+        val dest = "'" + destDir.trimEnd('/').replace("'", "'\\''") + "/'"
+        sources.forEach { source ->
+            val src = "'" + source.replace("'", "'\\''") + "'"
+            val cmd = (if (move) "mv -f " else "cp -rf ") + src + " " + dest
+            if (run(cmd)?.waitFor() != 0) return false
+        }
+        true
     }.getOrDefault(false)
 
     /** 复制到应用缓存后交给系统打开（可编辑的由外部应用写回缓存，再用 copyBack 写回） */

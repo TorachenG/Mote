@@ -1201,7 +1201,7 @@ private fun NewTabPageMiuix(
 
     var bannerContent by remember { mutableIntStateOf(prefs.getInt(KEY_HOME_BANNER_CONTENT, 1)) }
     val showBanner = bannerContent != 0
-    var backgroundContent by remember { mutableIntStateOf(prefs.getInt(KEY_HOME_BACKGROUND_CONTENT, BACKGROUND_CONTENT_BING_INDEX)) }
+    var backgroundContent by remember { mutableIntStateOf(prefs.getInt(KEY_HOME_BACKGROUND_CONTENT, 0)) }
     var showQuickUrls by remember { mutableStateOf(prefs.getBoolean(KEY_HOME_SHOW_QUICK_URLS, true)) }
     var scanModuleEnabled by remember { mutableStateOf(prefs.getBoolean(KEY_SCAN_MODULE_ENABLED, true)) }
 
@@ -1477,7 +1477,15 @@ private fun NewTabPageMiuix(
         }
     }
 
-    val onWallpaper = when (controlColorMode) {
+    val isCustomImageBg = backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX
+    val isBingBg = backgroundContent == BACKGROUND_CONTENT_BING_INDEX
+    val isImageBg = isCustomImageBg || isBingBg
+    val isPlainBg = backgroundContent == 0 || backgroundContent == 3
+
+    // 非图片背景：控件文字/图标统一跟随软件深色模式；图片背景才使用「控件颜色」设置
+    val onWallpaper = if (!isImageBg) {
+        MiuixTheme.colorScheme.onSurface
+    } else when (controlColorMode) {
         0 -> MiuixTheme.colorScheme.onSurface
         1 -> if (wallpaper.isLightBg) Color(0xFF000000) else Color(0xFFFFFFFF)
         2 -> Color(0xFF000000)
@@ -1495,10 +1503,8 @@ private fun NewTabPageMiuix(
         }
     }
 
-    val isCustomImageBg = backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX
-    val isBingBg = backgroundContent == BACKGROUND_CONTENT_BING_INDEX
     // ★ 需求 2a：材质风格/颜色仅在自定义背景为每日壁纸或自定义图片时生效，其余时候用 MIUIX 普通灰色材质
-    val effectiveMaterialStyle = if (isCustomImageBg || isBingBg) materialStyle else 0
+    val effectiveMaterialStyle = if (isImageBg) materialStyle else 0
     val blurSupported = isRuntimeShaderSupported()
 
     val backdrop: LayerBackdrop? = if (blurSupported) {
@@ -1507,7 +1513,7 @@ private fun NewTabPageMiuix(
             drawContent()
         }
     } else null
-    val useBlur = (isCustomImageBg || isBingBg) && blurSupported && backdrop != null
+    val useBlur = isImageBg && blurSupported && backdrop != null
 
     val folderBlurBackdrop: LayerBackdrop? = if (blurSupported) {
         rememberLayerBackdrop {
@@ -1516,7 +1522,11 @@ private fun NewTabPageMiuix(
         }
     } else null
 
-    val blurTintColor: Color = when (materialColorMode) {
+    val blurTintColor: Color = if (!isImageBg) {
+        // 默认 / 极简白：与 MIUIX 搜索栏同款灰色；其它纯色背景：主题 surface（浅色为白、深色为暗）
+        if (isPlainBg) MiuixTheme.colorScheme.surfaceContainerHigh
+        else MiuixTheme.colorScheme.surface
+    } else when (materialColorMode) {
         1 -> Color.White.copy(alpha = 0.2f)
         2 -> Color.Black.copy(alpha = 0.2f)
         else -> if (themeIsDark) Color.Black.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.2f)
@@ -1536,7 +1546,7 @@ private fun NewTabPageMiuix(
                 KEY_HOME_BANNER_FONT_WEIGHT -> bannerFontWeight = prefs.getInt(key, 400)
                 "search_suggest_enabled" -> searchSuggestEnabled = prefs.getBoolean(key, true)
                 "ui_control_color_mode" -> {
-                    controlColorMode = prefs.getInt(key, 0).coerceIn(0, 3)
+                    controlColorMode = prefs.getInt(key, 1).coerceIn(0, 3)
                 }
                 "ui_material_color_mode" -> {
                     materialColorMode = prefs.getInt(key, 0).coerceIn(0, 3)
@@ -5582,7 +5592,7 @@ private fun NewTabPageMaterial(
         mutableIntStateOf(prefs.getInt(KEY_HOME_BANNER_CONTENT, 1))
     }
     var backgroundContent by remember {
-        mutableIntStateOf(prefs.getInt(KEY_HOME_BACKGROUND_CONTENT, BACKGROUND_CONTENT_BING_INDEX))
+        mutableIntStateOf(prefs.getInt(KEY_HOME_BACKGROUND_CONTENT, 0))
     }
     var showQuickUrls by remember {
         mutableStateOf(prefs.getBoolean(KEY_HOME_SHOW_QUICK_URLS, true))
@@ -5641,7 +5651,7 @@ private fun NewTabPageMaterial(
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             when (key) {
                 "ui_control_color_mode" ->
-                    controlColorMode = prefs.getInt(key, 0).coerceIn(0, 3)
+                    controlColorMode = prefs.getInt(key, 1).coerceIn(0, 3)
                 "ui_material_color_mode" ->
                     materialColorMode = prefs.getInt(key, 0).coerceIn(0, 3)
                 "home_background_vignette" ->
@@ -5751,21 +5761,23 @@ private fun NewTabPageMaterial(
         }
     }
 
-    // ★ 需求 2a：材质颜色仅在自定义背景为每日壁纸或自定义图片时生效，其余时候回落 Material 默认灰色
-    val effectiveMaterialColorMode = if (
-        backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX ||
-        backgroundContent == BACKGROUND_CONTENT_BING_INDEX
-    ) materialColorMode else 0
+    val isCustomImageBg = backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX
+    val isBingBg = backgroundContent == BACKGROUND_CONTENT_BING_INDEX
+    val isImageBg = isCustomImageBg || isBingBg
+    val isPlainBg = backgroundContent == 0 || backgroundContent == 3
 
-    val searchBarColor: Color = when (effectiveMaterialColorMode) {
+    // ★ 需求 2a：材质颜色仅在自定义背景为每日壁纸或自定义图片时生效，其余时候回落 Material 默认灰色
+    val effectiveMaterialColorMode = if (isImageBg) materialColorMode else 0
+
+    val imageSearchBarColor: Color = when (effectiveMaterialColorMode) {
         1 -> Color.White.copy(alpha = 0.85f) // 浅色
         2 -> Color.Black.copy(alpha = 0.65f) // 深色
         else -> when { // 跟随软件
-            backgroundContent == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX && customWallpaperBitmap != null ->
+            isCustomImageBg && customWallpaperBitmap != null ->
                 if (wallpaper.isLightBg) Color.White.copy(alpha = 0.85f)
                 else Color.Black.copy(alpha = 0.65f)
 
-            backgroundContent == BACKGROUND_CONTENT_BING_INDEX && bingWallpaperBitmap != null ->
+            isBingBg && bingWallpaperBitmap != null ->
                 if (wallpaper.isLightBg) Color.White.copy(alpha = 0.85f)
                 else Color.Black.copy(alpha = 0.65f)
 
@@ -5773,14 +5785,25 @@ private fun NewTabPageMaterial(
         }
     }
 
-    // ★ 搜索栏前景（图标/文字）色：跟搜索栏背景对比
+    // 非图片背景：默认/极简白用 Material 搜索栏灰，其它纯色用 surface（浅色白、深色暗）
+    val controlSurfaceColor: Color = when {
+        !isImageBg && isPlainBg -> M3MaterialTheme.colorScheme.surfaceContainerHigh
+        !isImageBg -> M3MaterialTheme.colorScheme.surface
+        else -> imageSearchBarColor
+    }
+    val searchBarColor: Color = controlSurfaceColor
+
+    // ★ 搜索栏前景（图标/文字）色：非图片背景按软件主题黑白
     val searchBarContentColor: Color =
-        if (searchBarColor.luminance() > 0.5f) Color(0xFF000000)
+        if (!isImageBg) M3MaterialTheme.colorScheme.onSurface
+        else if (searchBarColor.luminance() > 0.5f) Color(0xFF000000)
         else Color(0xFFFFFFFF)
     val searchBarHintColor: Color = searchBarContentColor.copy(alpha = 0.5f)
 
-    // ★ Banner 颜色跟随「控件颜色」设置
-    val onWallpaper = when (controlColorMode) {
+    // ★ Banner 颜色仅在图片背景跟随「控件颜色」，其余按软件主题
+    val onWallpaper = if (!isImageBg) {
+        M3MaterialTheme.colorScheme.onSurface
+    } else when (controlColorMode) {
         0 -> M3MaterialTheme.colorScheme.onSurface
         1 -> if (wallpaper.isLightBg) Color(0xFF000000) else Color(0xFFFFFFFF)
         2 -> Color(0xFF000000)
@@ -6155,6 +6178,7 @@ private fun NewTabPageMaterial(
                     onCommitEdit = { commitQuickUrlEdit() },
                     onWallpaper = onWallpaper,
                     onWallpaperSecondary = onWallpaperSecondary,
+                    controlSurfaceColor = if (isImageBg) Color.Transparent else controlSurfaceColor,
                 )
             }
         }
@@ -6783,6 +6807,7 @@ private fun M3QuickUrlGrid(
     onCommitEdit: () -> Unit,
     onWallpaper: Color,
     onWallpaperSecondary: Color,
+    controlSurfaceColor: Color,
 ) {
     val density = LocalDensity.current
 
@@ -6918,6 +6943,7 @@ private fun M3QuickUrlGrid(
                             isEditMode = isEditMode,
                             onWallpaper = onWallpaper,
                             onWallpaperSecondary = onWallpaperSecondary,
+                            controlSurfaceColor = controlSurfaceColor,
                             onClick = {},
                             onLongClick = {},
                             onDelete = { onDelete(url) },
@@ -6944,12 +6970,14 @@ private fun M3QuickUrlGrid(
                         onClick = onMoreClick,
                         onWallpaper = onWallpaper,
                         onWallpaperSecondary = onWallpaperSecondary,
+                        controlSurfaceColor = controlSurfaceColor,
                     )
                 } else {
                     M3AddQuickUrlButton(
                         onClick = onAdd,
                         onWallpaper = onWallpaper,
                         onWallpaperSecondary = onWallpaperSecondary,
+                        controlSurfaceColor = controlSurfaceColor,
                     )
                 }
             }
@@ -7017,6 +7045,7 @@ private fun M3QuickUrlItem(
     isEditMode: Boolean,
     onWallpaper: Color,
     onWallpaperSecondary: Color,
+    controlSurfaceColor: Color,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onDelete: () -> Unit,
@@ -7050,7 +7079,14 @@ private fun M3QuickUrlItem(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(CircleShape),
+                    .clip(CircleShape)
+                    .background(
+                        if (favicon == null && controlSurfaceColor != Color.Transparent) {
+                            controlSurfaceColor
+                        } else {
+                            Color.Transparent
+                        }
+                    ),
                 contentAlignment = Alignment.Center,
             ) {
                 if (favicon != null) {
@@ -7116,6 +7152,7 @@ private fun M3AddQuickUrlButton(
     onClick: () -> Unit,
     onWallpaper: Color,
     onWallpaperSecondary: Color,
+    controlSurfaceColor: Color,
 ) {
     Column(
         modifier = Modifier
@@ -7129,7 +7166,10 @@ private fun M3AddQuickUrlButton(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(onWallpaper.copy(alpha = 0.08f)),
+                .background(
+                    if (controlSurfaceColor == Color.Transparent) onWallpaper.copy(alpha = 0.08f)
+                    else controlSurfaceColor
+                ),
             contentAlignment = Alignment.Center,
         ) {
             M3Icon(
@@ -7651,6 +7691,7 @@ private fun M3QuickUrlMoreButton(
     onClick: () -> Unit,
     onWallpaper: Color,
     onWallpaperSecondary: Color,
+    controlSurfaceColor: Color,
 ) {
     Column(
         modifier = Modifier
@@ -7664,7 +7705,10 @@ private fun M3QuickUrlMoreButton(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
-                .background(onWallpaper.copy(alpha = 0.08f)),
+                .background(
+                    if (controlSurfaceColor == Color.Transparent) onWallpaper.copy(alpha = 0.08f)
+                    else controlSurfaceColor
+                ),
             contentAlignment = Alignment.Center,
         ) {
             M3QuickUrlMoreMiniGrid(hiddenUrls = hiddenUrls.take(4))

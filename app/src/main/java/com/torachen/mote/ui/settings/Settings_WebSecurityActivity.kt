@@ -138,6 +138,9 @@ private const val KEY_REMEMBER_FORM = "web_remember_form"
 private const val KEY_ACCEPT_COOKIE = "web_accept_cookie"
 private const val KEY_CLEAR_INCOGNITO_ON_EXIT = "web_clear_incognito_on_exit"
 
+private const val KEY_DOWNLOAD_PROTECTION = "web_download_protection"
+private const val KEY_DISABLE_WEBRTC = "web_disable_webrtc"
+private const val KEY_BLOCK_REDIRECTS = "web_block_redirects"
 private const val KEY_BLOCK_ADS_GLOBAL = "web_block_ads_global"
 private const val KEY_TRACKING_PROTECTION_GLOBAL = "web_tracking_protection_global"
 
@@ -150,6 +153,9 @@ private data class WebSecurityUiState(
     val rememberFormEnabled: Boolean,
     val acceptCookieEnabled: Boolean,
     val clearIncognitoOnExitEnabled: Boolean,
+    val downloadProtectionEnabled: Boolean,
+    val disableWebRtcEnabled: Boolean,
+    val blockRedirectsEnabled: Boolean,
     val blockAdsGlobalEnabled: Boolean,
     val trackingProtectionGlobalEnabled: Boolean,
     val trackingLevel: Int,
@@ -160,6 +166,9 @@ private data class WebSecurityActions(
     val onRememberFormChange: (Boolean) -> Unit,
     val onAcceptCookieChange: (Boolean) -> Unit,
     val onClearIncognitoOnExitChange: (Boolean) -> Unit,
+    val onDownloadProtectionChange: (Boolean) -> Unit,
+    val onDisableWebRtcChange: (Boolean) -> Unit,
+    val onBlockRedirectsChange: (Boolean) -> Unit,
     val onBlockAdsGlobalChange: (Boolean) -> Unit,
     val onTrackingProtectionGlobalChange: (Boolean) -> Unit,
     val onTrackingLevelChange: (Int) -> Unit,
@@ -190,6 +199,15 @@ fun SettingsWebSecurityPage(
     var clearIncognitoOnExitEnabled by remember {
         mutableStateOf(prefs.getBoolean(KEY_CLEAR_INCOGNITO_ON_EXIT, true))
     }
+    var downloadProtectionEnabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_DOWNLOAD_PROTECTION, true))
+    }
+    var disableWebRtcEnabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_DISABLE_WEBRTC, false))
+    }
+    var blockRedirectsEnabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_BLOCK_REDIRECTS, false))
+    }
     var blockAdsGlobalEnabled by remember {
         mutableStateOf(prefs.getBoolean(KEY_BLOCK_ADS_GLOBAL, true))
     }
@@ -204,6 +222,9 @@ fun SettingsWebSecurityPage(
         rememberFormEnabled = rememberFormEnabled,
         acceptCookieEnabled = acceptCookieEnabled,
         clearIncognitoOnExitEnabled = clearIncognitoOnExitEnabled,
+        downloadProtectionEnabled = downloadProtectionEnabled,
+        disableWebRtcEnabled = disableWebRtcEnabled,
+        blockRedirectsEnabled = blockRedirectsEnabled,
         blockAdsGlobalEnabled = blockAdsGlobalEnabled,
         trackingProtectionGlobalEnabled = trackingProtectionGlobalEnabled,
         trackingLevel = trackingLevel,
@@ -221,6 +242,18 @@ fun SettingsWebSecurityPage(
         onClearIncognitoOnExitChange = {
             clearIncognitoOnExitEnabled = it
             prefs.edit().putBoolean(KEY_CLEAR_INCOGNITO_ON_EXIT, it).apply()
+        },
+        onDownloadProtectionChange = {
+            downloadProtectionEnabled = it
+            prefs.edit().putBoolean(KEY_DOWNLOAD_PROTECTION, it).apply()
+        },
+        onDisableWebRtcChange = {
+            disableWebRtcEnabled = it
+            prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
+        },
+        onBlockRedirectsChange = {
+            blockRedirectsEnabled = it
+            prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
         },
         onBlockAdsGlobalChange = { enabled ->
             blockAdsGlobalEnabled = enabled
@@ -404,6 +437,45 @@ private fun SettingsWebSecurityMiuix(
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
                             ) {
+                                SearchableItem(
+                                    title = "下载防护",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_download_protection",
+                                ) {
+                                    SwitchPreference(
+                                        title = "下载防护",
+                                        summary = "拦截网页发起的可疑可执行文件下载",
+                                        checked = state.downloadProtectionEnabled,
+                                        onCheckedChange = actions.onDownloadProtectionChange,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "禁用 WebRTC",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_disable_webrtc",
+                                ) {
+                                    SwitchPreference(
+                                        title = "禁用 WebRTC",
+                                        summary = "阻止网页通过 WebRTC 暴露本机 IP 地址",
+                                        checked = state.disableWebRtcEnabled,
+                                        onCheckedChange = actions.onDisableWebRtcChange,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "网页重定向",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_block_redirects",
+                                ) {
+                                    SwitchPreference(
+                                        title = "网页重定向",
+                                        summary = "阻止网页自动跳转到其它站点",
+                                        checked = state.blockRedirectsEnabled,
+                                        onCheckedChange = actions.onBlockRedirectsChange,
+                                    )
+                                }
                                 SearchableItem(
                                     title = "拦截广告",
                                     pageRoute = "settings_web_security",

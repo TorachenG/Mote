@@ -25,6 +25,8 @@ import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.abs
@@ -47,6 +49,7 @@ internal fun PullRefreshContainer(
     modifier: Modifier = Modifier,
     indicatorTopPadding: androidx.compose.ui.unit.Dp = 0.dp,
     uiState: PullRefreshUiState? = null,
+    isMaterial: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
@@ -135,30 +138,38 @@ internal fun PullRefreshContainer(
             content()
         }
 
-        if (uiState == null && (pullDistance > 0f || isRefreshing)) {
-            val indicatorScale = 1f + indicatorProgress * 0.6f
+        if (pullDistance > 0f || isRefreshing) {
+            val indicatorScale = if (isRefreshing) 1f else indicatorProgress
             val indicatorColor = if (indicatorProgress >= 1f) {
-                MiuixTheme.colorScheme.primary
+                if (isMaterial) MaterialTheme.colorScheme.primary else MiuixTheme.colorScheme.primary
             } else {
-                Color(0xFF666666)
+                if (isMaterial) MaterialTheme.colorScheme.onSurfaceVariant
+                else MiuixTheme.colorScheme.onSurfaceVariantSummary
             }
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = indicatorTopPadding + 12.dp)
+                    .padding(top = indicatorTopPadding)
                     .size(22.dp)
                     .graphicsLayer {
                         scaleX = indicatorScale
                         scaleY = indicatorScale
-                        translationY = animatedOffset * 0.9f
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                InfiniteProgressIndicator(
-                    color = indicatorColor,
-                    size = 22.dp,
-                    strokeWidth = 2.5.dp,
-                )
+                if (isMaterial) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.fillMaxSize(),
+                        color = indicatorColor,
+                        strokeWidth = 2.5.dp,
+                    )
+                } else {
+                    InfiniteProgressIndicator(
+                        color = indicatorColor,
+                        size = 22.dp,
+                        strokeWidth = 2.5.dp,
+                    )
+                }
             }
         }
     }

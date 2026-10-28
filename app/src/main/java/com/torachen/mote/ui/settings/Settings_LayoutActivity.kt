@@ -274,6 +274,9 @@ private val CONTROL_COLOR_OPTIONS = listOf(
     "黑色",
     "白色",
 )
+
+/** 下拉展示顺序：跟随背景调整在前、跟随软件设置在后（内部索引保持不变，兼容旧设置）。 */
+private val CONTROL_COLOR_DISPLAY_ORDER = listOf(1, 0, 2, 3)
 private const val CONTROL_COLOR_DEFAULT = 0
 private const val CONTROL_COLOR_DIVIDER_AFTER_INDEX = 1
 private const val CONTROL_COLOR_FOLLOW_BACKGROUND_INDEX = 1
@@ -441,7 +444,7 @@ fun SettingsLayoutPage(
     }
     var backgroundContentIndex by remember {
         mutableIntStateOf(
-            prefs.getInt(KEY_BACKGROUND_CONTENT, BACKGROUND_CONTENT_BING_INDEX)
+            prefs.getInt(KEY_BACKGROUND_CONTENT, 0)
                 .coerceIn(0, BACKGROUND_CONTENT_OPTIONS.lastIndex)
         )
     }
@@ -1015,29 +1018,26 @@ private fun SettingsLayoutMiuix(
     }
 
     val controlColorEntries = remember(newTabState.controlColorIndex) {
+        val firstGroup = CONTROL_COLOR_DISPLAY_ORDER.take(CONTROL_COLOR_DIVIDER_AFTER_INDEX + 1)
+        val secondGroup = CONTROL_COLOR_DISPLAY_ORDER.drop(CONTROL_COLOR_DIVIDER_AFTER_INDEX + 1)
         listOf(
             DropdownEntry(
-                items = CONTROL_COLOR_OPTIONS
-                    .take(CONTROL_COLOR_DIVIDER_AFTER_INDEX + 1)
-                    .mapIndexed { index, label ->
-                        DropdownItem(
-                            text = label,
-                            selected = newTabState.controlColorIndex == index,
-                            onClick = { actions.onControlColorChange(index) },
-                        )
-                    },
+                items = firstGroup.map { actualIndex ->
+                    DropdownItem(
+                        text = CONTROL_COLOR_OPTIONS[actualIndex],
+                        selected = newTabState.controlColorIndex == actualIndex,
+                        onClick = { actions.onControlColorChange(actualIndex) },
+                    )
+                },
             ),
             DropdownEntry(
-                items = CONTROL_COLOR_OPTIONS
-                    .drop(CONTROL_COLOR_DIVIDER_AFTER_INDEX + 1)
-                    .mapIndexed { index, label ->
-                        val actualIndex = index + CONTROL_COLOR_DIVIDER_AFTER_INDEX + 1
-                        DropdownItem(
-                            text = label,
-                            selected = newTabState.controlColorIndex == actualIndex,
-                            onClick = { actions.onControlColorChange(actualIndex) },
-                        )
-                    },
+                items = secondGroup.map { actualIndex ->
+                    DropdownItem(
+                        text = CONTROL_COLOR_OPTIONS[actualIndex],
+                        selected = newTabState.controlColorIndex == actualIndex,
+                        onClick = { actions.onControlColorChange(actualIndex) },
+                    )
+                },
             ),
         )
     }
@@ -1356,20 +1356,6 @@ private fun SettingsLayoutMiuix(
                                                             newTabState.backgroundContentIndex == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX
 
                                                 SearchableItem(
-                                                    title = "控件颜色",
-                                                    pageRoute = "settings_layout",
-                                                    pageTitle = "主题与界面",
-                                                    itemKey = "settings_layout_control_color",
-                                                    tabIndex = 1,
-                                                ) {
-                                                    WindowDropdownPreference(
-                                                        title = "控件颜色",
-                                                        entries = controlColorEntries,
-                                                        collapseOnSelection = true,
-                                                    )
-                                                }
-
-                                                SearchableItem(
                                                     title = "自定义背景",
                                                     pageRoute = "settings_layout",
                                                     pageTitle = "主题与界面",
@@ -1414,6 +1400,22 @@ private fun SettingsLayoutMiuix(
                                                             title = "背景暗角滤镜",
                                                             checked = newTabState.backgroundVignetteEnabled,
                                                             onCheckedChange = actions.onBackgroundVignetteChange,
+                                                        )
+                                                    }
+                                                }
+
+                                                AnimatedVisibility(visible = showBgDependentOptions) {
+                                                    SearchableItem(
+                                                        title = "控件颜色",
+                                                        pageRoute = "settings_layout",
+                                                        pageTitle = "主题与界面",
+                                                        itemKey = "settings_layout_control_color",
+                                                        tabIndex = 1,
+                                                    ) {
+                                                        WindowDropdownPreference(
+                                                            title = "控件颜色",
+                                                            entries = controlColorEntries,
+                                                            collapseOnSelection = true,
                                                         )
                                                     }
                                                 }
@@ -1948,17 +1950,10 @@ private fun SettingsLayoutMaterial(
                                     val showBgDependentOptions =
                                         newTabState.backgroundContentIndex == BACKGROUND_CONTENT_BING_INDEX ||
                                                 newTabState.backgroundContentIndex == BACKGROUND_CONTENT_CUSTOM_IMAGE_INDEX
+                                    val controlColorDisplayOptions =
+                                        CONTROL_COLOR_DISPLAY_ORDER.map { CONTROL_COLOR_OPTIONS[it] }
 
                                     val themeItems: List<@Composable () -> Unit> = buildList {
-                                        add {
-                                            M3SegmentDropdownItem(
-                                                title = "控件颜色",
-                                                summary = null,
-                                                options = CONTROL_COLOR_OPTIONS,
-                                                selectedIndex = newTabState.controlColorIndex,
-                                                onSelected = actions.onControlColorChange,
-                                            )
-                                        }
                                         add {
                                             M3SegmentDropdownItem(
                                                 title = "自定义背景",
@@ -1986,6 +1981,23 @@ private fun SettingsLayoutMaterial(
                                                     summary = null,
                                                     checked = newTabState.backgroundVignetteEnabled,
                                                     onCheckedChange = actions.onBackgroundVignetteChange,
+                                                )
+                                            }
+                                            add {
+                                                M3SegmentDropdownItem(
+                                                    title = "控件颜色",
+                                                    summary = null,
+                                                    options = controlColorDisplayOptions,
+                                                    selectedIndex = CONTROL_COLOR_DISPLAY_ORDER
+                                                        .indexOf(newTabState.controlColorIndex)
+                                                        .takeIf { it >= 0 } ?: 0,
+                                                    onSelected = { displayIndex ->
+                                                        actions.onControlColorChange(
+                                                            CONTROL_COLOR_DISPLAY_ORDER.getOrElse(displayIndex) {
+                                                                CONTROL_COLOR_FOLLOW_BACKGROUND_INDEX
+                                                            }
+                                                        )
+                                                    },
                                                 )
                                             }
                                             // ★ Material 主题下隐藏「材质风格」「材质颜色」

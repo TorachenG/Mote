@@ -35,6 +35,7 @@ import androidx.compose.material3.NavigationBarItem as M3NavigationBarItem
 import androidx.compose.material3.Text as M3Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +47,7 @@ import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
 import com.torachen.mote.ui.floating.FloatingBottomBar
 import com.torachen.mote.ui.floating.FloatingBottomBarItem
+import com.torachen.mote.ui.filemanager.LocalFileViewerState
 import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
@@ -66,6 +68,7 @@ fun DownloadsShell(
     onOpenInBrowser: (String) -> Unit,
     onOpenScanner: () -> Unit = {},
     onOpenDir: (String?, String?, String?, Boolean) -> Unit = { _, _, _, _ -> },
+    onOpenFileSettings: () -> Unit = {},
 ) {
     val pagerState = rememberPagerState(initialPage = 0) { 2 }
     val tab = pagerState.currentPage
@@ -86,6 +89,7 @@ fun DownloadsShell(
             withContext(Dispatchers.IO) { fileController.reload() }
         }
     }
+    var materialTab by remember { mutableIntStateOf(tab) }
     val openDownloadsFolder: () -> Unit = {
         val target = java.io.File(
             android.os.Environment.getExternalStorageDirectory(),
@@ -93,11 +97,13 @@ fun DownloadsShell(
         )
         if (!target.exists()) target.mkdirs()
         fileController.enter(target)
+        materialTab = 1
         scope.launch { pagerState.animateScrollToPage(1) }
     }
     var downloadsSelecting by remember { mutableStateOf(false) }
     var filesSelecting by remember { mutableStateOf(false) }
     var filesSubPage by remember { mutableStateOf(false) }
+    val viewerOpen = LocalFileViewerState.current != null
 
     when (LocalUiMode.current) {
         UiMode.Miuix -> DownloadsShellMiuix(
@@ -105,36 +111,41 @@ fun DownloadsShell(
             tab = tab,
             onTabChange = { scope.launch { pagerState.animateScrollToPage(it) } },
             pagerState = pagerState,
-            swipeEnabled = !downloadsSelecting && !filesSelecting,
+            swipeEnabled = !downloadsSelecting && !filesSelecting && !viewerOpen,
             onBack = onBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
             onOpenInBrowser = onOpenInBrowser,
-            navBarVisible = !downloadsSelecting && !filesSelecting && !filesSubPage,
+            navBarVisible = !downloadsSelecting && !filesSelecting && !filesSubPage && !viewerOpen,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
             onFilesSubPageChange = { filesSubPage = it },
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
             onOpenScanner = onOpenScanner,
+            onOpenFileSettings = onOpenFileSettings,
         )
         UiMode.Material -> DownloadsShellMaterial(
             fileController = fileController,
-            tab = tab,
-            onTabChange = { scope.launch { pagerState.animateScrollToPage(it) } },
+            tab = materialTab,
+            onTabChange = { index ->
+                materialTab = index
+                scope.launch { pagerState.animateScrollToPage(index) }
+            },
             pagerState = pagerState,
-            swipeEnabled = !downloadsSelecting && !filesSelecting,
+            swipeEnabled = !downloadsSelecting && !filesSelecting && !viewerOpen,
             onBack = onBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
             onOpenInBrowser = onOpenInBrowser,
-            navBarVisible = !downloadsSelecting && !filesSelecting && !filesSubPage,
+            navBarVisible = !downloadsSelecting && !filesSelecting && !filesSubPage && !viewerOpen,
             onDownloadsSelectingChange = { downloadsSelecting = it },
             onFilesSelectingChange = { filesSelecting = it },
             onFilesSubPageChange = { filesSubPage = it },
             selectedIndex = { pagerState.currentPage },
             onOpenDownloadsFolder = openDownloadsFolder,
             onOpenScanner = onOpenScanner,
+            onOpenFileSettings = onOpenFileSettings,
         )
     }
 }
@@ -157,6 +168,7 @@ private fun DownloadsShellMiuix(
     swipeEnabled: Boolean,
     onOpenDownloadsFolder: () -> Unit,
     onOpenScanner: () -> Unit,
+    onOpenFileSettings: () -> Unit,
 ) {
     val surface = MiuixTheme.colorScheme.surface
     val blurSupported = isRuntimeShaderSupported()
@@ -195,6 +207,7 @@ private fun DownloadsShellMiuix(
                         onSelectionModeChange = onFilesSelectingChange,
                         controller = fileController,
                         onOpenScanner = onOpenScanner,
+                        onOpenFileSettings = onOpenFileSettings,
                         onSubPageChange = onFilesSubPageChange,
                     )
                 }
@@ -316,6 +329,7 @@ private fun DownloadsShellMaterial(
     swipeEnabled: Boolean,
     onOpenDownloadsFolder: () -> Unit,
     onOpenScanner: () -> Unit,
+    onOpenFileSettings: () -> Unit,
 ) {
     val bg = M3MaterialTheme.colorScheme.surface
 
@@ -335,6 +349,7 @@ private fun DownloadsShellMaterial(
                 onSelectionModeChange = onFilesSelectingChange,
                 controller = fileController,
                 onOpenScanner = onOpenScanner,
+                onOpenFileSettings = onOpenFileSettings,
             )
         }
 

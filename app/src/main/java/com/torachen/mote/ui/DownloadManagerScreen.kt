@@ -240,6 +240,12 @@ internal const val KEY_SPEED_LIMIT = "download_speed_limit"
 
 internal object PendingOpenInNewWindowStore {
     var pending by mutableStateOf<String?>(null)
+
+    /**
+     * true 表示这次打开来自应用内页面（文件管理/设置等）的外部跳转：
+     * 必须新建一个窗口并直接加载目标页，返回时关闭该窗口，而不是回到默认新标签页。
+     */
+    var forceNewWindow: Boolean = false
 }
 
 internal object PendingOpenDownloadsStore {
@@ -2697,6 +2703,7 @@ private fun openDownloadedFile(context: Context, item: MoteDownloadTask, onBack:
     }
 
     if (isHtml) {
+        PendingOpenInNewWindowStore.forceNewWindow = false
         PendingOpenInNewWindowStore.pending = contentUri.toString()
         onBack()
         return

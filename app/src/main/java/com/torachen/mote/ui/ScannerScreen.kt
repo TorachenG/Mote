@@ -765,25 +765,26 @@ private fun enhancedDocumentFilter(pixels: IntArray, width: Int, height: Int): I
         b[i] = (c and 0xFF).toFloat()
     }
 
-    // 1. 3x3 降噪，每个通道一次（比多次全分辨率卷积快得多）
     val dr = gaussianBlur3x3(r, width, height)
     val dg = gaussianBlur3x3(g, width, height)
     val db = gaussianBlur3x3(b, width, height)
 
-    // 2. 背景光照估计：先 1/4 降采样再做积分图模糊，再双线性上采样
-    //    （原来对三个通道各做一次全分辨率 boxBlur，是耗时大头）
+    val lumOrig = FloatArray(n)
+    for (i in 0 until n) {
+        lumOrig[i] = 0.299f * dr[i] + 0.587f * dg[i] + 0.114f * db[i]
+    }
+
     val scale = 4
     val smallW = (width + scale - 1) / scale
     val smallH = (height + scale - 1) / scale
-    val bgRadius = ((minOf(width, height) / 12) / scale).coerceIn(4, 40)
-    val bgR = SmallPlane(boxBlur(downsamplePlane(dr, width, height, scale), smallW, smallH, bgRadius), smallW, smallH)
-    val bgG = SmallPlane(boxBlur(downsamplePlane(dg, width, height, scale), smallW, smallH, bgRadius), smallW, smallH)
-    val bgB = SmallPlane(boxBlur(downsamplePlane(db, width, height, scale), smallW, smallH, bgRadius), smallW, smallH)
+    val fullResRadius = (kotlin.math.sqrt((width * height).toFloat()) / 32f)
+        .toInt().coerceAtLeast(8)
+    val bgRadius = (fullResRadius / scale).coerceIn(8, 80)
 
-    // 3. 色调曲线 LUT：反射率 0.34 以下压成黑（文字），0.98 以上提成纯白（纸张），中间平滑过渡
-    val curve = FloatArray(512) { idx ->
-        smoothstep(0.34f, 0.98f, idx / 511f * 1.5f) * 255f
-    }
+    val bgLum = SmallPlane(
+        boxBlur(downsamplePlane(lumOrig, width, height, scale), smallW, smallH, bgRadius),
+        smallW, smallH,
+    )
 
     val out = IntArray(n)
     val invScale = 1f / scale
@@ -792,49 +793,40 @@ private fun enhancedDocumentFilter(pixels: IntArray, width: Int, height: Int): I
         val row = y * width
         for (x in 0 until width) {
             val i = row + x
-            val fx = x * invScale
-            val bgRv = sampleBilinear(bgR, fx, fy).coerceAtLeast(16f)
-            val bgGv = sampleBilinear(bgG, fx, fy).coerceAtLeast(16f)
-            val bgBv = sampleBilinear(bgB, fx, fy).coerceAtLeast(16f)
+            val bgv = sampleBilinear(bgLum, x * invScale, fy).coerceAtLeast(8f)
 
-            // 4. 反射率归一化：逐通道除以背景 → 去掉阴影/偏色，同时保留通道比例
-            var nr = dr[i] / bgRv * 255f
-            var ng = dg[i] / bgGv * 255f
-            var nb = db[i] / bgBv * 255f
+            var nr = dr[i] / bgv * 128f
+            var ng = dg[i] / bgv * 128f
+            var nb = db[i] / bgv * 128f
 
-            // 5. 曲线只作用在亮度上，色相/饱和度基本不变（不破坏色彩）
-            val lum = nr * 0.299f + ng * 0.587f + nb * 0.114f
-            val target = curve[(lum * (511f / 382.5f)).toInt().coerceIn(0, 511)]
+            val maxc = maxOf(nr, ng, nb)
+            if (maxc > 255f) {
+                val s = 255f / maxc
+                nr *= s
+                ng *= s
+                nb *= s
+            }
+
+            val lum = 0.299f * nr + 0.587f * ng + 0.114f * nb
+            val lumN = lum / 255f
+            val mappedN = when {
+                lumN <= 0.30f -> 0f
+                lumN <= 0.50f -> (lumN - 0.30f) / 0.20f * 0.85f
+                lumN <= 0.70f -> 0.85f + (lumN - 0.50f) / 0.20f * 0.12f
+                else -> 0.97f + (lumN - 0.70f) / 0.30f * 0.03f
+            }
             if (lum > 1f) {
-                // 限制增益，避免彩色区域被拉出荧光感
-                val ratio = (target / lum).coerceIn(0.55f, 1.75f)
+                val ratio = mappedN * 255f / lum
                 nr *= ratio
                 ng *= ratio
                 nb *= ratio
-            }
-
-            // 6. 轻微提饱和，避免整张纸发灰
-            val y2 = nr * 0.299f + ng * 0.587f + nb * 0.114f
-            nr = y2 + (nr - y2) * 1.05f
-            ng = y2 + (ng - y2) * 1.05f
-            nb = y2 + (nb - y2) * 1.05f
-
-            // 7. 只在"背景确实很亮（纸面）"的区域做强补偿；
-            //    背景偏暗（普通照片、阴影、深色桌面）保留原始明暗，避免过曝
-            val bgLum = (bgRv + bgGv + bgBv) / 3f
-            val w = smoothstep(150f, 235f, bgLum)
-            if (w < 0.999f) {
-                nr = dr[i] + (nr - dr[i]) * w
-                ng = dg[i] + (ng - dg[i]) * w
-                nb = db[i] + (nb - db[i]) * w
             }
 
             out[i] = packArgb(nr, ng, nb, 255)
         }
     }
 
-    // 7. 轻度锐化，强化笔画边缘（强度比原来更低，避免小字出现白边）
-    return sharpenArgb(out, width, height, amount = 0.26f)
+    return sharpenArgb(out, width, height, amount = 0.25f)
 }
 
 // 黑白滤镜：光照补偿 + Otsu 二值化（专为文档小字优化）

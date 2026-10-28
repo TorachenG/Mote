@@ -100,4 +100,14 @@ internal object FmSafStore {
     }
 
     fun docUri(docId: String): Uri = DocumentsContract.buildDocumentUri(AUTHORITY, docId)
+
+    /** 删除目录项；无写权限或失败返回 false */
+    fun delete(context: Context, docId: String): Boolean = runCatching {
+        DocumentsContract.deleteDocument(context.contentResolver, docUri(docId))
+    }.getOrDefault(false)
+
+    /** 重命名目录项；失败返回 false */
+    fun rename(context: Context, docId: String, newName: String): Boolean = runCatching {
+        DocumentsContract.renameDocument(context.contentResolver, docUri(docId), newName) != null
+    }.getOrDefault(false)
 }

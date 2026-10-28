@@ -110,8 +110,8 @@ android {
         applicationId = "com.torachen.mote"
         minSdk = 24
         targetSdk = 37
-        versionCode = 22
-        versionName = "0.3.1"
+        versionCode = 23
+        versionName = "0.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

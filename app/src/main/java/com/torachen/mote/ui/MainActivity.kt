@@ -345,6 +345,12 @@ import com.torachen.mote.service.UserScriptStore
 import com.torachen.mote.ui.scripts.ScriptEditorPage
 import com.torachen.mote.ui.scripts.ScriptsNavArgs
 import com.torachen.mote.ui.scripts.ScriptsPage
+import com.torachen.mote.ui.filemanager.FileManagerSettingsPage
+import com.torachen.mote.ui.filemanager.LocalFileViewerRequest
+import com.torachen.mote.ui.filemanager.LocalFileViewerState
+import com.torachen.mote.ui.filemanager.LocalPdfViewerPage
+import com.torachen.mote.ui.filemanager.LocalTextEditorPage
+import com.torachen.mote.ui.filemanager.LocalWebViewerPage
 
 import com.materialkolor.PaletteStyle
 import com.materialkolor.rememberDynamicColorScheme
@@ -1010,6 +1016,20 @@ private val JS_CONTEXTMENU_TRACKER = """
   }, { passive: true, capture: true });
 })();
 """.trimIndent()
+
+/** 禁用 WebRTC：覆盖 RTCPeerConnection，避免网页通过 ICE 收集本机 IP */
+private val JS_DISABLE_WEBRTC = """
+(function() {
+  try {
+    var block = function() { throw new Error('WebRTC disabled by Mote'); };
+    try { Object.defineProperty(window, 'RTCPeerConnection', { value: block, writable: false }); } catch (e) {}
+    try { Object.defineProperty(window, 'webkitRTCPeerConnection', { value: block, writable: false }); } catch (e) {}
+    try { Object.defineProperty(window, 'mozRTCPeerConnection', { value: block, writable: false }); } catch (e) {}
+    try { if (navigator.mediaDevices) { navigator.mediaDevices.getUserMedia = block; } } catch (e) {}
+    try { if (window.RTCDataChannel) { window.RTCDataChannel = block; } } catch (e) {}
+  } catch (e) {}
+})();
+"""
 
 private val JS_HOOK_XHR_FETCH = """
 (function(){
@@ -2347,6 +2367,7 @@ data class BrowserWindow(
     var incognito: Boolean = false,
     var translated: Boolean = false,
     var isProgrammatic: Boolean = false,
+    var isDirectOpen: Boolean = false,
 )
 
 data class HistoryEntry(
@@ -2461,7 +2482,7 @@ fun rememberScreenCornerRadius(fallback: Dp = 28.dp): Dp {
 private fun defaultTools(): List<ToolDef> = listOf(
     ToolDef("bookmarks", "书签列表", MiuixIcons.FavoritesFill),
     ToolDef("history", "历史记录", MiuixIcons.Recent),
-    ToolDef("downloads", "下载管理", MiuixIcons.Download),
+    ToolDef("downloads", "下载/文件", MiuixIcons.Download),
     ToolDef("refresh", "刷新网页", MiuixIcons.Refresh),
     ToolDef("night_mode", "夜间模式", MiuixIcons.Show, isToggle = true),
     ToolDef("incognito", "无痕模式", MiuixIcons.Hide, isToggle = true),
@@ -2473,7 +2494,7 @@ private fun defaultTools(): List<ToolDef> = listOf(
     ToolDef("find_in_page", "页面查找", MiuixIcons.Search),
     ToolDef("zoom", "网页缩放", MiuixIcons.VerticalSplit),
     ToolDef("translate", "网页翻译", MiuixIcons.Translate, isToggle = true),
-    ToolDef("print", "网页打印", MiuixIcons.Rename),
+    ToolDef("print", "打印/PDF", MiuixIcons.Rename),
     ToolDef("sniff", "资源嗅探", MiuixIcons.RecordingTape),
     ToolDef("view_source", "网页源码", MiuixIcons.Weeks),
     ToolDef("run_script", "脚本", MiuixIcons.Notes),
@@ -2904,6 +2925,7 @@ class MainActivity : ComponentActivity() {
         try {
             val launchUrl = intent.data?.toString()
             if (!launchUrl.isNullOrBlank()) {
+                PendingOpenInNewWindowStore.forceNewWindow = false
                 PendingOpenInNewWindowStore.pending = launchUrl
             }
             if (intent.getBooleanExtra("open_downloads", false) == true) {
@@ -3337,22 +3359,57 @@ fun AppRoot() {
     BackHandler(enabled = pageStack.size > 1 && exitingPageId != null) {
     }
 
-    /** 回到最底层页面（浏览器主页）：保留正常退场动画，退场期间把中间层直接去掉 */
-    fun popToRoot() {
+    /**
+     * 从应用内页面跳到浏览器时，直接收掉所有中间页面。
+     * 这类跳转不会再回到文件管理/设置页，不能依赖退场动画或 backInFlight 竞态，
+     * 否则浏览器返回时会露出残留页面。
+     */
+    fun resetToRootImmediate() {
+        val root = pageStack.firstOrNull() ?: return
+        animJob?.cancel()
+        animJob = null
+        exitingPageId = null
+        backInFlight = false
+        progress = 1f
+        if (pageStack.size > 1) {
+            pageStack.removeAll { it.id != root.id }
+        }
+    }
+
+    fun openInBrowserFromApp(url: String) {
+        PendingOpenInNewWindowStore.forceNewWindow = true
+        // 先让浏览器在页面栈底层准备好，再播放当前页面的退场动画，避免“闪回主页”
+        PendingOpenInNewWindowStore.pending = url
+
         if (pageStack.size <= 1) return
-        if (exitingPageId != null || backInFlight) return
+        if (exitingPageId != null || backInFlight) {
+            resetToRootImmediate()
+            return
+        }
         val topId = pageStack.last().id
         val rootId = pageStack.first().id
         if (topId == rootId) return
         popPage()
-        // 退场动画只针对最上面那一页，其余中间页此时不可见，直接移除
         pageStack.removeAll { it.id != rootId && it.id != topId }
+        // 动画结束后兜底清掉仍在栈里的页面（正常情况 popPage 已移除顶层）
+        val job = animJob
+        scope.launch {
+            job?.join()
+            if (pageStack.size > 1) resetToRootImmediate()
+        }
+    }
+
+    // 本地 PDF / 文本 / HTML / 图片查看器走正式页面栈，复用统一的进出场和预见式返回
+    val viewerRequest = LocalFileViewerState.current
+    LaunchedEffect(viewerRequest) {
+        if (viewerRequest != null && pageStack.none { it.route == "local_file_viewer" }) {
+            pushPage("local_file_viewer")
+        }
     }
 
     val openSettings: () -> Unit = remember { { pushPage("settings_main") } }
     val openScanner: () -> Unit = remember { { pushPage("scanner") } }
     val handlePop: () -> Unit = remember { { popPage() } }
-    val handlePopRoot: () -> Unit = remember { { popToRoot() } }
     val handlePush: (String) -> Unit = remember { { r -> pushPage(r) } }
 
     CompositionLocalProvider(
@@ -3448,7 +3505,7 @@ fun AppRoot() {
                                 openScanner = openScanner,
                                 onPop = handlePop,
                                 onPush = handlePush,
-                                onPopToRoot = handlePopRoot,
+                                onOpenInBrowserFromApp = { url -> openInBrowserFromApp(url) },
                             )
                         }
 
@@ -3493,8 +3550,9 @@ private fun RenderPageContent(
     openScanner: () -> Unit,
     onPop: () -> Unit,
     onPush: (String) -> Unit,
-    onPopToRoot: () -> Unit,
+    onOpenInBrowserFromApp: (String) -> Unit,
 ) {
+    val openInBrowserFromApp = onOpenInBrowserFromApp
     PageSurface(
         isSettled = surfaceIsSettled,
         cornerRadius = screenCornerRadius,
@@ -3590,10 +3648,7 @@ private fun RenderPageContent(
                 onBack = { onPop() },
                 onOpenDownloadSettings = { onPush("download_settings") },
                 onOpenTaskDetail = { onPush("download_task_detail") },
-                onOpenInBrowser = { uri ->
-                    PendingOpenInNewWindowStore.pending = uri
-                    onPopToRoot()
-                },
+                onOpenInBrowser = { uri -> openInBrowserFromApp(uri) },
                 onOpenScanner = { onPush("scanner") },
                 onOpenDir = { path, category, title, fromShortcut ->
                     FileManagerDirRequest.path = path
@@ -3603,13 +3658,11 @@ private fun RenderPageContent(
                     FileManagerDirRequest.token = System.nanoTime()
                     onPush("file_manager_dir")
                 },
+                onOpenFileSettings = { onPush("file_manager_settings") },
             )
             "file_manager_dir" -> FileManagerDirPage(
                 onBack = { onPop() },
-                onOpenInBrowser = { uri ->
-                    PendingOpenInNewWindowStore.pending = uri
-                    onPopToRoot()
-                },
+                onOpenInBrowser = { uri -> openInBrowserFromApp(uri) },
                 initialPath = FileManagerDirRequest.path,
                 initialCategory = FileManagerDirRequest.category,
                 pageTitle = FileManagerDirRequest.title ?: "手机存储目录",
@@ -3617,8 +3670,54 @@ private fun RenderPageContent(
                 fromShortcut = FileManagerDirRequest.fromShortcut,
                 onOpenFileBrowser = { onPush("file_browser") },
             )
-            "file_browser" -> BrowserScreen(
-                onOpenSettings = { onPush("settings_main") },
+            "file_manager_settings" -> {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                FileManagerSettingsPage(
+                    onBack = { onPop() },
+                    onOpenRecycleBin = {
+                        FileManagerDirRequest.path = java.io.File(context.filesDir, "recycle").absolutePath
+                        FileManagerDirRequest.category = null
+                        FileManagerDirRequest.title = "回收站"
+                        FileManagerDirRequest.fromShortcut = true
+                        FileManagerDirRequest.token = System.nanoTime()
+                        onPush("file_manager_dir")
+                    },
+                )
+            }
+            "local_file_viewer" -> {
+                // 用首次组合时的请求快照，保证退场动画期间内容不会先变空
+                val request = remember { LocalFileViewerState.current }
+                if (request == null) {
+                    LaunchedEffect(Unit) { onPop() }
+                } else {
+                    DisposableEffect(request) {
+                        onDispose {
+                            if (LocalFileViewerState.current === request) {
+                                LocalFileViewerState.current = null
+                            }
+                        }
+                    }
+                    when (request) {
+                        is LocalFileViewerRequest.Pdf -> LocalPdfViewerPage(
+                            request = request,
+                            onBack = onPop,
+                        )
+                        is LocalFileViewerRequest.Text -> LocalTextEditorPage(
+                            request = request,
+                            onBack = onPop,
+                        )
+                        is LocalFileViewerRequest.Web -> LocalWebViewerPage(
+                            request = request,
+                            onBack = onPop,
+                            onOpenInBrowser = { url ->
+                                LocalFileViewerState.current = null
+                                openInBrowserFromApp(url)
+                            },
+                        )
+                    }
+                }
+            }
+            "file_browser" -> BrowserScreen(                onOpenSettings = { onPush("settings_main") },
                 onOpenScanner = { onPush("scanner") },
                 onOpenDownloads = { onPush("downloads") },
                 onOpenScripts = { onPush("scripts") },
@@ -3642,18 +3741,12 @@ private fun RenderPageContent(
             )
             "settings_sync_browsers" -> SettingsSyncBrowsersPage(
                 onBack = { onPop() },
-                onOpenUrl = { url ->
-                    PendingOpenInNewWindowStore.pending = url
-                    onPopToRoot()
-                },
+                onOpenUrl = { url -> openInBrowserFromApp(url) },
             )
             "settings_cache_settings" -> CacheSettingsPage(onBack = { onPop() })
             "settings_about" -> SettingsAboutPage(
                 onBack = { onPop() },
-                onOpenUrl = { url ->
-                    PendingOpenInNewWindowStore.pending = url
-                    onPopToRoot()
-                },
+                onOpenUrl = { url -> openInBrowserFromApp(url) },
             )
             else -> SettingsSubPage(
                 title = routeTitle(entry.route),
@@ -3676,6 +3769,7 @@ private fun routeTitle(route: String): String = when (route) {
     "settings_password_manager" -> "密码管理器"
     "settings_legal" -> "法律信息"
     "settings_about" -> "关于"
+    "file_manager_settings" -> "文件管理设置"
     else -> ""
 }
 
@@ -4154,7 +4248,7 @@ fun BrowserScreen(
     var customEngineUrl by remember { mutableStateOf(getActiveCustomEngineUrl()) }
 
     var controlColorMode by remember {
-        mutableIntStateOf(prefs.getInt("ui_control_color_mode", 0).coerceIn(0, 3))
+        mutableIntStateOf(prefs.getInt("ui_control_color_mode", 1).coerceIn(0, 3))
     }
 
     var hasActiveDownloads by remember { mutableStateOf(false) }
@@ -4447,7 +4541,7 @@ fun BrowserScreen(
                     customEngineUrl = getActiveCustomEngineUrl()
                 }
                 "ui_control_color_mode" -> {
-                    controlColorMode = prefs.getInt(key, 0).coerceIn(0, 3)
+                    controlColorMode = prefs.getInt(key, 1).coerceIn(0, 3)
                 }
                 "web_remember_form" -> {
                     val enabled = prefs.getBoolean(key, true)
@@ -5140,7 +5234,7 @@ fun BrowserScreen(
                 it.status == MoteDownloadStatus.PAUSED
     }
 
-    fun createWindow(url: String = ""): String {
+    fun createWindow(url: String = "", directOpen: Boolean = false): String {
         val inheritIncognito = windows.firstOrNull { it.id == activeWindowId }?.incognito == true
         val id = UUID.randomUUID().toString()
 
@@ -5165,6 +5259,7 @@ fun BrowserScreen(
                 noImage = globalNoImage,
                 desktopMode = globalDesktopMode,
                 isProgrammatic = finalUrl.isNotBlank(),
+                isDirectOpen = directOpen && finalUrl.isNotBlank(),
             )
         )
         activeWindowId = id
@@ -5260,7 +5355,7 @@ fun BrowserScreen(
 
     // ★ 统一导航判断（供底部工具栏与横滑手势使用）
     //   返回：WebView 有历史 → goBack
-    //         无历史 + 不在 home → goToHomePage
+    //         无历史 + 不在 home → 直接跳转窗口关闭，普通窗口回主页
     fun canNavigateBack(): Boolean {
         val wv = activeWindowId?.let { webViewMap[it] } ?: return false
         if (wv.canGoBack()) return true
@@ -5269,13 +5364,19 @@ fun BrowserScreen(
     }
 
     fun performNavigateBack() {
-        val wv = activeWindowId?.let { webViewMap[it] } ?: return
+        val id = activeWindowId ?: return
+        val wv = webViewMap[id] ?: return
         if (wv.canGoBack()) {
             wv.goBack()
             return
         }
         if (!isAtHomePage()) {
-            goToHomePage()
+            // 由文件管理/设置等页面直接新建并加载的窗口从未经过主页，返回应直接关闭它
+            if (activeWindow?.isDirectOpen == true && windows.size > 1) {
+                closeWindow(id)
+            } else {
+                goToHomePage()
+            }
         }
     }
 
@@ -5743,6 +5844,7 @@ fun BrowserScreen(
     val pendingOpenNew = PendingOpenInNewWindowStore.pending
     LaunchedEffect(pendingOpenNew) {
         val url = pendingOpenNew ?: return@LaunchedEffect
+        val forceNewWindow = PendingOpenInNewWindowStore.forceNewWindow
         var waited = 0
         while (activeWindowId == null && waited < 3000) {
             delay(50); waited += 50
@@ -5751,14 +5853,15 @@ fun BrowserScreen(
             delay(100)
             try {
                 val current = windows.firstOrNull { it.id == activeWindowId }
-                if (current != null && (current.url.isBlank() || isHomeUrl(current.url))) {
+                if (!forceNewWindow && current != null && (current.url.isBlank() || isHomeUrl(current.url))) {
                     // 当前窗口还是空白页时直接复用，避免多出一个新标签页历史
                     navigateToUrl(current.id, url)
                 } else {
-                    createWindow(url)
+                    createWindow(url, directOpen = forceNewWindow)
                 }
             } catch (_: Exception) {}
         }
+        PendingOpenInNewWindowStore.forceNewWindow = false
         PendingOpenInNewWindowStore.pending = null
     }
 
@@ -10552,6 +10655,22 @@ private fun createWebView(
             ): Boolean {
                 val url = request?.url?.toString() ?: return false
                 val lower = url.lowercase()
+                try {
+                    val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+                    if (secPrefs.getBoolean("web_block_redirects", false) &&
+                        request != null &&
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+                        request.isRedirect
+                    ) {
+                        val currentHost = view?.url?.let { Uri.parse(it).host.orEmpty() }.orEmpty()
+                        val targetHost = request.url.host.orEmpty()
+                        if (currentHost.isNotBlank() && targetHost.isNotBlank() && currentHost != targetHost) {
+                            Toast.makeText(context, "网页重定向已拦截：$targetHost", Toast.LENGTH_SHORT).show()
+                            return true
+                        }
+                    }
+                } catch (_: Exception) {}
+
                 if (!lower.startsWith("http://") && !lower.startsWith("https://")) {
                     val ignoredSchemes = listOf("about:", "data:", "file:", "content:", "javascript:", "blob:")
                     if (ignoredSchemes.any { lower.startsWith(it) }) {
@@ -10611,6 +10730,12 @@ private fun createWebView(
                     SecurityStateHolder.reset(url)
                 }
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
+                try {
+                    val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+                    if (secPrefs.getBoolean("web_disable_webrtc", false)) {
+                        view?.evaluateJavascript(JS_DISABLE_WEBRTC, null)
+                    }
+                } catch (_: Exception) {}
                 if (url != null) onFaviconFromDomain(url)
             }
 
@@ -10985,6 +11110,21 @@ private fun createWebView(
 
         setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
             val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
+            val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+            if (secPrefs.getBoolean("web_download_protection", true)) {
+                val lowerName = fileName.lowercase()
+                val riskyExt = listOf(".apk", ".exe", ".bat", ".cmd", ".sh", ".scr", ".msi", ".jar", ".vbs")
+                if (riskyExt.any { lowerName.endsWith(it) } ||
+                    mimetype.contains("vnd.android.package-archive", true)
+                ) {
+                    Toast.makeText(
+                        context,
+                        "下载防护已拦截可疑文件：$fileName",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@setDownloadListener
+                }
+            }
             onDownloadRequest(
                 PendingDownload(
                     url = url,

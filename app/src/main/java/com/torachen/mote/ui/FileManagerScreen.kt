@@ -3,6 +3,9 @@ package com.torachen.mote.ui
 import com.torachen.mote.ui.filemanager.FileManagerHomePage
 import com.torachen.mote.ui.filemanager.ShizukuBridge
 import com.torachen.mote.ui.filemanager.LocalFileBrowserRequest
+import com.torachen.mote.ui.filemanager.LocalFileViewerRequest
+import com.torachen.mote.ui.filemanager.LocalFileViewerState
+import com.torachen.mote.ui.filemanager.isRestrictedAppDir
 
 import android.content.Context
 import android.content.Intent
@@ -15,6 +18,7 @@ import android.provider.Settings
 import android.widget.Toast
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.setContent
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -32,6 +36,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -46,6 +52,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,6 +74,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.MoreVert
@@ -83,9 +91,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu as M3DropdownMenu
+import androidx.compose.material3.DropdownMenuItem as M3DropdownMenuItem
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.IconButton as M3IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar as M3TopAppBar
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
 import androidx.compose.material3.Surface as M3Surface
 import androidx.compose.material3.Text as M3Text
@@ -152,20 +163,24 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.File as FileIcon
 import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.icon.extended.MoveFile
 import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.window.WindowBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
@@ -174,6 +189,8 @@ internal data class FsEntry(
     val isDir: Boolean,
     val size: Long,
     val modified: Long,
+    /** 非空表示该条目通过 SAF / Shizuku 回退通道访问；file 仍是逻辑路径 */
+    val docId: String? = null,
 )
 
 internal enum class FileCategory(val label: String, val extensions: Set<String>) {
@@ -191,6 +208,31 @@ private const val FM_BLUR_RADIUS = 25f
 private const val FM_BLEND_ALPHA = 0.8f
 private val FM_FALLBACK_HEIGHT = 128.dp
 
+/** 文件管理功能设置：设置页与文件管理页共享同一份 Compose 状态 */
+internal object FileManagerPrefs {
+    const val KEY_RECYCLE_ENABLED = "fm_recycle_enabled"
+    /** 回收站保留天数，与清理逻辑共用 */
+    const val RECYCLE_RETENTION_DAYS = 30
+
+    private var prefs: android.content.SharedPreferences? = null
+
+    var recycleEnabled by mutableStateOf(true)
+        private set
+
+    fun ensure(context: Context) {
+        if (prefs != null) return
+        val p = context.applicationContext.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+        prefs = p
+        recycleEnabled = p.getBoolean(KEY_RECYCLE_ENABLED, true)
+    }
+
+    fun setRecycleEnabled(context: Context, enabled: Boolean) {
+        ensure(context)
+        recycleEnabled = enabled
+        prefs?.edit()?.putBoolean(KEY_RECYCLE_ENABLED, enabled)?.apply()
+    }
+}
+
 internal class FileManagerController(
     val context: Context,
     val onOpenInBrowser: (String) -> Unit,
@@ -200,23 +242,36 @@ internal class FileManagerController(
 ) {
     val root: java.io.File = Environment.getExternalStorageDirectory()
 
+    init {
+        FileManagerPrefs.ensure(context)
+    }
+
     var currentDir by mutableStateOf(root)
     var dirEntries by mutableStateOf<Map<String, List<FsEntry>>>(emptyMap())
     var selected by mutableStateOf<List<FsEntry>>(emptyList())
     /** 多选模式独立状态：清空选择后仍保持多选 */
     var selectionMode by mutableStateOf(false)
-    var pendingOp by mutableStateOf<PendingOp?>(null)
-    var pickDir by mutableStateOf<java.io.File?>(null)
     var needsAllFiles by mutableStateOf(false)
     /** 当前目录存在但无法读取（典型：其它应用的 Android/data） */
     var dirUnreadable by mutableStateOf(false)
-    /** SAF 浏览模式：java.io 不可读时改用 DocumentsContract 列举 */
+    /** 回退浏览模式：java.io 不可读时改用 SAF / Shizuku 列举，目录导航仍以 currentDir 为准 */
     var safMode by mutableStateOf(false)
-    var safPath by mutableStateOf("")
-    var safEntries by mutableStateOf<List<FmSafStore.Entry>>(emptyList())
+    /** 当前目录相对内部存储根的路径；始终是普通路径，不含不可见字符或前导斜杠 */
+    val safPath: String
+        get() = currentDir.absolutePath.removePrefix(root.absolutePath).trim('/')
+    var safEntries by mutableStateOf<List<FsEntry>>(emptyList())
+    /** safEntries 对应的目录；切换目录后立即失效，避免把上一目录的回退列表当成新目录内容 */
+    var safDirPath by mutableStateOf<String?>(null)
     var safFailed by mutableStateOf(false)
-    /** Shizuku 通道模式 */
+    /** Shizuku 通道模式（仅在回退浏览时有效） */
     var shizukuMode by mutableStateOf(false)
+    /** 本次会话选择过 Shizuku：之后遇到不可读目录优先走 Shizuku */
+    var shizukuPreferred by mutableStateOf(false)
+
+    /** 已授予 Shizuku 权限时，不可读目录直接走 Shizuku，不必每次手动点按钮 */
+    private val shizukuAutoAvailable: Boolean by lazy {
+        runCatching { ShizukuBridge.hasPermission() }.getOrDefault(false)
+    }
 
     /** 由页面注入：请求 SAF 目录授权 */
     var onRequestSafGrant: (() -> Unit)? = null
@@ -242,6 +297,7 @@ internal class FileManagerController(
         showHome = false
         category = null
         selected = emptyList()
+        exitFallback()
         currentDir = dir
     }
 
@@ -249,6 +305,7 @@ internal class FileManagerController(
         showHome = true
         category = null
         selected = emptyList()
+        exitFallback()
     }
 
     // 分类浏览
@@ -257,8 +314,6 @@ internal class FileManagerController(
     var categoryLoading by mutableStateOf(false)
     /** 目录切换/重新扫描期间为 true，界面先不渲染旧列表，避免闪回顶部 */
     var reloading by mutableStateOf(false)
-    /** 每个目录的滚动位置记忆（firstVisibleIndex to offset） */
-    val scrollMemory = mutableMapOf<String, Pair<Int, Int>>()
     /** 每个目录独立的 LazyListState，切回时天然保留滚动位置，无需异步恢复 */
     private val listStateMap = mutableMapOf<String, androidx.compose.foundation.lazy.LazyListState>()
 
@@ -278,31 +333,50 @@ internal class FileManagerController(
     var paintStartIndex = -1
     private var paintTarget = false
     private var paintRowHeightPx = 0f
+    /** 本次涂抹开始前各行的选中状态，用于手指返回时还原 */
+    private val paintOriginal = mutableMapOf<Int, Boolean>()
 
     fun beginPaint(index: Int, rowHeightPx: Float) {
-        val list = entriesOf(currentDir)
+        val list = visibleEntries(currentDir)
         val entry = list.getOrNull(index) ?: return
         paintStartIndex = index
         paintRowHeightPx = rowHeightPx.coerceAtLeast(1f)
-        // 起始行已在 enterSelection 中选中，后续按“选中”状态涂抹，不要把起始行再反选
+        // 起始行已在长按中切换过，后续按切换后的状态涂抹
         paintTarget = isSelected(entry)
+        paintOriginal.clear()
+        paintOriginal[index] = paintTarget
     }
 
     fun paintBy(offsetPx: Float) {
         if (paintStartIndex < 0) return
-        val list = entriesOf(currentDir)
+        val list = visibleEntries(currentDir)
+        if (list.isEmpty()) return
         val index = (paintStartIndex + (offsetPx / paintRowHeightPx).roundToInt())
-            .coerceIn(0, (list.size - 1).coerceAtLeast(0))
-        applyPaint(index)
+            .coerceIn(0, list.lastIndex)
+        val lo = minOf(paintStartIndex, index)
+        val hi = maxOf(paintStartIndex, index)
+        // 首次进入涂抹范围的行，先记下它原来的状态
+        for (i in lo..hi) {
+            if (!paintOriginal.containsKey(i)) paintOriginal[i] = isSelected(list[i])
+        }
+        for (i in lo..hi) setSelected(list[i], paintTarget)
+        // 手指往回走时，已经离开当前范围的行恢复涂抹前的状态
+        for ((i, original) in paintOriginal) {
+            if (i !in lo..hi) setSelected(list[i], original)
+        }
+    }
+
+    private fun setSelected(entry: FsEntry, select: Boolean) {
+        val exists = selected.any { it.file.absolutePath == entry.file.absolutePath }
+        when {
+            select && !exists -> selected = selected + entry
+            !select && exists -> selected = selected.filterNot { it.file.absolutePath == entry.file.absolutePath }
+        }
     }
 
     fun endPaint() {
         paintStartIndex = -1
-    }
-
-    private fun applyPaint(index: Int) {
-        val entry = entriesOf(currentDir).getOrNull(index) ?: return
-        if (isSelected(entry) != paintTarget) toggle(entry)
+        paintOriginal.clear()
     }
 
     fun exitSelection() {
@@ -330,113 +404,172 @@ internal class FileManagerController(
         category = null
     }
 
-    /** 返回键/返回按钮统一处理：返回 true 表示已消费 */
-
     /**
-     * 备用路径：在 /0 后插入不可见字符（LRM），利用路径规范化差异绕过 Android/data 的 java.io 限制。
-     * 仅在常规访问失败时尝试；失败返回 null。
+     * 备用访问路径：在内部存储根后插入不可见字符（LRM），部分系统上可绕过 Android/data 的 java.io 限制。
+     * 只作为「列举数据源」使用，绝不写入 currentDir / 目录轴 / SAF 路径，避免多出幽灵目录层级。
      */
+    @Volatile
     private var altBase: String? = null
 
-    /** 若已确定备用基址，把任意路径规范化为带不可见字符的等价路径 */
-    private fun canonical(dir: java.io.File): java.io.File {
-        val base = altBase ?: return dir
-        if (dir.absolutePath.contains("\u200E")) return dir
-        val plain = dir.absolutePath.replace("\u200E", "")
-        val rel = plain.removePrefix(root.absolutePath)
-        return java.io.File(base + rel)
+    @Volatile
+    private var altBaseChecked = false
+
+    private fun altBaseOrNull(): String? {
+        altBase?.let { return it }
+        if (altBaseChecked) return null
+        altBaseChecked = true
+        val candidate = root.absolutePath + "\u200E"
+        val available = runCatching { java.io.File(candidate).listFiles() != null }.getOrDefault(false)
+        if (available) altBase = candidate
+        return altBase
     }
 
-    private fun altAccessDir(dir: java.io.File): java.io.File? {
-        val p = dir.absolutePath
-        val marker = "/0/"
-        val idx = p.indexOf(marker)
-        if (idx < 0) return null
-        val alt = p.substring(0, idx + 2) + "‎" + p.substring(idx + 2)
-        val altFile = java.io.File(alt)
-        return if (altFile.listFiles() != null) altFile else null
+    /** 目录的可读列表：先普通路径，再备用路径；两者都读不了返回 null（空目录返回空列表） */
+    private fun listSource(dir: java.io.File): List<FsEntry>? {
+        dir.listFiles()?.let { return mapEntries(it) }
+        val base = altBaseOrNull() ?: return null
+        val rel = dir.absolutePath.removePrefix(root.absolutePath)
+        val altFiles = java.io.File(base + rel).listFiles() ?: return null
+        return mapEntries(altFiles)
     }
 
-    fun enterSaf(absolutePath: String) {
+    /** 与普通目录一致的排序分组：隐藏项 → 中文名 → 其它 */
+    private fun nameGroup(name: String): Int = when {
+        name.startsWith(".") -> 0
+        name.firstOrNull()?.let { it.code in 0x4E00..0x9FFF } == true -> 1
+        else -> 2
+    }
+
+    private fun sortEntries(entries: List<FsEntry>): List<FsEntry> =
+        entries.sortedWith(
+            compareByDescending<FsEntry> { it.isDir }
+                .thenBy { nameGroup(it.file.name) }
+                .thenBy { it.file.name.lowercase() }
+        )
+
+    private fun mapEntries(files: Array<java.io.File>): List<FsEntry> =
+        sortEntries(
+            files.map { file ->
+                FsEntry(
+                    file = file,
+                    isDir = file.isDirectory,
+                    size = if (file.isFile) file.length() else 0L,
+                    modified = file.lastModified(),
+                )
+            }
+        )
+
+    /** 备用路径下的文件反推回普通路径，保证 currentDir 始终是真实、可返回的逻辑目录 */
+    private fun logicalDirOf(file: java.io.File): java.io.File {
+        val path = file.absolutePath
+        val base = altBase
+        val mapped = if (base != null && path.startsWith(base)) {
+            root.absolutePath + path.removePrefix(base)
+        } else {
+            path
+        }
+        return java.io.File(mapped.replace("\u200E", ""))
+    }
+
+    private fun navigateTo(dir: java.io.File) {
+        currentDir = dir
+        selected = emptyList()
+        if (safMode) {
+            safEntries = emptyList()
+            safDirPath = null
+            safFailed = false
+        }
+    }
+
+    /** 当前目录进入 SAF / Shizuku 回退浏览 */
+    private fun enterFallback() {
         safMode = true
-        safPath = absolutePath.removePrefix(root.absolutePath).trim('/')
-        // 列表仍展示可读的父目录，避免同一个 AnimatedContent 同时做“目录切换”和 SAF 模式切换
-        currentDir = java.io.File(absolutePath).parentFile ?: root
-        loadSaf()
+        shizukuMode = shizukuPreferred || shizukuAutoAvailable
+        if (shizukuMode) loadShizuku() else loadSaf()
+    }
+
+    private fun exitFallback() {
+        if (!safMode) return
+        safMode = false
+        shizukuMode = false
+        safEntries = emptyList()
+        safDirPath = null
+        safFailed = false
     }
 
     fun loadSaf() {
+        val dir = currentDir
+        val path = dir.absolutePath.removePrefix(root.absolutePath).trim('/')
+        safFailed = false
         scanScope.launch {
             val list = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                FmSafStore.list(context, safPath)
+                FmSafStore.list(context, path)
             }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                safEntries = list.orEmpty()
+                if (currentDir != dir) return@withContext
+                val mapped = sortEntries(
+                    list.orEmpty().map { item ->
+                        FsEntry(
+                            file = java.io.File(dir, item.name),
+                            isDir = item.isDir,
+                            size = item.size,
+                            modified = item.modified,
+                            docId = item.docId,
+                        )
+                    }
+                )
+                safEntries = mapped
+                safDirPath = dir.absolutePath
+                // 缓存到目录条目表，退出动画和多选时仍能拿到这些行
+                dirEntries = dirEntries + (dir.absolutePath to mapped)
                 safFailed = list == null
             }
         }
     }
 
-    fun enterShizuku(path: String) {
-        shizukuMode = true
+    /** 用户选择使用 Shizuku 访问当前不可读目录 */
+    fun useShizuku() {
+        shizukuPreferred = true
         safMode = true
-        safPath = path
+        shizukuMode = true
         loadShizuku()
     }
 
-    fun shizukuAbsolutePath(): String =
-        android.os.Environment.getExternalStorageDirectory().absolutePath + "/" + safPath.trim('/')
+    /** 用户为当前目录授予 SAF 权限后重新列举 */
+    fun onSafGranted() {
+        shizukuPreferred = false
+        shizukuMode = false
+        // 只有当前确实处于回退浏览时才需要刷新，避免授权回调把可读目录误切到 SAF 列表
+        if (safMode) loadSaf()
+    }
 
     fun loadShizuku() {
+        val dir = currentDir
+        safFailed = false
         scanScope.launch {
-            val base = shizukuAbsolutePath()
             val entries = withContext(Dispatchers.IO) {
-                ShizukuBridge.list(base)?.map { (name, isDir) ->
-                    FmSafStore.Entry(name, isDir, 0L, 0L, base.trimEnd('/') + "/" + name)
+                ShizukuBridge.list(dir.absolutePath)?.map { item ->
+                    FsEntry(
+                        file = java.io.File(dir, item.name),
+                        isDir = item.isDir,
+                        size = item.size,
+                        modified = item.modified,
+                        docId = dir.absolutePath.trimEnd('/') + "/" + item.name,
+                    )
                 }
             }
             withContext(Dispatchers.Main) {
-                safEntries = entries.orEmpty()
+                if (currentDir != dir) return@withContext
+                val mapped = sortEntries(entries.orEmpty())
+                safEntries = mapped
+                safDirPath = dir.absolutePath
+                dirEntries = dirEntries + (dir.absolutePath to mapped)
                 safFailed = entries == null
             }
         }
     }
 
-    fun safOpen(entry: FmSafStore.Entry) {
-        if (entry.isDir) {
-            if (shizukuMode) {
-                safPath = entry.docId
-                loadShizuku()
-            } else {
-                safPath = entry.docId.removePrefix("primary:").trim('/')
-                loadSaf()
-            }
-        } else if (shizukuMode) {
-            val local = ShizukuBridge.copyToCache(context, entry.docId)
-            if (local == null || !ShizukuBridge.openLocal(context, local)) {
-                android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            if (!FmSafStore.open(context, entry.docId)) {
-                android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    fun safUp(): Boolean {
-        if (safPath.isEmpty()) return false
-        safPath = safPath.substringBeforeLast('/', "")
-        loadSaf()
-        return true
-    }
-
     fun onBackPressed(): Boolean {
-        if (safMode) {
-            if (safUp()) return true
-            safMode = false
-            shizukuMode = false
-            return true
-        }
         if (selectionMode) {
             exitSelection()
             return true
@@ -513,61 +646,118 @@ internal class FileManagerController(
 
     fun entriesOf(dir: java.io.File): List<FsEntry> = dirEntries[dir.absolutePath].orEmpty()
 
+    /** 当前页面真正展示的条目：回退浏览时是 SAF / Shizuku 列表，其余为普通列表 */
+    fun visibleEntries(dir: java.io.File): List<FsEntry> =
+        if (safMode && safDirPath == dir.absolutePath) safEntries else entriesOf(dir)
+
     suspend fun reload() {
-        // 已有缓存时不再遮盖，避免切回目录瞬间出现“闪白/闪内容”
-        reloading = entriesOf(currentDir).isEmpty()
         val dir = currentDir
-        val list = withContext(Dispatchers.IO) {
-            val sourceDir = dir.takeIf { it.listFiles() != null } ?: altAccessDir(dir) ?: dir
-            sourceDir.listFiles()?.map { file ->
-                FsEntry(file, file.isDirectory, if (file.isFile) file.length() else 0L, file.lastModified())
-            }?.sortedWith(
-                compareByDescending<FsEntry> { it.isDir }
-                    .thenBy { entry ->
-                        val name = entry.file.name
-                        when {
-                            name.startsWith(".") -> 0
-                            name.firstOrNull()?.let { it.code in 0x4E00..0x9FFF } == true -> 1
-                            else -> 2
-                        }
-                    }
-                    .thenBy { it.file.name.lowercase() }
-            )
-                ?: emptyList()
+        // 已有缓存或处于回退浏览时不再遮盖，避免切回目录瞬间出现“闪白/闪内容”
+        reloading = entriesOf(dir).isEmpty() && !safMode
+        val list = withContext(Dispatchers.IO) { listSource(dir) }
+        // 列举期间目录已被切走：丢弃这次结果，避免旧目录内容覆盖新页面
+        if (currentDir != dir) return
+        if (list != null) {
+            exitFallback()
+            dirUnreadable = false
+            dirEntries = dirEntries + (dir.absolutePath to list)
+        } else {
+            // 普通路径与备用路径都列不出来：保持 currentDir 不变，仅切换列举通道，
+            // 这样目录轴 / 返回键 / 页面始终指向同一个目录。
+            dirUnreadable = true
+            enterFallback()
         }
-        dirUnreadable = list.isEmpty() && dir.exists() && dir.listFiles() == null
-        if (dirUnreadable) {
-            val alt = altAccessDir(dir)
-            if (alt != null) {
-                currentDir = alt
-                return reload()
-            }
-            enterSaf(dir.absolutePath)
-        }
-        dirEntries = dirEntries + (dir.absolutePath to list)
-        val path = dir.absolutePath
         needsAllFiles = !hasAllFiles(context)
         reloading = false
     }
 
+    /** 分类列表下拉刷新：重新扫描当前分类，扫描期间保留旧列表 */
+    suspend fun reloadCategory() {
+        val target = category ?: return
+        val result = withContext(Dispatchers.IO) {
+            scanCategory(target) { partial ->
+                withContext(Dispatchers.Main.immediate) {
+                    categoryFiles = partial
+                }
+            }
+        }
+        withContext(Dispatchers.Main) {
+            categoryFiles = result
+        }
+    }
+
     fun enter(dir: java.io.File) {
-        val target = if (altBase != null) canonical(dir) else dir
-        if (!target.isDirectory) return
-        currentDir = target
-        selected = emptyList()
-        pickDir = dir
+        navigateTo(logicalDirOf(dir))
+    }
+
+    /** 复制 / 移动弹窗里的子目录列表；支持备用路径和 Shizuku 通道 */
+    fun listDirectories(dir: java.io.File): List<java.io.File> {
+        val fromSource = listSource(dir)
+        val dirs = if (fromSource != null) {
+            fromSource.filter { it.isDir }.map { logicalDirOf(it.file) }
+        } else if (ShizukuBridge.hasPermission()) {
+            ShizukuBridge.list(dir.absolutePath)
+                ?.filter { it.isDir }
+                ?.map { java.io.File(dir, it.name) }
+                .orEmpty()
+        } else {
+            emptyList()
+        }
+        return dirs.distinctBy { it.absolutePath }
+            .sortedWith(compareBy({ nameGroup(it.name) }, { it.name.lowercase() }))
+    }
+
+    /** 把当前选中的文件复制 / 移动到目标目录 */
+    fun transferSelected(dest: java.io.File, op: PendingOp) {
+        val items = selected
+        if (items.isEmpty()) return
+        if (items.any {
+                it.isDir && (dest.absolutePath == it.file.absolutePath ||
+                    dest.absolutePath.startsWith(it.file.absolutePath + "/"))
+            }
+        ) {
+            android.widget.Toast.makeText(context, "不能移动到所选文件夹内部", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (items.any { it.docId != null } || isRestrictedAppDir(dest.absolutePath)) {
+            if (!ShizukuBridge.hasPermission()) {
+                android.widget.Toast.makeText(context, "该目录暂不支持此操作", android.widget.Toast.LENGTH_SHORT).show()
+                return
+            }
+            exitSelection()
+            scanScope.launch(Dispatchers.IO) {
+                val ok = ShizukuBridge.copyOrMove(
+                    sources = items.map { it.file.absolutePath },
+                    destDir = dest.absolutePath,
+                    move = op == PendingOp.MOVE,
+                )
+                withContext(Dispatchers.Main) {
+                    android.widget.Toast.makeText(
+                        context,
+                        if (ok) "完成" else "操作失败",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                    reload()
+                }
+            }
+            return
+        }
+        val paths = items.map { it.file.absolutePath }
+        when (op) {
+            PendingOp.COPY -> FileOpService.copy(context, paths, dest.absolutePath)
+            PendingOp.MOVE -> FileOpService.move(context, paths, dest.absolutePath)
+        }
+        exitSelection()
     }
 
     fun up(): Boolean {
         val parent = currentDir.parentFile ?: return false
         if (parent.absolutePath.length < root.absolutePath.length) return false
-        currentDir = parent
-        selected = emptyList()
-        pickDir = parent
+        navigateTo(parent)
         return true
     }
 
-    fun allEntries(): List<FsEntry> = entriesOf(currentDir)
+    fun allEntries(): List<FsEntry> = visibleEntries(currentDir)
 
     fun allSelected(): Boolean {
         val all = allEntries()
@@ -587,37 +777,13 @@ internal class FileManagerController(
     fun isSelected(entry: FsEntry): Boolean =
         selected.any { it.file.absolutePath == entry.file.absolutePath }
 
-    fun beginMove(op: PendingOp) {
-        if (selected.isEmpty()) return
-        pendingOp = op
-        pickDir = currentDir
-    }
-
-    fun cancelPick() {
-        pendingOp = null
-        pickDir = null
-        selected = emptyList()
-    }
-
-    fun confirmPick() {
-        val op = pendingOp ?: return
-        val items = selected
-        val dest = pickDir ?: return
-        if (items.isEmpty()) return
-        if (items.any { it.isDir && dest.absolutePath.startsWith(it.file.absolutePath) }) return
-        val paths = items.map { it.file.absolutePath }
-        when (op) {
-            PendingOp.COPY -> FileOpService.copy(context, paths, dest.absolutePath)
-            PendingOp.MOVE -> FileOpService.move(context, paths, dest.absolutePath)
-        }
-        pendingOp = null
-        pickDir = null
-        selected = emptyList()
-    }
-
     fun compressSelected(): java.io.File? {
         val items = selected
         if (items.isEmpty()) return null
+        if (items.any { it.docId != null }) {
+            android.widget.Toast.makeText(context, "该目录暂不支持压缩", android.widget.Toast.LENGTH_SHORT).show()
+            return null
+        }
         val baseDir = items.first().file.parentFile ?: currentDir
         val name = if (items.size == 1) items.first().file.name + ".zip" else "压缩包.zip"
         val zip = java.io.File(baseDir, name)
@@ -631,21 +797,27 @@ internal class FileManagerController(
     fun deleteSelected() {
         val items = selected
         if (items.isEmpty()) return
-        if (shizukuMode) {
-            scanScope.launch(Dispatchers.IO) {
-                selected.forEach { ShizukuBridge.delete(it.file.absolutePath) }
+        val inRecycle = isInRecycle
+        val permanent = items.any { it.docId != null } || inRecycle || !FileManagerPrefs.recycleEnabled
+        scanScope.launch(Dispatchers.IO) {
+            if (permanent) {
+                // 关闭回收站、回收站内删除、受限目录：直接彻底删除
+                var ok = true
+                items.forEach { item ->
+                    val deleted = when {
+                        item.docId != null && shizukuMode -> ShizukuBridge.delete(item.docId)
+                        item.docId != null -> FmSafStore.delete(context, item.docId)
+                        else -> item.file.deleteRecursively()
+                    }
+                    if (!deleted) ok = false
+                }
                 withContext(Dispatchers.Main) {
                     selected = emptyList()
-                    loadShizuku()
+                    if (!ok) {
+                        android.widget.Toast.makeText(context, "部分文件删除失败", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    reload()
                 }
-            }
-            return
-        }
-        val inRecycle = isInRecycle
-        scanScope.launch(Dispatchers.IO) {
-            if (inRecycle) {
-                // 回收站内删除：直接物理删除
-                items.forEach { item -> runCatching { item.file.deleteRecursively() } }
             } else {
                 val bucket = java.io.File(recycleRoot, System.currentTimeMillis().toString())
                 bucket.mkdirs()
@@ -663,20 +835,21 @@ internal class FileManagerController(
                         }
                     }
                 }
-            }
-            withContext(Dispatchers.Main) {
-                selected = emptyList()
-                reload()
+                withContext(Dispatchers.Main) {
+                    selected = emptyList()
+                    reload()
+                }
             }
         }
     }
 
     fun purgeRecycleBin() {
         scanScope.launch(Dispatchers.IO) {
-            val expire = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+            val expire = System.currentTimeMillis() -
+                FileManagerPrefs.RECYCLE_RETENTION_DAYS * 24L * 60 * 60 * 1000
             recycleRoot.listFiles()?.forEach { bucket ->
                 if (!bucket.isDirectory) return@forEach
-                // 每个文件单独按修改时间计算 30 天
+                // 每个文件单独按修改时间计算保留天数
                 bucket.walkTopDown().filter { it.isFile }.forEach { file ->
                     if (file.lastModified() < expire) {
                         runCatching { file.delete() }
@@ -693,19 +866,71 @@ internal class FileManagerController(
 
     fun openRecycleBin() {
         recycleRoot.mkdirs()
+        exitFallback()
         currentDir = recycleRoot
         selected = emptyList()
     }
 
     fun extract(item: FsEntry) {
+        if (item.docId != null) {
+            android.widget.Toast.makeText(context, "该目录暂不支持解压", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
         val parent = item.file.parentFile ?: return
         val base = item.file.name.substringBeforeLast('.', item.file.name)
         FileOpService.extract(context, item.file.absolutePath, java.io.File(parent, base).absolutePath)
     }
 
+    /** 重命名：普通路径走 java.io，受限目录走 Shizuku / SAF */
+    fun rename(item: FsEntry, rawName: String) {
+        val newName = rawName.trim()
+        if (newName.isEmpty() || newName == item.file.name || newName.contains('/')) {
+            android.widget.Toast.makeText(context, "名称无效", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val parent = item.file.parentFile ?: return
+        scanScope.launch(Dispatchers.IO) {
+            val ok = runCatching {
+                when {
+                    item.docId != null && shizukuMode ->
+                        ShizukuBridge.rename(item.docId, parent.absolutePath.trimEnd('/') + "/" + newName)
+                    item.docId != null -> FmSafStore.rename(context, item.docId, newName)
+                    else -> {
+                        val target = java.io.File(parent, newName)
+                        // 普通目录不做覆盖式 mv：renameTo 失败通常是重名或没权限
+                        item.file.renameTo(target) ||
+                            (isRestrictedAppDir(item.file.absolutePath) &&
+                                ShizukuBridge.hasPermission() &&
+                                ShizukuBridge.rename(item.file.absolutePath, target.absolutePath))
+                    }
+                }
+            }.getOrDefault(false)
+            withContext(Dispatchers.Main) {
+                if (ok) {
+                    exitSelection()
+                    reload()
+                } else {
+                    android.widget.Toast.makeText(context, "重命名失败", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     fun open(item: FsEntry) {
         if (item.isDir) {
             enter(item.file)
+            return
+        }
+        val docId = item.docId
+        if (docId != null) {
+            if (shizukuMode) {
+                val local = ShizukuBridge.copyToCache(context, docId)
+                if (local == null || !ShizukuBridge.openLocal(context, local)) {
+                    android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            } else if (!FmSafStore.open(context, docId)) {
+                android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
+            }
             return
         }
         openFile(context, item.file, onOpenInBrowser) { onOpenFileBrowser() }
@@ -764,16 +989,32 @@ private fun openFile(
     }
 
     if (mime.startsWith("image/")) {
-        LocalFileBrowserRequest.url = uri.toString()
-        LocalFileBrowserRequest.title = file.name
-        onOpenFileBrowser()
+        LocalFileViewerState.current = LocalFileViewerRequest.Web(
+            path = file.absolutePath,
+            title = file.name,
+            browserUrl = uri.toString(),
+            isImage = true,
+        )
         return
     }
 
     if (mime == "text/html" || name.endsWith(".html") || name.endsWith(".htm")) {
-        LocalFileBrowserRequest.url = uri.toString()
-        LocalFileBrowserRequest.title = file.name
-        onOpenFileBrowser()
+        LocalFileViewerState.current = LocalFileViewerRequest.Web(
+            path = file.absolutePath,
+            title = file.name,
+            browserUrl = uri.toString(),
+            isImage = false,
+        )
+        return
+    }
+
+    if (mime == "application/pdf" || name.endsWith(".pdf")) {
+        LocalFileViewerState.current = LocalFileViewerRequest.Pdf(file.absolutePath, file.name)
+        return
+    }
+
+    if (mime == "text/plain" || name.endsWith(".txt")) {
+        LocalFileViewerState.current = LocalFileViewerRequest.Text(file.absolutePath, file.name)
         return
     }
 
@@ -850,12 +1091,14 @@ internal fun FileManagerPage(
     onSelectionModeChange: (Boolean) -> Unit = {},
     controller: FileManagerController? = null,
     onOpenScanner: () -> Unit = {},
+    onOpenFileSettings: () -> Unit = {},
     onSubPageChange: (Boolean) -> Unit = {},
     pageTitle: String = "文件管理",
 ) {
     val context = LocalContext.current
     val realController = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
     val controller = realController
+
     val safLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -867,7 +1110,7 @@ internal fun FileManagerPage(
                 )
             }
             FmSafStore.treeUri = uri
-            controller.loadSaf()
+            controller.onSafGranted()
         }
     }
     androidx.compose.runtime.SideEffect {
@@ -887,7 +1130,7 @@ internal fun FileManagerPage(
     androidx.compose.runtime.DisposableEffect(Unit) {
         val listener = rikka.shizuku.Shizuku.OnRequestPermissionResultListener { code, grant ->
             if (code == ShizukuBridge.PERMISSION_REQUEST_CODE && grant == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                controller.enterShizuku(controller.safPath)
+                controller.useShizuku()
             }
         }
         runCatching { rikka.shizuku.Shizuku.addRequestPermissionResultListener(listener) }
@@ -930,11 +1173,12 @@ internal fun FileManagerPage(
     // 快捷方式进入且未点过目录轴：不拦截返回，直接由路由出栈（含预见式返回）
     val shortcutNoUp = controller.routeMode && !controller.upNavEnabled
     BackHandler(
-        enabled = controller.selecting ||
-            (controller.category == null &&
-                !controller.isInRecycle &&
-                controller.currentDir != controller.root &&
-                !shortcutNoUp)
+        enabled = LocalFileViewerState.current == null &&
+            (controller.selecting ||
+                (controller.category == null &&
+                    !controller.isInRecycle &&
+                    controller.currentDir != controller.root &&
+                    !shortcutNoUp))
     ) {
         controller.onBackPressed()
     }
@@ -944,10 +1188,17 @@ internal fun FileManagerPage(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var shareItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var showZipShareDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<FsEntry?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var transferOp by remember { mutableStateOf<PendingOp?>(null) }
     var confirmTitle by remember { mutableStateOf("") }
     var confirmText by remember { mutableStateOf("") }
     var confirmAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val uiScope = rememberCoroutineScope()
+    val onRenameRequest: (FsEntry) -> Unit = { entry ->
+        renameTarget = entry
+        renameText = entry.file.name
+    }
 
     val requestCompress: () -> Unit = {
         confirmTitle = "压缩"
@@ -965,6 +1216,10 @@ internal fun FileManagerPage(
 
     fun doShare(items: List<FsEntry>) {
         if (items.isEmpty()) return
+        if (items.any { it.docId != null }) {
+            Toast.makeText(context, "该目录暂不支持分享", Toast.LENGTH_SHORT).show()
+            return
+        }
         uiScope.launch {
             Toast.makeText(context, "正在压缩…", Toast.LENGTH_SHORT).show()
             val zip = withContext(Dispatchers.IO) { zipForShare(context, items) }
@@ -998,7 +1253,7 @@ internal fun FileManagerPage(
         label = "home",
     ) { home ->
         if (home) {
-            FileManagerHomePage(controller, onOpenScanner)
+            FileManagerHomePage(controller, onOpenScanner, onOpenFileSettings)
         } else {
     when (LocalUiMode.current) {
         UiMode.Miuix -> FileManagerMiuix(
@@ -1008,6 +1263,9 @@ internal fun FileManagerPage(
             onDelete = requestDelete,
             onCompress = requestCompress,
             onExtract = requestExtract,
+            onRename = onRenameRequest,
+            onCopy = { if (controller.selected.isNotEmpty()) transferOp = PendingOp.COPY },
+            onMove = { if (controller.selected.isNotEmpty()) transferOp = PendingOp.MOVE },
             onTool = onTool,
             pageTitle = pageTitle,
         )
@@ -1018,6 +1276,9 @@ internal fun FileManagerPage(
             onDelete = requestDelete,
             onCompress = requestCompress,
             onExtract = requestExtract,
+            onRename = onRenameRequest,
+            onCopy = { if (controller.selected.isNotEmpty()) transferOp = PendingOp.COPY },
+            onMove = { if (controller.selected.isNotEmpty()) transferOp = PendingOp.MOVE },
             onTool = onTool,
             pageTitle = pageTitle,
         )
@@ -1030,11 +1291,23 @@ internal fun FileManagerPage(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    "确定删除 ${controller.selected.size} 个文件？删除后无法找回。",
-                    style = MiuixTheme.textStyles.body1,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (FileManagerPrefs.recycleEnabled &&
+                    !controller.isInRecycle &&
+                    controller.selected.none { it.docId != null }
+                ) {
+                    Text(
+                        "确定删除 ${controller.selected.size} 个文件？删除后可在回收站保留 " +
+                            "${FileManagerPrefs.RECYCLE_RETENTION_DAYS} 天。",
+                        style = MiuixTheme.textStyles.body1,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Text(
+                        "确定删除 ${controller.selected.size} 个文件？删除后无法找回。",
+                        style = MiuixTheme.textStyles.body1,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { showDeleteDialog = false },
@@ -1087,6 +1360,54 @@ internal fun FileManagerPage(
         }
     }
 
+    val renaming = renameTarget
+    var lastRenaming by remember { mutableStateOf(renaming) }
+    if (renaming != null) lastRenaming = renaming
+    WindowDialog(
+        show = renaming != null,
+        title = "重命名",
+        onDismissRequest = { renameTarget = null },
+    ) {
+        val target = lastRenaming
+        if (target != null) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Button(
+                        onClick = { renameTarget = null },
+                        modifier = Modifier.weight(1f),
+                        colors = MiuixButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.secondaryContainer,
+                            contentColor = MiuixTheme.colorScheme.onSurface,
+                        ),
+                    ) { Text("取消") }
+                    Button(
+                        onClick = {
+                            val name = renameText.trim()
+                            if (name.isNotBlank()) controller.rename(target, name)
+                            renameTarget = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = MiuixButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                        ),
+                    ) { Text("确定") }
+                }
+            }
+        }
+    }
+
     if (infoItems.isNotEmpty()) {
         FileInfoDialog(
             items = infoItems,
@@ -1098,6 +1419,187 @@ internal fun FileManagerPage(
             },
             onDismiss = { showInfoDialog = false },
         )
+    }
+
+    val currentTransfer = transferOp
+    var lastTransferOp by remember { mutableStateOf(currentTransfer) }
+    if (currentTransfer != null) lastTransferOp = currentTransfer
+    FileTransferSheet(
+        show = currentTransfer != null,
+        op = lastTransferOp ?: PendingOp.COPY,
+        controller = controller,
+        onDismiss = { transferOp = null },
+        onConfirm = { dest ->
+            val op = currentTransfer
+            transferOp = null
+            if (op != null) controller.transferSelected(dest, op)
+        },
+    )
+}
+
+@Composable
+private fun FileTransferSheet(
+    show: Boolean,
+    op: PendingOp,
+    controller: FileManagerController,
+    onDismiss: () -> Unit,
+    onConfirm: (java.io.File) -> Unit,
+) {
+    val root = controller.root
+    val onSurface = MiuixTheme.colorScheme.onSurface
+    val summaryColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+    var browseDir by remember { mutableStateOf(root) }
+    var dirs by remember { mutableStateOf<List<java.io.File>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(show) {
+        if (show) browseDir = root
+    }
+    LaunchedEffect(show, browseDir) {
+        if (!show) return@LaunchedEffect
+        loading = true
+        dirs = withContext(Dispatchers.IO) { controller.listDirectories(browseDir) }
+        loading = false
+    }
+
+    val segments = remember(browseDir) { controller.segmentsOf(browseDir) }
+    val breadcrumbItems = segments.map {
+        BreadcrumbItem(
+            path = it.absolutePath,
+            text = if (it.absolutePath.replace("\u200E", "") == root.absolutePath) "内部存储"
+            else it.name.replace("\u200E", "").ifBlank { "Android" },
+        )
+    }
+
+    WindowBottomSheet(
+        show = show,
+        onDismissRequest = onDismiss,
+        title = if (op == PendingOp.MOVE) "移动到" else "复制到",
+        backgroundColor = MiuixTheme.colorScheme.surface,
+        allowDismiss = true,
+        startAction = {
+            Box(
+                modifier = Modifier
+                    .size(width = 44.dp, height = 36.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Close,
+                    contentDescription = "关闭",
+                    tint = onSurface,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        },
+        endAction = {
+            Box(
+                modifier = Modifier
+                    .size(width = 44.dp, height = 36.dp)
+                    .clip(CircleShape)
+                    .clickable { onConfirm(browseDir) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Ok,
+                    contentDescription = "确定",
+                    tint = onSurface,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+        },
+    ) {
+        PredictiveBackHandler(enabled = show) { progress ->
+            try {
+                progress.collect { }
+            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                return@PredictiveBackHandler
+            }
+            if (browseDir != root) {
+                browseDir = browseDir.parentFile ?: root
+            } else {
+                onDismiss()
+            }
+        }
+
+        val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = if (navBarBottom > 12.dp) navBarBottom else 12.dp),
+        ) {
+            BreadcrumbBar(
+                items = breadcrumbItems,
+                highlightIndex = breadcrumbItems.lastIndex,
+                onItemClick = { index ->
+                    segments.getOrNull(index)?.let { browseDir = it }
+                },
+                insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+            ) {
+                when {
+                    loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(120.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("加载中…", fontSize = 14.sp, color = summaryColor)
+                        }
+                    }
+                    dirs.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(120.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("暂无文件夹", fontSize = 14.sp, color = summaryColor)
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        ) {
+                            items(dirs, key = { it.absolutePath }) { dir ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { browseDir = dir }
+                                        .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.FolderFill,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFD966),
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = dir.name,
+                                        style = MiuixTheme.textStyles.body1,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Icon(
+                                        imageVector = MiuixIcons.ChevronForward,
+                                        contentDescription = null,
+                                        tint = summaryColor,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1111,6 +1613,9 @@ private fun FileManagerMiuix(
     onDelete: () -> Unit,
     onCompress: () -> Unit,
     onExtract: (FsEntry) -> Unit,
+    onRename: (FsEntry) -> Unit,
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
     onTool: (FmTool) -> Unit,
     pageTitle: String,
 ) {
@@ -1121,22 +1626,6 @@ private fun FileManagerMiuix(
     val listState = controller.listStateFor(controller.currentDir.absolutePath)
     var headerHeightDp by remember { mutableStateOf(0.dp) }
     val pullUi = remember { PullRefreshUiState() }
-    var pendingScroll by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { controller.scrollMemory[controller.currentDir.absolutePath] = it }
-    }
-    LaunchedEffect(controller.currentDir) {
-        pendingScroll = controller.scrollMemory[controller.currentDir.absolutePath]
-    }
-    LaunchedEffect(controller.dirEntries, pendingScroll) {
-        val target = pendingScroll ?: return@LaunchedEffect
-        val count = listState.layoutInfo.totalItemsCount
-        if (count > 0) {
-            listState.scrollToItem(target.first.coerceIn(0, count - 1), target.second)
-            pendingScroll = null
-        }
-    }
     val surface = MiuixTheme.colorScheme.surface
 
     val blurSupported = isRuntimeShaderSupported()
@@ -1194,18 +1683,13 @@ private fun FileManagerMiuix(
 
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
-    val hasBreadcrumbRow = !controller.safMode && controller.category == null && !controller.isInRecycle
+    val hasBreadcrumbRow = controller.category == null && !controller.isInRecycle
     var breadcrumbHeightDp by remember { mutableStateOf(44.dp) }
 
     // 退出多选时用上一次的选择渲染，保证胶囊栏有完整的退出动画
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
-    var barPending by remember { mutableStateOf<PendingOp?>(null) }
     LaunchedEffect(controller.selected) {
         if (controller.selected.isNotEmpty()) barItems = controller.selected
-    }
-    LaunchedEffect(controller.pendingOp) {
-        if (controller.pendingOp != null) barPending = controller.pendingOp
-        else if (!controller.selecting) barPending = null
     }
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
@@ -1237,16 +1721,18 @@ private fun FileManagerMiuix(
                 },
                 label = "dir",
             ) { dir ->
+                // 每个目录使用自己的 LazyListState，进出目录和过渡动画都不会重置滚动位置
+                val pageListState = controller.listStateFor(dir.absolutePath)
                 PullRefreshContainer(
                     canPull = {
-                        listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                        pageListState.firstVisibleItemIndex == 0 && pageListState.firstVisibleItemScrollOffset == 0
                     },
                     onRefresh = { controller.reload() },
-                    indicatorTopPadding = 52.dp,
+                    indicatorTopPadding = topPadding,
                     uiState = pullUi,
                 ) {
                 LazyColumn(
-                    state = listState,
+                    state = pageListState,
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -1258,53 +1744,47 @@ private fun FileManagerMiuix(
                     ),
                     overscrollEffect = null,
                 ) {
-                    if (controller.safMode) {
-                        item(key = "saf_header") { MiuixBreadcrumbSaf(controller) }
-                        if (controller.safFailed) {
-                            item(key = "saf_failed") {
-                                Card(
-                                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
-                                ) {
-                                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                                        Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            if (ShizukuBridge.binderAlive()) {
-                                                "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
-                                            } else {
-                                                "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
-                                            },
-                                            fontSize = 12.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                        )
-                                        Spacer(Modifier.height(10.dp))
+                    if (controller.safMode && controller.safFailed) {
+                        item(key = "saf_failed") {
+                            Card(
+                                modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                                    Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        if (ShizukuBridge.binderAlive()) {
+                                            "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
+                                        } else {
+                                            "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
+                                        },
+                                        fontSize = 12.sp,
+                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    top.yukonga.miuix.kmp.basic.Button(
+                                        onClick = { controller.onRequestSafGrant?.invoke() },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) {
+                                        Text("选择目录授权")
+                                    }
+                                    if (ShizukuBridge.binderAlive()) {
+                                        Spacer(Modifier.height(8.dp))
                                         top.yukonga.miuix.kmp.basic.Button(
-                                            onClick = { controller.onRequestSafGrant?.invoke() },
+                                            onClick = {
+                                                if (ShizukuBridge.hasPermission()) {
+                                                    controller.useShizuku()
+                                                } else {
+                                                    ShizukuBridge.requestPermission()
+                                                }
+                                            },
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
-                                            Text("选择目录授权")
-                                        }
-                                        if (ShizukuBridge.binderAlive()) {
-                                            Spacer(Modifier.height(8.dp))
-                                            top.yukonga.miuix.kmp.basic.Button(
-                                                onClick = {
-                                                    if (ShizukuBridge.hasPermission()) {
-                                                        controller.enterShizuku(controller.safPath)
-                                                    } else {
-                                                        ShizukuBridge.requestPermission()
-                                                    }
-                                                },
-                                                modifier = Modifier.fillMaxWidth(),
-                                            ) {
-                                                Text("使用 Shizuku 访问")
-                                            }
+                                            Text("使用 Shizuku 访问")
                                         }
                                     }
                                 }
                             }
-                        }
-                        items(controller.safEntries) { entry ->
-                            SafEntryRow(entry) { controller.safOpen(entry) }
                         }
                     }
                     if (controller.dirUnreadable && !controller.safMode) {
@@ -1344,10 +1824,8 @@ private fun FileManagerMiuix(
                             }
                         }
                     }
-                    if (!controller.safMode) {
-                        items(controller.entriesOf(dir)) { entry ->
-                            MiuixEntryRow(controller, entry)
-                        }
+                    items(controller.visibleEntries(dir)) { entry ->
+                        MiuixEntryRow(controller, entry)
                     }
                 }
                 }
@@ -1430,21 +1908,13 @@ private fun FileManagerMiuix(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
             TopAppBar(
-                title = if (controller.pendingOp != null) "选择目标目录" else (controller.titleOverride ?: pageTitle),
-                largeTitle = if (controller.pendingOp != null) "选择目标目录" else (controller.titleOverride ?: pageTitle),
+                title = controller.titleOverride ?: pageTitle,
+                largeTitle = controller.titleOverride ?: pageTitle,
                 color = Color.Transparent,
                 defaultWindowInsetsPadding = false,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     when {
-                        controller.pendingOp != null -> IconButton(onClick = { controller.cancelPick() }) {
-                            Icon(
-                                imageVector = MiuixIcons.ChevronBackward,
-                                contentDescription = "返回",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
                         controller.selecting -> SettingsTopBarAction(
                             backCardAlpha = backCardAlpha,
                             backCardMaterialModifier = backCardMaterialModifier,
@@ -1496,7 +1966,7 @@ private fun FileManagerMiuix(
 
         val liveBarItems = if (controller.selected.isNotEmpty()) controller.selected else barItems
         AnimatedVisibility(
-            visible = controller.selecting || controller.pendingOp != null || controller.selected.isNotEmpty(),
+            visible = controller.selecting || controller.selected.isNotEmpty(),
             enter = slideInVertically(
                 animationSpec = tween(280, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
                 initialOffsetY = { it },
@@ -1507,23 +1977,80 @@ private fun FileManagerMiuix(
             ) + fadeOut(tween(140)),
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp),
         ) {
-            if (barPending != null) {
-                MiuixPickBar(controller)
-            } else if (liveBarItems.isNotEmpty()) {
+            if (liveBarItems.isNotEmpty()) {
                 MiuixActionBar(
                     items = liveBarItems,
                     onAbout = { onAbout(liveBarItems) },
                     onShare = { onShare(liveBarItems) },
                     onOpen = { one -> controller.open(one); controller.exitSelection() },
-                    onCopy = { controller.beginMove(PendingOp.COPY) },
-                    onMove = { controller.beginMove(PendingOp.MOVE) },
+                    onCopy = onCopy,
+                    onMove = onMove,
                     onExtract = onExtract,
                     onCompress = onCompress,
                     onDelete = onDelete,
+                    onRename = onRename,
                 )
             }
         }
 
+    }
+}
+
+@Composable
+private fun MaterialBreadcrumb(
+    controller: FileManagerController,
+    dir: java.io.File,
+    startPadding: androidx.compose.ui.unit.Dp,
+    category: FileCategory? = null,
+    onNavigateUp: () -> Unit = {},
+) {
+    val inRecycle = dir.absolutePath.startsWith(controller.recycleRoot.absolutePath)
+    val segments = remember(dir) {
+        if (inRecycle) listOf(controller.recycleRoot) else controller.segmentsOf(dir)
+    }
+    val items = if (category != null) {
+        listOf(
+            "内部存储" to controller.root.absolutePath,
+            category.label to "category:${category.name}",
+        )
+    } else {
+        segments.map {
+            (if (it.absolutePath.replace("\u200E", "") == controller.root.absolutePath) "内部存储"
+            else it.name.replace("\u200E", "").ifBlank { "Android" }) to it.absolutePath
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(start = startPadding, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEachIndexed { index, (label, _) ->
+            if (index > 0) {
+                M3Text(
+                    text = " / ",
+                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = M3MaterialTheme.typography.bodyMedium,
+                )
+            }
+            M3Text(
+                text = label,
+                color = if (index == items.lastIndex) M3MaterialTheme.colorScheme.primary
+                else M3MaterialTheme.colorScheme.onSurfaceVariant,
+                style = M3MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .clickable {
+                        if (index < items.lastIndex) onNavigateUp()
+                        if (category != null) {
+                            controller.closeCategory()
+                        } else {
+                            segments.getOrNull(index)?.let { controller.enter(it) }
+                        }
+                    }
+                    .padding(horizontal = 4.dp, vertical = 6.dp),
+            )
+        }
     }
 }
 
@@ -1562,9 +2089,7 @@ private fun MiuixBreadcrumb(
                 if (category != null) {
                     controller.closeCategory()
                 } else {
-                    segments.getOrNull(index)?.let {
-                        if (controller.pendingOp != null) controller.pickDir = it else controller.enter(it)
-                    }
+                    segments.getOrNull(index)?.let { controller.enter(it) }
                 }
             },
             insideMargin = PaddingValues(start = startPadding, end = 16.dp),
@@ -1641,11 +2166,11 @@ private fun Modifier.dragSelectModifier(
 
         fun rowAt(y: Float): FsEntry? {
             val info = listState.layoutInfo
-            val entryCount = controller.entriesOf(controller.currentDir).size
+            val entryCount = controller.visibleEntries(controller.currentDir).size
             if (entryCount <= 0) return null
             val startIndex = info.totalItemsCount - entryCount
             val item = info.visibleItemsInfo.firstOrNull { y >= it.offset && y <= it.offset + it.size } ?: return null
-            return controller.entriesOf(controller.currentDir).getOrNull(item.index - startIndex)
+            return controller.visibleEntries(controller.currentDir).getOrNull(item.index - startIndex)
         }
 
         fun applyAt(y: Float, target: Boolean) {
@@ -1738,66 +2263,6 @@ internal fun FileManagerDirPage(
 
 
 @Composable
-private fun MiuixBreadcrumbSaf(controller: FileManagerController) {
-    val segments = if (controller.safPath.isEmpty()) emptyList()
-    else controller.safPath.split("/")
-    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-        BreadcrumbBar(
-            items = (listOf("内部存储") + segments).mapIndexed { index, text ->
-                BreadcrumbItem(path = index.toString(), text = text)
-            },
-            highlightIndex = segments.size,
-            onItemClick = { index ->
-                controller.safPath = segments.take(index).joinToString("/")
-                controller.loadSaf()
-            },
-            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun SafEntryRow(entry: FmSafStore.Entry, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = if (entry.isDir) MiuixIcons.FolderFill else MiuixIcons.FileIcon,
-            contentDescription = null,
-            tint = if (entry.isDir) Color(0xFFFFD966) else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier.size(if (entry.isDir) 30.dp else 26.dp),
-        )
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(entry.name, fontSize = 16.sp, color = MiuixTheme.colorScheme.onSurface, maxLines = 1)
-            val summary = if (entry.isDir) {
-                fmFormatTime(entry.modified)
-            } else {
-                listOf(fmFormatSize(entry.size), fmFormatTime(entry.modified))
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · ")
-            }
-            if (summary.isNotBlank()) {
-                Text(summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1)
-            }
-        }
-        if (entry.isDir) {
-            Icon(
-                imageVector = MiuixIcons.ChevronForward,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun CategoryListMiuix(
     controller: FileManagerController,
     topPadding: androidx.compose.ui.unit.Dp,
@@ -1845,6 +2310,13 @@ private fun CategoryListMiuix(
         visible = appeared,
         enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
     ) {
+    PullRefreshContainer(
+        canPull = {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        },
+        onRefresh = { controller.reloadCategory() },
+        indicatorTopPadding = topPadding,
+    ) {
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -1862,6 +2334,7 @@ private fun CategoryListMiuix(
         }
     }
     }
+    }
 
 }
 
@@ -1876,6 +2349,14 @@ private fun CategoryListMaterial(
     AnimatedVisibility(
         visible = appeared,
         enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
+    ) {
+    PullRefreshContainer(
+        canPull = {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        },
+        onRefresh = { controller.reloadCategory() },
+        indicatorTopPadding = 4.dp,
+        isMaterial = true,
     ) {
     LazyColumn(
         state = listState,
@@ -1894,12 +2375,16 @@ private fun CategoryListMaterial(
         }
     }
     }
+    }
 
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
+private fun MiuixEntryRow(
+    controller: FileManagerController,
+    entry: FsEntry,
+) {
     val summary = if (entry.isDir) fmFormatTime(entry.modified)
     else listOfNotNull(
         fmFormatSize(entry.size).takeIf { it.isNotBlank() },
@@ -1908,27 +2393,29 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
 
     val selecting = controller.selecting
     val selected = controller.isSelected(entry)
+    val rowScope = rememberCoroutineScope()
+    var suppressClick by remember { mutableStateOf(false) }
 
-    val onClick: () -> Unit = {
+    val onClick: () -> Unit = click@{
+        // 长按松手后系统还会补发一次 click，忽略它，避免刚选中又被取消
+        if (suppressClick) {
+            suppressClick = false
+            return@click
+        }
         when {
-            controller.pendingOp != null -> controller.pickDir = entry.file
             selecting -> controller.toggle(entry)
             entry.isDir -> controller.enter(entry.file)
             else -> controller.open(entry)
         }
     }
-    val onLongClick: () -> Unit = {
-        if (controller.pendingOp == null) controller.toggle(entry)
-    }
 
     val rowIndex = remember(entry.file.absolutePath, controller.currentDir) {
-        controller.entriesOf(controller.currentDir).indexOfFirst {
+        controller.visibleEntries(controller.currentDir).indexOfFirst {
             it.file.absolutePath == entry.file.absolutePath
         }
     }
     var rowHeightPx by remember { mutableFloatStateOf(1f) }
     var paintDy by remember { mutableFloatStateOf(0f) }
-    var lastLongPressAt by remember { mutableStateOf(0L) }
 
     Row(
         modifier = Modifier
@@ -1937,7 +2424,7 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
             .pointerInput(entry.file.absolutePath) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = {
-                        lastLongPressAt = System.currentTimeMillis()
+                        suppressClick = true
                         // 已进入多选：再次长按先翻转该项，后续涂抹以翻转后的状态为准
                         if (controller.selecting) controller.toggle(entry)
                         else controller.enterSelection(entry)
@@ -1951,9 +2438,20 @@ private fun MiuixEntryRow(controller: FileManagerController, entry: FsEntry) {
                     onDragEnd = {
                         paintDy = 0f
                         controller.endPaint()
-                        lastLongPressAt = System.currentTimeMillis()
+                        // 稍后解除 click 抑制：若系统补发了 click 则已被上面的 onClick 消费
+                        rowScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            suppressClick = false
+                        }
                     },
-                    onDragCancel = { paintDy = 0f; controller.endPaint() },
+                    onDragCancel = {
+                        paintDy = 0f
+                        controller.endPaint()
+                        rowScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            suppressClick = false
+                        }
+                    },
                 )
             }
             .clickable(onClick = onClick)
@@ -2019,6 +2517,22 @@ private fun loadApkIcon(context: android.content.Context, file: java.io.File): I
     }
 }
 
+/** Android/data/<包名> 目录返回包名，用于在文件夹右下角显示应用图标 */
+private fun dataPackageName(file: java.io.File): String? {
+    val parent = file.parentFile ?: return null
+    return if (parent.name == "data" && parent.parentFile?.name == "Android") file.name else null
+}
+
+private val appIconCache = java.util.concurrent.ConcurrentHashMap<String, ImageBitmap>()
+
+private fun loadAppIcon(context: Context, pkg: String): ImageBitmap? = runCatching {
+    val drawable = context.packageManager.getApplicationIcon(pkg)
+    val bitmap = android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888)
+    drawable.setBounds(0, 0, 96, 96)
+    drawable.draw(android.graphics.Canvas(bitmap))
+    bitmap.asImageBitmap()
+}.getOrNull()
+
 @Composable
 private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp) {
     val context = LocalContext.current
@@ -2031,34 +2545,60 @@ private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp
             else -> null
         }
     }
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(RoundedCornerShape(10.dp)),
-        contentAlignment = Alignment.Center,
+    val appPackage = remember(entry.file.absolutePath, entry.isDir) {
+        if (entry.isDir) dataPackageName(entry.file) else null
+    }
+    val appIcon by produceState<ImageBitmap?>(
+        initialValue = appPackage?.let { appIconCache[it] },
+        key1 = appPackage,
     ) {
-        if (bitmap != null) {
+        val pkg = appPackage ?: return@produceState
+        if (value != null) return@produceState
+        val icon = withContext(Dispatchers.IO) { loadAppIcon(context, pkg) }
+        if (icon != null) appIconCache[pkg] = icon
+        value = icon
+    }
+    Box(modifier = Modifier.size(size)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                val typed = if (entry.isDir) null else fmTypeIcon(entry.file)
+                Icon(
+                    imageVector = when {
+                        entry.isDir -> MiuixIcons.FolderFill
+                        typed != null -> typed.first
+                        else -> androidx.compose.material.icons.Icons.Rounded.Description
+                    },
+                    contentDescription = null,
+                    tint = when {
+                        entry.isDir -> Color(0xFFFFD966)
+                        typed != null -> typed.second
+                        else -> MiuixTheme.colorScheme.primary
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        if (appIcon != null) {
             Image(
-                bitmap = bitmap!!,
+                bitmap = appIcon!!,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            val typed = if (entry.isDir) null else fmTypeIcon(entry.file)
-            Icon(
-                imageVector = when {
-                    entry.isDir -> MiuixIcons.FolderFill
-                    typed != null -> typed.first
-                    else -> androidx.compose.material.icons.Icons.Rounded.Description
-                },
-                contentDescription = null,
-                tint = when {
-                    entry.isDir -> Color(0xFFFFD966)
-                    typed != null -> typed.second
-                    else -> MiuixTheme.colorScheme.primary
-                },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(16.dp)
+                    .clip(RoundedCornerShape(4.dp)),
             )
         }
     }
@@ -2075,6 +2615,7 @@ private fun MiuixActionBar(
     onDelete: () -> Unit,
     onAbout: () -> Unit,
     onShare: () -> Unit,
+    onRename: (FsEntry) -> Unit,
 ) {
     val single = items.size == 1
     val one = items.firstOrNull()
@@ -2103,14 +2644,32 @@ private fun MiuixActionBar(
                 show = showMore,
                 entries = listOf(
                     DropdownEntry(
-                        items = listOf(
-                            DropdownItem(text = "关于", onClick = { showMore = false; onAbout() }),
-                            DropdownItem(text = "分享", onClick = { showMore = false; onShare() }),
-                            DropdownItem(text = "用其它应用打开", onClick = {
-                                showMore = false
-                                items.firstOrNull()?.let { openWithOtherApp(context, it.file) }
-                            }),
-                        )
+                        items = buildList {
+                            if (single) {
+                                add(
+                                    DropdownItem(text = "重命名", onClick = {
+                                        showMore = false
+                                        items.firstOrNull()?.let(onRename)
+                                    })
+                                )
+                            }
+                            add(DropdownItem(text = "关于", onClick = { showMore = false; onAbout() }))
+                            add(DropdownItem(text = "分享", onClick = { showMore = false; onShare() }))
+                            add(
+                                DropdownItem(text = "用其它应用打开", onClick = {
+                                    showMore = false
+                                    items.firstOrNull()?.let { entry ->
+                                        if (entry.docId != null) {
+                                            android.widget.Toast.makeText(
+                                                context, "该目录暂不支持此操作", android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        } else {
+                                            openWithOtherApp(context, entry.file)
+                                        }
+                                    }
+                                })
+                            )
+                        }
                     )
                 ),
                 onDismissRequest = { showMore = false },
@@ -2150,27 +2709,6 @@ private fun CapsuleAction(
     }
 }
 
-@Composable
-private fun MiuixPickBar(controller: FileManagerController) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(28.dp))
-            .background(MiuixTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "取消", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary,
-            modifier = Modifier.clickable { controller.cancelPick() },
-        )
-        Text(
-            "确定", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary,
-            modifier = Modifier.clickable { controller.confirmPick() },
-        )
-    }
-}
-
 /* ---------------- Material 3 ---------------- */
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2182,6 +2720,9 @@ private fun FileManagerMaterial(
     onDelete: () -> Unit,
     onCompress: () -> Unit,
     onExtract: (FsEntry) -> Unit,
+    onRename: (FsEntry) -> Unit,
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
     onTool: (FmTool) -> Unit,
     pageTitle: String,
 ) {
@@ -2189,25 +2730,22 @@ private fun FileManagerMaterial(
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val density = LocalDensity.current
     val topState = rememberTopAppBarState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(topState)
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(topState)
     val surface = M3MaterialTheme.colorScheme.surface
     var barBottomPx by remember { mutableIntStateOf(0) }
     val topPadding = if (barBottomPx > 0) with(density) { barBottomPx.toDp() } else statusTop + 64.dp
     var headerHeightDp by remember { mutableStateOf(0.dp) }
 
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
-    var barPending by remember { mutableStateOf<PendingOp?>(null) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    val materialContext = LocalContext.current
     LaunchedEffect(controller.selected) {
         if (controller.selected.isNotEmpty()) barItems = controller.selected
-    }
-    LaunchedEffect(controller.pendingOp) {
-        if (controller.pendingOp != null) barPending = controller.pendingOp
-        else if (!controller.selecting) barPending = null
     }
 
     Box(modifier = Modifier.fillMaxSize().background(surface)) {
         Column(modifier = Modifier.fillMaxSize().padding(top = topPadding)) {
-            val subPageM = controller.currentDir != controller.root && !controller.safMode
+            val subPageM = controller.currentDir != controller.root
             val breadcrumbShiftM by animateDpAsState(
                 targetValue = if (subPageM) 0.dp else headerHeightDp,
                 animationSpec = tween(320, easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)),
@@ -2215,7 +2753,7 @@ private fun FileManagerMaterial(
             )
             if (subPageM) {
                 Box(modifier = Modifier.graphicsLayer { translationY = breadcrumbShiftM.toPx() }) {
-                    MiuixBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
+                    MaterialBreadcrumb(controller, controller.currentDir, 16.dp, controller.category)
                 }
             }
 
@@ -2242,35 +2780,18 @@ private fun FileManagerMaterial(
                 },
                 label = "m3dir",
             ) { dir ->
-                val materialFileListState = controller.listStateFor(controller.currentDir.absolutePath)
-    val materialPullUi = remember { PullRefreshUiState() }
-    var pendingScrollM by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    LaunchedEffect(materialFileListState) {
-        snapshotFlow {
-            materialFileListState.firstVisibleItemIndex to materialFileListState.firstVisibleItemScrollOffset
-        }.collect {
-            controller.scrollMemory[controller.currentDir.absolutePath] = it
-        }
-    }
-    LaunchedEffect(controller.currentDir) {
-        pendingScrollM = controller.scrollMemory[controller.currentDir.absolutePath]
-    }
-    LaunchedEffect(controller.dirEntries, pendingScrollM) {
-        val target = pendingScrollM ?: return@LaunchedEffect
-        val count = materialFileListState.layoutInfo.totalItemsCount
-        if (count > 0) {
-            materialFileListState.scrollToItem(target.first.coerceIn(0, count - 1), target.second)
-            pendingScrollM = null
-        }
-    }
+                // 每个目录独立的列表状态，返回/进入都保持原有滚动进度
+                val materialFileListState = controller.listStateFor(dir.absolutePath)
+                val materialPullUi = remember { PullRefreshUiState() }
                 PullRefreshContainer(
                     canPull = {
                         materialFileListState.firstVisibleItemIndex == 0 &&
                             materialFileListState.firstVisibleItemScrollOffset == 0
                     },
                     onRefresh = { controller.reload() },
-                    indicatorTopPadding = 52.dp,
+                    indicatorTopPadding = 4.dp,
                     uiState = materialPullUi,
+                    isMaterial = true,
                 ) {
                 LazyColumn(
                     state = materialFileListState,
@@ -2280,30 +2801,43 @@ private fun FileManagerMaterial(
                         .graphicsLayer { alpha = 1f },
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
-                    if (controller.safMode) {
-                        item(key = "saf_header") { MiuixBreadcrumbSaf(controller) }
-                        if (controller.safFailed) {
-                            item(key = "saf_failed") {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                                    M3Text("无法读取该目录", fontSize = 15.sp, color = M3MaterialTheme.colorScheme.onSurface)
-                                    Spacer(Modifier.height(4.dp))
-                                    M3Text(
-                                        "系统未授予该目录的访问权限，可点击下方按钮选择该目录授权。",
-                                        fontSize = 12.sp,
-                                        color = M3MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(10.dp))
+                    if (controller.safMode && controller.safFailed) {
+                        item(key = "saf_failed") {
+                            Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                                M3Text("无法读取该目录", fontSize = 15.sp, color = M3MaterialTheme.colorScheme.onSurface)
+                                Spacer(Modifier.height(4.dp))
+                                M3Text(
+                                    if (ShizukuBridge.binderAlive()) {
+                                        "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
+                                    } else {
+                                        "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                androidx.compose.material3.Button(
+                                    onClick = { controller.onRequestSafGrant?.invoke() },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    M3Text("选择目录授权")
+                                }
+                                if (ShizukuBridge.binderAlive()) {
+                                    Spacer(Modifier.height(8.dp))
                                     androidx.compose.material3.Button(
-                                        onClick = { controller.onRequestSafGrant?.invoke() },
+                                        onClick = {
+                                            if (ShizukuBridge.hasPermission()) {
+                                                controller.useShizuku()
+                                            } else {
+                                                ShizukuBridge.requestPermission()
+                                            }
+                                        },
                                         modifier = Modifier.fillMaxWidth(),
                                     ) {
-                                        M3Text("选择目录授权")
+                                        M3Text("使用 Shizuku 访问")
                                     }
                                 }
                             }
-                        }
-                        items(controller.safEntries) { entry ->
-                            SafEntryRow(entry) { controller.safOpen(entry) }
                         }
                     }
                     if (controller.needsAllFiles) {
@@ -2327,10 +2861,8 @@ private fun FileManagerMaterial(
                             }
                         }
                     }
-                    if (!controller.safMode) {
-                        items(controller.entriesOf(dir)) { entry ->
-                            MaterialEntryRow(controller, entry)
-                        }
+                    items(controller.visibleEntries(dir)) { entry ->
+                        MaterialEntryRow(controller, entry)
                     }
                 }
                 }
@@ -2349,17 +2881,16 @@ private fun FileManagerMaterial(
                     if (bottom != barBottomPx) barBottomPx = bottom
                 },
         ) {
-            LargeTopAppBar(
-                title = { M3Text(if (controller.pendingOp != null) "选择目标目录" else "文件管理") },
+            M3TopAppBar(
+                title = { M3Text("文件管理") },
                 navigationIcon = {
                     M3IconButton(onClick = {
                         when {
-                            controller.pendingOp != null -> controller.cancelPick()
                             controller.selecting -> controller.exitSelection()
                             !controller.up() -> controller.onBack()
                         }
                     }) {
-                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                        M3Icon(top.yukonga.miuix.kmp.icon.MiuixIcons.Back, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -2379,7 +2910,7 @@ private fun FileManagerMaterial(
 
         Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp)) {
             androidx.compose.animation.AnimatedVisibility(
-                visible = controller.selected.isNotEmpty() || controller.pendingOp != null,
+                visible = controller.selected.isNotEmpty(),
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             ) {
@@ -2388,66 +2919,100 @@ private fun FileManagerMaterial(
                     color = M3MaterialTheme.colorScheme.surfaceContainerHigh,
                     shadowElevation = 8.dp,
                 ) {
-                    if (barPending != null) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp),
-                        ) {
-                            M3Text(
-                                "取消", color = M3MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { controller.cancelPick() },
-                            )
-                            M3Text(
-                                "确定", color = M3MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.clickable { controller.confirmPick() },
-                            )
+                    val items = barItems
+                    val single = items.size == 1
+                    val one = items.firstOrNull()
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        if (single && one != null && !one.isDir && isArchive(one.file.name)) {
+                            M3CapsuleAction(Icons.Rounded.Unarchive, "解压", true) {
+                                controller.extract(one)
+                                controller.exitSelection()
+                            }
+                        } else {
+                            M3CapsuleAction(Icons.Rounded.Archive, "压缩", true) { controller.compressSelected() }
                         }
-                    } else {
-                        val items = barItems
-                        val single = items.size == 1
-                        val one = items.firstOrNull()
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (single && one != null && !one.isDir && isArchive(one.file.name)) {
-                                M3CapsuleAction(Icons.Rounded.Unarchive, "解压", true) {
-                                    controller.extract(one)
-                                    controller.exitSelection()
-                                }
-                            } else {
-                                M3CapsuleAction(Icons.Rounded.Archive, "压缩", true) { controller.compressSelected() }
+                        M3CapsuleAction(Icons.Filled.Folder, "复制", true) { onCopy() }
+                        M3CapsuleAction(Icons.Filled.Folder, "移动", true) { onMove() }
+                        M3CapsuleAction(Icons.Filled.Delete, "删除", true) { onDelete() }
+                        if (single && one != null && !one.isDir && isArchive(one.file.name)) {
+                            M3CapsuleAction(Icons.Filled.Folder, "解压", true) {
+                                controller.extract(one)
+                                controller.exitSelection()
                             }
-                            M3CapsuleAction(Icons.Filled.Folder, "复制", true) { controller.beginMove(PendingOp.COPY) }
-                            M3CapsuleAction(Icons.Filled.Folder, "移动", true) { controller.beginMove(PendingOp.MOVE) }
-                            M3CapsuleAction(Icons.Filled.Delete, "删除", true) { onDelete() }
-                            if (single && one != null && !one.isDir && isArchive(one.file.name)) {
-                                M3CapsuleAction(Icons.Filled.Folder, "解压", true) {
-                                    controller.extract(one)
-                                    controller.exitSelection()
-                                }
-                            }
+                        }
+                        Box {
                             M3CapsuleAction(Icons.Rounded.MoreVert, "更多", true) {
-                                onAbout(controller.selected.ifEmpty { barItems })
+                                showMoreMenu = true
+                            }
+                                M3DropdownMenu(
+                                    expanded = showMoreMenu,
+                                    onDismissRequest = { showMoreMenu = false },
+                                ) {
+                                    if (single && one != null) {
+                                        M3DropdownMenuItem(
+                                            text = { M3Text("重命名") },
+                                            onClick = {
+                                                showMoreMenu = false
+                                                onRename(one)
+                                            },
+                                        )
+                                    }
+                                    M3DropdownMenuItem(
+                                        text = { M3Text("关于") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            onAbout(controller.selected.ifEmpty { barItems })
+                                        },
+                                    )
+                                    M3DropdownMenuItem(
+                                        text = { M3Text("分享") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            onShare(controller.selected.ifEmpty { barItems })
+                                        },
+                                    )
+                                    M3DropdownMenuItem(
+                                        text = { M3Text("用其它应用打开") },
+                                        onClick = {
+                                            showMoreMenu = false
+                                            one?.let { entry ->
+                                                if (entry.docId != null) {
+                                                    Toast.makeText(
+                                                        materialContext,
+                                                        "该目录暂不支持此操作",
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                } else {
+                                                    openWithOtherApp(materialContext, entry.file)
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
-                    }
                 }
             }
         }
 
     }
 }
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) {
+private fun MaterialEntryRow(
+    controller: FileManagerController,
+    entry: FsEntry,
+) {
     val summary = if (entry.isDir) fmFormatTime(entry.modified)
     else listOfNotNull(
         fmFormatSize(entry.size).takeIf { it.isNotBlank() },
         fmFormatTime(entry.modified),
     ).joinToString(" · ")
 
+    val selecting = controller.selecting
     val selected = controller.isSelected(entry)
 
     Row(
@@ -2455,14 +3020,13 @@ private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) 
             .combinedClickable(
                 onClick = {
                     when {
-                        controller.pendingOp != null -> controller.pickDir = entry.file
-                        controller.selecting -> controller.toggle(entry)
+                        selecting -> controller.toggle(entry)
                         entry.isDir -> controller.enter(entry.file)
                         else -> controller.open(entry)
                     }
                 },
                 onLongClick = {
-                    if (controller.pendingOp == null) controller.toggle(entry)
+                    controller.toggle(entry)
                 },
             )
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -2471,24 +3035,28 @@ private fun MaterialEntryRow(controller: FileManagerController, entry: FsEntry) 
         EntryThumb(entry)
         Spacer(Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            M3Text(entry.file.name, fontSize = 15.sp, maxLines = 1)
+            M3Text(
+                entry.file.name,
+                style = M3MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+            )
             if (summary.isNotBlank()) {
                 M3Text(
                     summary,
-                    fontSize = 12.sp,
+                    style = M3MaterialTheme.typography.bodySmall,
                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
             }
         }
         androidx.compose.animation.AnimatedVisibility(
-            visible = controller.selecting,
+            visible = selecting,
             enter = fadeIn(tween(180)) + expandHorizontally(tween(220)),
             exit = fadeOut(tween(150)) + shrinkHorizontally(tween(200)),
         ) {
             androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = null)
         }
-        if (!controller.selecting && entry.isDir) {
+        if (!selecting && entry.isDir) {
             M3Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
