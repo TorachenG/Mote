@@ -186,6 +186,7 @@ private data class WebSecurityActions(
     val onOpenSiteManager: () -> Unit,
     val onOpenDownloadWhitelist: () -> Unit,
     val onOpenAdWhitelist: () -> Unit,
+    val onOpenWebPermissions: () -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -278,6 +279,7 @@ fun SettingsWebSecurityPage(
     onOpenSiteManager: () -> Unit = {},
     onOpenDownloadWhitelist: () -> Unit = {},
     onOpenAdWhitelist: () -> Unit = {},
+    onOpenWebPermissions: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -368,6 +370,7 @@ fun SettingsWebSecurityPage(
         onOpenSiteManager = onOpenSiteManager,
         onOpenDownloadWhitelist = onOpenDownloadWhitelist,
         onOpenAdWhitelist = onOpenAdWhitelist,
+        onOpenWebPermissions = onOpenWebPermissions,
         onBack = onBack,
     )
 
@@ -510,6 +513,18 @@ private fun SettingsWebSecurityMiuix(
                                         summary = "记住表单中输入的数据以便以后使用",
                                         checked = state.rememberFormEnabled,
                                         onCheckedChange = actions.onRememberFormChange,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "网页权限",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_web_permissions",
+                                ) {
+                                    ArrowPreference(
+                                        title = "网页权限",
+                                        summary = "管理相机、定位、剪贴板等权限",
+                                        onClick = actions.onOpenWebPermissions,
                                     )
                                 }
                                 SearchableItem(
@@ -790,7 +805,11 @@ private fun SettingsWebSecurityMaterial(
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
 
-    val pageBg = M3MaterialTheme.colorScheme.surfaceContainer
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -859,6 +878,12 @@ private fun SettingsWebSecurityMaterial(
                                             )
                                         },
                                         {
+                                M3SegmentArrowItem(
+                                    title = "网页权限",
+                                    onClick = actions.onOpenWebPermissions,
+                                )
+                            },
+                            {
                                             M3SegmentSwitchItem(
                                                 title = "接受 Cookie",
                                                 checked = state.acceptCookieEnabled,
@@ -1555,7 +1580,11 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
         exitMultiSelect()
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surfaceContainer
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     val navBarBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -2358,7 +2387,11 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
 @Composable
 private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
     val context = LocalContext.current
-    val bg = M3MaterialTheme.colorScheme.surfaceContainer
+    val bg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     val version = SecurityStateHolder.whitelistVersion
     val sites = remember(version) { SecurityStateHolder.getManagedSites() }
 
@@ -2570,22 +2603,9 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                 Card(
                     modifier = Modifier
                         .padding(horizontal = 12.dp)
-                        .padding(bottom = 12.dp),
+                        .padding(top = 12.dp, bottom = 12.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .padding(horizontal = 16.dp, vertical = 13.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Text(
-                            host,
-                            style = MiuixTheme.textStyles.headline1,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                            color = MiuixTheme.colorScheme.onSurface,
-                        )
-                    }
+                    top.yukonga.miuix.kmp.basic.BasicComponent(title = host)
                 }
             }
             item(key = "protect") {
@@ -2678,7 +2698,11 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
 private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
-    val bg = M3MaterialTheme.colorScheme.surfaceContainer
+    val bg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     val site = remember(host) { SecurityStateHolder.getSiteProtection(host) }
     var siteBlockAds by remember(host) { mutableStateOf(site.blockAds) }
@@ -2820,6 +2844,142 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                                     },
                                 )
                             },
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+// ============================================================
+// 网页权限
+// ============================================================
+
+private const val KEY_PERM_CAMERA = "web_perm_camera"
+private const val KEY_PERM_MIC = "web_perm_microphone"
+private const val KEY_PERM_LOCATION = "web_perm_location"
+private const val KEY_PERM_CLIPBOARD = "web_perm_clipboard"
+
+@Composable
+fun WebPermissionsPage(onBack: () -> Unit) {
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> WebPermissionsPageMiuix(onBack)
+        UiMode.Material -> WebPermissionsPageMaterial(onBack)
+    }
+}
+
+@Composable
+private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    val scrollBehavior = MiuixScrollBehavior()
+    val surface = MiuixTheme.colorScheme.surface
+    var camera by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CAMERA, true)) }
+    var mic by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_MIC, true)) }
+    var location by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_LOCATION, true)) }
+    var clipboard by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CLIPBOARD, true)) }
+
+    Column(modifier = Modifier.fillMaxSize().background(surface)) {
+        TopAppBar(
+            title = "网页权限",
+            largeTitle = "网页权限",
+            color = Color.Transparent,
+            defaultWindowInsetsPadding = true,
+            scrollBehavior = scrollBehavior,
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(MiuixIcons.ChevronBackward, contentDescription = "返回", tint = MiuixTheme.colorScheme.onSurface)
+                }
+            },
+        )
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection).overScrollVertical(),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            overscrollEffect = null,
+        ) {
+            item(key = "perms") {
+                Card(
+                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+                ) {
+                    SwitchPreference(
+                        title = "相机",
+                        summary = "允许网页请求使用相机",
+                        checked = camera,
+                        onCheckedChange = { camera = it; prefs.edit().putBoolean(KEY_PERM_CAMERA, it).apply() },
+                    )
+                    SwitchPreference(
+                        title = "麦克风",
+                        summary = "允许网页请求使用麦克风",
+                        checked = mic,
+                        onCheckedChange = { mic = it; prefs.edit().putBoolean(KEY_PERM_MIC, it).apply() },
+                    )
+                    SwitchPreference(
+                        title = "定位",
+                        summary = "允许网页获取当前位置",
+                        checked = location,
+                        onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() },
+                    )
+                    SwitchPreference(
+                        title = "剪贴板",
+                        summary = "允许网页读取剪贴板内容",
+                        checked = clipboard,
+                        onCheckedChange = { clipboard = it; prefs.edit().putBoolean(KEY_PERM_CLIPBOARD, it).apply() },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    val bg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
+    var camera by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CAMERA, true)) }
+    var mic by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_MIC, true)) }
+    var location by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_LOCATION, true)) }
+    var clipboard by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CLIPBOARD, true)) }
+
+    M3Scaffold(
+        containerColor = bg,
+        topBar = {
+            M3TopAppBar(
+                title = { M3Text("网页权限") },
+                navigationIcon = {
+                    M3IconButton(onClick = onBack) {
+                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
+                },
+                colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+            )
+        },
+    ) { innerPadding ->
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).overScrollVertical(),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            overscrollEffect = null,
+        ) {
+            item(key = "perms") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    MoteSegmentedColumn(
+                        content = listOf(
+                            { M3SegmentSwitchItem(title = "相机", checked = camera, onCheckedChange = { camera = it; prefs.edit().putBoolean(KEY_PERM_CAMERA, it).apply() }) },
+                            { M3SegmentSwitchItem(title = "麦克风", checked = mic, onCheckedChange = { mic = it; prefs.edit().putBoolean(KEY_PERM_MIC, it).apply() }) },
+                            { M3SegmentSwitchItem(title = "定位", checked = location, onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() }) },
+                            { M3SegmentSwitchItem(title = "剪贴板", checked = clipboard, onCheckedChange = { clipboard = it; prefs.edit().putBoolean(KEY_PERM_CLIPBOARD, it).apply() }) },
                         ),
                     )
                 }

@@ -3754,6 +3754,7 @@ private fun RenderPageContent(
                 onOpenSiteManager = { onPush("settings_web_sites") },
                 onOpenDownloadWhitelist = { onPush("settings_download_whitelist") },
                 onOpenAdWhitelist = { onPush("settings_ad_whitelist") },
+                onOpenWebPermissions = { onPush("settings_web_permissions") },
             )
             "settings_web_sites" -> WebSiteManagerPage(
                 onBack = { onPop() },
@@ -3769,6 +3770,7 @@ private fun RenderPageContent(
             "settings_tracking_whitelist" -> TrackingWhitelistPage(onBack = { onPop() })
             "settings_download_whitelist" -> DownloadWhitelistPage(onBack = { onPop() })
             "settings_ad_whitelist" -> AdWhitelistPage(onBack = { onPop() })
+            "settings_web_permissions" -> WebPermissionsPage(onBack = { onPop() })
             "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
             "settings_personal_info" -> SettingsPersonalInfoPage(
                 onBack = { onPop() },
@@ -11196,6 +11198,18 @@ private fun createWebView(
 
             override fun onPermissionRequest(request: PermissionRequest?) {
                 if (request == null) return
+                val permPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+                val allowCamera = permPrefs.getBoolean("web_perm_camera", true)
+                val allowMic = permPrefs.getBoolean("web_perm_microphone", true)
+                val blocked = request.resources.any { r ->
+                    (r == PermissionRequest.RESOURCE_VIDEO_CAPTURE && !allowCamera) ||
+                        (r == PermissionRequest.RESOURCE_AUDIO_CAPTURE && !allowMic)
+                }
+                if (blocked) {
+                    request.deny()
+                    Toast.makeText(context, "网页权限中已关闭相机/麦克风", Toast.LENGTH_SHORT).show()
+                    return
+                }
                 val resources = request.resources
                 val needed = mutableListOf<String>()
                 for (r in resources) {
