@@ -819,7 +819,7 @@ private fun SettingsWebSecurityMaterial(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
             ) {
                 item(key = "site_manager") {
                     Column(
@@ -1298,7 +1298,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                                                         }
                                                     }
                                                 )
-                                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                                                .padding(horizontal = 16.dp, vertical = 13.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             Text(
@@ -2178,7 +2178,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .overScrollVertical(),
-                contentPadding = PaddingValues(bottom = 32.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp),
                 overscrollEffect = null,
             ) {
                 if (sites.isEmpty()) {
@@ -2233,7 +2233,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                                         if (!selected.contains(host)) selected.add(host)
                                     },
                                 )
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 16.dp, vertical = 13.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             if (selecting) {
@@ -2247,7 +2247,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                             }
                             Text(
                                 text = host,
-                                fontSize = MiuixTheme.textStyles.body1.fontSize,
+                                style = MiuixTheme.textStyles.body1,
                                 color = MiuixTheme.colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
                             )
@@ -2424,7 +2424,7 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
                     .fillMaxSize()
                     .padding(innerPadding)
                     .overScrollVertical(),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
                 overscrollEffect = null,
             ) {
                 if (sites.isEmpty()) {
@@ -2494,7 +2494,7 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
                                     ) {
                                         if (selecting) {
                                             androidx.compose.foundation.layout.Row(
-                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp),
                                                 verticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 androidx.compose.material3.Checkbox(
@@ -2560,7 +2560,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .overScrollVertical(),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
             overscrollEffect = null,
         ) {
             item(key = "host") {
@@ -2569,8 +2569,8 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         .padding(horizontal = 12.dp)
                         .padding(bottom = 12.dp),
                 ) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Text(host, fontSize = MiuixTheme.textStyles.body1.fontSize, color = MiuixTheme.colorScheme.onSurface)
+                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 13.dp)) {
+                        Text(host, style = MiuixTheme.textStyles.body1, color = MiuixTheme.colorScheme.onSurface)
                     }
                 }
             }
@@ -2694,7 +2694,7 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .overScrollVertical(),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
             overscrollEffect = null,
         ) {
             item(key = "host") {
@@ -2706,7 +2706,7 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                 ) {
                     M3Text(
                         host,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
                         style = M3MaterialTheme.typography.bodyLarge,
                     )
                 }
