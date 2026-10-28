@@ -2538,9 +2538,10 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
     val site = remember(host) { SecurityStateHolder.getSiteProtection(host) }
     var siteBlockAds by remember(host) { mutableStateOf(site.blockAds) }
     var siteTracking by remember(host) { mutableStateOf(site.trackingProtection) }
-    var downloadProtection by remember { mutableStateOf(prefs.getBoolean(KEY_DOWNLOAD_PROTECTION, true)) }
-    var disableWebRtc by remember { mutableStateOf(prefs.getBoolean(KEY_DISABLE_WEBRTC, false)) }
-    var blockRedirects by remember { mutableStateOf(prefs.getBoolean(KEY_BLOCK_REDIRECTS, false)) }
+    val siteSettings = remember(host) { SecurityStateHolder.getSiteProtection(host) }
+    var downloadProtection by remember(host) { mutableStateOf(siteSettings.downloadProtection) }
+    var disableWebRtc by remember(host) { mutableStateOf(siteSettings.webrtcDisabled) }
+    var blockRedirects by remember(host) { mutableStateOf(siteSettings.blockRedirects) }
     var rememberForm by remember { mutableStateOf(prefs.getBoolean(KEY_REMEMBER_FORM, true)) }
     var acceptCookie by remember { mutableStateOf(prefs.getBoolean(KEY_ACCEPT_COOKIE, true)) }
 
@@ -2598,7 +2599,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         checked = downloadProtection,
                         onCheckedChange = {
                             downloadProtection = it
-                            prefs.edit().putBoolean(KEY_DOWNLOAD_PROTECTION, it).apply()
+                            SecurityStateHolder.setSiteDownloadProtection(host, it)
                         },
                     )
                     SwitchPreference(
@@ -2616,7 +2617,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         checked = blockRedirects,
                         onCheckedChange = {
                             blockRedirects = it
-                            prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
+                            SecurityStateHolder.setSiteBlockRedirects(host, it)
                         },
                     )
                     SwitchPreference(
@@ -2625,7 +2626,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         checked = disableWebRtc,
                         onCheckedChange = {
                             disableWebRtc = it
-                            prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
+                            SecurityStateHolder.setSiteWebrtc(host, it)
                         },
                     )
                 }
@@ -2671,9 +2672,10 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
     val site = remember(host) { SecurityStateHolder.getSiteProtection(host) }
     var siteBlockAds by remember(host) { mutableStateOf(site.blockAds) }
     var siteTracking by remember(host) { mutableStateOf(site.trackingProtection) }
-    var downloadProtection by remember { mutableStateOf(prefs.getBoolean(KEY_DOWNLOAD_PROTECTION, true)) }
-    var disableWebRtc by remember { mutableStateOf(prefs.getBoolean(KEY_DISABLE_WEBRTC, false)) }
-    var blockRedirects by remember { mutableStateOf(prefs.getBoolean(KEY_BLOCK_REDIRECTS, false)) }
+    val siteSettings = remember(host) { SecurityStateHolder.getSiteProtection(host) }
+    var downloadProtection by remember(host) { mutableStateOf(siteSettings.downloadProtection) }
+    var disableWebRtc by remember(host) { mutableStateOf(siteSettings.webrtcDisabled) }
+    var blockRedirects by remember(host) { mutableStateOf(siteSettings.blockRedirects) }
     var rememberForm by remember { mutableStateOf(prefs.getBoolean(KEY_REMEMBER_FORM, true)) }
     var acceptCookie by remember { mutableStateOf(prefs.getBoolean(KEY_ACCEPT_COOKIE, true)) }
 

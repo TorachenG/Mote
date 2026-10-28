@@ -626,6 +626,8 @@ internal object SecurityStateHolder {
         val blockAds: Boolean = true,
         val trackingProtection: Boolean = true,
     val downloadProtection: Boolean = true,
+    val webrtcDisabled: Boolean = false,
+    val blockRedirects: Boolean = false,
     )
 
     var info by mutableStateOf(SecurityInfo())
@@ -665,6 +667,8 @@ internal object SecurityStateHolder {
                         blockAds = o.optBoolean("ads", true),
                         trackingProtection = o.optBoolean("tracking", true),
                         downloadProtection = o.optBoolean("download", true),
+                        webrtcDisabled = o.optBoolean("webrtc", false),
+                        blockRedirects = o.optBoolean("redirects", false),
                     )
                 }
             }
@@ -679,6 +683,8 @@ internal object SecurityStateHolder {
                     put("ads", sp.blockAds)
                     put("tracking", sp.trackingProtection)
             put("download", sp.downloadProtection)
+            put("webrtc", sp.webrtcDisabled)
+            put("redirects", sp.blockRedirects)
                 })
             }
             prefsRef?.edit()?.putString("web_site_protection", json.toString())?.apply()
@@ -746,7 +752,31 @@ internal object SecurityStateHolder {
     }
 
     fun getManagedSites(): List<String> =
-        (managedSites + siteProtectionMap.keys).sorted()
+        (managedSites + siteProtectionMap
+            .filter {
+                !it.value.blockAds || !it.value.trackingProtection ||
+                    !it.value.downloadProtection || it.value.webrtcDisabled || it.value.blockRedirects
+            }
+            .keys)
+            .sorted()
+
+    fun setSiteWebrtc(host: String, enabled: Boolean) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        siteProtectionMap[base] = cur.copy(webrtcDisabled = enabled)
+        persistSiteProtection()
+        whitelistVersion++
+    }
+
+    fun setSiteBlockRedirects(host: String, enabled: Boolean) {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return
+        val cur = siteProtectionMap[base] ?: SiteProtection()
+        siteProtectionMap[base] = cur.copy(blockRedirects = enabled)
+        persistSiteProtection()
+        whitelistVersion++
+    }
 
     fun setSiteDownloadProtection(host: String, enabled: Boolean) {
         val base = getBaseDomain(host)
@@ -10752,7 +10782,10 @@ private fun createWebView(
                 val lower = url.lowercase()
                 try {
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-                    if (secPrefs.getBoolean("web_block_redirects", false) &&
+                    val redirectHost = SecurityStateHolder.info.host
+                    val siteRedirects = redirectHost.isNotBlank() &&
+                        SecurityStateHolder.getSiteProtection(redirectHost).blockRedirects
+                    if ((siteRedirects || secPrefs.getBoolean("web_block_redirects", false)) &&
                         request != null &&
                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
                         request.isRedirect
@@ -10828,7 +10861,10 @@ private fun createWebView(
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
                 try {
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-                    if (secPrefs.getBoolean("web_disable_webrtc", false)) {
+                    val pageHostForWebrtc = SecurityStateHolder.info.host
+                    val siteWebrtc = pageHostForWebrtc.isNotBlank() &&
+                        SecurityStateHolder.getSiteProtection(pageHostForWebrtc).webrtcDisabled
+                    if (siteWebrtc || secPrefs.getBoolean("web_disable_webrtc", false)) {
                         view?.evaluateJavascript(JS_DISABLE_WEBRTC, null)
                         WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PRIVACY)
                     }
