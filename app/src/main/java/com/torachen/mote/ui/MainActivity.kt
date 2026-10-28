@@ -3,6 +3,7 @@
 
 package com.torachen.mote.ui
 
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
@@ -709,6 +710,12 @@ internal object SecurityStateHolder {
         trackingLevel = level.coerceIn(0, 2)
         prefsRef?.edit()?.putInt("web_tracking_level", trackingLevel)?.apply()
     }
+
+    /** 所有被单独改动过设置的站点（含广告、跟踪等任意一项与默认不同） */
+    fun getAllSiteProtections(): Map<String, SiteProtection> = siteProtectionMap.toMap()
+
+    fun getSiteProtection(host: String): SiteProtection =
+        siteProtectionMap[getBaseDomain(host)] ?: SiteProtection()
 
     fun getTrackingWhitelist(): List<String> {
         @Suppress("UNUSED_VARIABLE")
@@ -3611,6 +3618,18 @@ private fun RenderPageContent(
             "settings_web_security" -> SettingsWebSecurityPage(
                 onBack = { onPop() },
                 onOpenWhitelist = { onPush("settings_tracking_whitelist") },
+                onOpenSiteManager = { onPush("settings_web_sites") },
+            )
+            "settings_web_sites" -> WebSiteManagerPage(
+                onBack = { onPop() },
+                onOpenSite = { host ->
+                    WebSiteNavArgs.host = host
+                    onPush("settings_web_site")
+                },
+            )
+            "settings_web_site" -> WebSiteSettingsPage(
+                host = WebSiteNavArgs.host ?: "",
+                onBack = { onPop() },
             )
             "settings_tracking_whitelist" -> TrackingWhitelistPage(onBack = { onPop() })
             "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })

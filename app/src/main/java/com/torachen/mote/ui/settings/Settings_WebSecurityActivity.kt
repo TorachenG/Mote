@@ -14,6 +14,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.foundation.lazy.items
+import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.background
@@ -176,6 +179,7 @@ private data class WebSecurityActions(
     val onTrackingProtectionGlobalChange: (Boolean) -> Unit,
     val onTrackingLevelChange: (Int) -> Unit,
     val onOpenWhitelist: () -> Unit,
+    val onOpenSiteManager: () -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -218,7 +222,7 @@ private fun SecurityShieldHeader() {
                 imageVector = Icons.Rounded.Shield,
                 contentDescription = null,
                 tint = primary,
-                modifier = Modifier.size(112.dp),
+                modifier = Modifier.size(124.dp),
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(text = total.toString(), fontSize = 30.sp, color = Color.White)
@@ -265,6 +269,7 @@ private fun SecurityStatCard(count: String, label: String, modifier: Modifier = 
 fun SettingsWebSecurityPage(
     onBack: () -> Unit,
     onOpenWhitelist: () -> Unit = {},
+    onOpenSiteManager: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -352,6 +357,7 @@ fun SettingsWebSecurityPage(
             SecurityStateHolder.updateTrackingLevel(clamped)
         },
         onOpenWhitelist = onOpenWhitelist,
+        onOpenSiteManager = onOpenSiteManager,
         onBack = onBack,
     )
 
@@ -464,6 +470,18 @@ private fun SettingsWebSecurityMiuix(
                         Column(modifier = Modifier.fillMaxWidth()) {
 
                             SecurityShieldHeader()
+
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                ArrowPreference(
+                                    title = "网页管理",
+                                    summary = "查看并管理单独调整过设置的网站",
+                                    onClick = actions.onOpenSiteManager,
+                                )
+                            }
 
                             SmallTitle("网页权限")
 
@@ -767,6 +785,26 @@ private fun SettingsWebSecurityMaterial(
                     .padding(innerPadding),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
+                item(key = "site_manager") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                {
+                                    M3SegmentArrowItem(
+                                        title = "网页管理",
+                                        onClick = actions.onOpenSiteManager,
+                                    )
+                                },
+                            ),
+                        )
+                    }
+                }
+
                 item(key = "perm_header") {
                     WebSecuritySectionHeader("网页权限")
                 }
@@ -1942,6 +1980,410 @@ private fun collectFlatBookmarkForWhitelist(
         val url = obj.optString("url", "")
         if (url.isNotBlank()) {
             out.add(obj.optString("title", url) to url)
+        }
+    }
+}
+
+
+// ============================================================
+// 网页管理
+// ============================================================
+
+internal object WebSiteNavArgs {
+    var host: String? = null
+}
+
+@Composable
+fun WebSiteManagerPage(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> WebSiteManagerPageMiuix(onBack, onOpenSite)
+        UiMode.Material -> WebSiteManagerPageMaterial(onBack, onOpenSite)
+    }
+}
+
+@Composable
+private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
+    val scrollBehavior = MiuixScrollBehavior()
+    val surface = MiuixTheme.colorScheme.surface
+    val sites = remember {
+        SecurityStateHolder.getAllSiteProtections()
+            .filter { !it.value.blockAds || !it.value.trackingProtection }
+            .keys.sorted()
+    }
+    Column(modifier = Modifier.fillMaxSize().background(surface)) {
+        TopAppBar(
+            title = "网页管理",
+            largeTitle = "网页管理",
+            color = Color.Transparent,
+            defaultWindowInsetsPadding = true,
+            scrollBehavior = scrollBehavior,
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "返回", tint = MiuixTheme.colorScheme.onSurface)
+                }
+            },
+        )
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            if (sites.isEmpty()) {
+                item(key = "empty") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                        Text("暂无单独设置的网站", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    }
+                }
+            }
+            items(sites) { host ->
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                ) {
+                    ArrowPreference(title = host, onClick = { onOpenSite(host) })
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) -> Unit) {
+    val bg = M3MaterialTheme.colorScheme.surface
+    val sites = remember {
+        SecurityStateHolder.getAllSiteProtections()
+            .filter { !it.value.blockAds || !it.value.trackingProtection }
+            .keys.sorted()
+    }
+    M3Scaffold(
+        containerColor = bg,
+        topBar = {
+            M3TopAppBar(
+                title = { M3Text("网页管理") },
+                navigationIcon = {
+                    M3IconButton(onClick = onBack) {
+                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
+                },
+                colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+            )
+        },
+    ) { innerPadding ->
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            if (sites.isEmpty()) {
+                item(key = "empty") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                        M3Text("暂无单独设置的网站", style = M3MaterialTheme.typography.bodyMedium, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item(key = "site_list") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    MoteSegmentedColumn(
+                        content = sites.map { host ->
+                            {
+                                M3SegmentArrowItem(title = host, onClick = { onOpenSite(host) })
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WebSiteSettingsPage(host: String, onBack: () -> Unit) {
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> WebSiteSettingsPageMiuix(host, onBack)
+        UiMode.Material -> WebSiteSettingsPageMaterial(host, onBack)
+    }
+}
+
+@Composable
+private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    val scrollBehavior = MiuixScrollBehavior()
+    val surface = MiuixTheme.colorScheme.surface
+
+    val site = remember(host) { SecurityStateHolder.getSiteProtection(host) }
+    var siteBlockAds by remember(host) { mutableStateOf(site.blockAds) }
+    var siteTracking by remember(host) { mutableStateOf(site.trackingProtection) }
+    var downloadProtection by remember { mutableStateOf(prefs.getBoolean(KEY_DOWNLOAD_PROTECTION, true)) }
+    var disableWebRtc by remember { mutableStateOf(prefs.getBoolean(KEY_DISABLE_WEBRTC, false)) }
+    var blockRedirects by remember { mutableStateOf(prefs.getBoolean(KEY_BLOCK_REDIRECTS, false)) }
+    var rememberForm by remember { mutableStateOf(prefs.getBoolean(KEY_REMEMBER_FORM, true)) }
+    var acceptCookie by remember { mutableStateOf(prefs.getBoolean(KEY_ACCEPT_COOKIE, true)) }
+
+    Column(modifier = Modifier.fillMaxSize().background(surface)) {
+        TopAppBar(
+            title = "网站设置",
+            largeTitle = "网站设置",
+            color = Color.Transparent,
+            defaultWindowInsetsPadding = true,
+            scrollBehavior = scrollBehavior,
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(imageVector = MiuixIcons.ChevronBackward, contentDescription = "返回", tint = MiuixTheme.colorScheme.onSurface)
+                }
+            },
+        )
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            item(key = "host") {
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Text(host, fontSize = MiuixTheme.textStyles.body1.fontSize, color = MiuixTheme.colorScheme.onSurface)
+                    }
+                }
+            }
+            item(key = "protect") {
+                SmallTitle("防护")
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                ) {
+                    SwitchPreference(
+                        title = "下载防护",
+                        summary = "拦截网页发起的可疑可执行文件下载",
+                        checked = downloadProtection,
+                        onCheckedChange = {
+                            downloadProtection = it
+                            prefs.edit().putBoolean(KEY_DOWNLOAD_PROTECTION, it).apply()
+                        },
+                    )
+                    SwitchPreference(
+                        title = "禁用 WebRTC",
+                        summary = "阻止网页通过 WebRTC 暴露本机 IP 地址",
+                        checked = disableWebRtc,
+                        onCheckedChange = {
+                            disableWebRtc = it
+                            prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
+                        },
+                    )
+                    SwitchPreference(
+                        title = "网页重定向",
+                        summary = "阻止网页自动跳转到其它站点",
+                        checked = blockRedirects,
+                        onCheckedChange = {
+                            blockRedirects = it
+                            prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
+                        },
+                    )
+                    SwitchPreference(
+                        title = "拦截广告",
+                        summary = "阻止该网站中的广告请求",
+                        checked = siteBlockAds,
+                        onCheckedChange = {
+                            siteBlockAds = it
+                            SecurityStateHolder.setSiteBlockAds(host, it)
+                        },
+                    )
+                    SwitchPreference(
+                        title = "跟踪防护",
+                        summary = "限制该网站跨站收集浏览数据",
+                        checked = siteTracking,
+                        onCheckedChange = {
+                            siteTracking = it
+                            SecurityStateHolder.setSiteTrackingProtection(host, it)
+                        },
+                    )
+                }
+            }
+            item(key = "permission") {
+                SmallTitle("网页权限")
+                Card(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                ) {
+                    SwitchPreference(
+                        title = "记住表单数据",
+                        summary = "记住表单中输入的数据以便以后使用",
+                        checked = rememberForm,
+                        onCheckedChange = {
+                            rememberForm = it
+                            prefs.edit().putBoolean(KEY_REMEMBER_FORM, it).apply()
+                        },
+                    )
+                    SwitchPreference(
+                        title = "接受 Cookie",
+                        summary = "允许网站保存和读取 Cookie",
+                        checked = acceptCookie,
+                        onCheckedChange = {
+                            acceptCookie = it
+                            prefs.edit().putBoolean(KEY_ACCEPT_COOKIE, it).apply()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    val bg = M3MaterialTheme.colorScheme.surface
+
+    val site = remember(host) { SecurityStateHolder.getSiteProtection(host) }
+    var siteBlockAds by remember(host) { mutableStateOf(site.blockAds) }
+    var siteTracking by remember(host) { mutableStateOf(site.trackingProtection) }
+    var downloadProtection by remember { mutableStateOf(prefs.getBoolean(KEY_DOWNLOAD_PROTECTION, true)) }
+    var disableWebRtc by remember { mutableStateOf(prefs.getBoolean(KEY_DISABLE_WEBRTC, false)) }
+    var blockRedirects by remember { mutableStateOf(prefs.getBoolean(KEY_BLOCK_REDIRECTS, false)) }
+    var rememberForm by remember { mutableStateOf(prefs.getBoolean(KEY_REMEMBER_FORM, true)) }
+    var acceptCookie by remember { mutableStateOf(prefs.getBoolean(KEY_ACCEPT_COOKIE, true)) }
+
+    M3Scaffold(
+        containerColor = bg,
+        topBar = {
+            M3TopAppBar(
+                title = { M3Text("网站设置") },
+                navigationIcon = {
+                    M3IconButton(onClick = onBack) {
+                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
+                },
+                colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+            )
+        },
+    ) { innerPadding ->
+        androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentPadding = PaddingValues(bottom = 24.dp),
+        ) {
+            item(key = "host") {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    M3Text(
+                        host,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                        style = M3MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+            item(key = "protect") {
+                WebSecuritySectionHeader("防护")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    MoteSegmentedColumn(
+                        content = listOf(
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "下载防护",
+                                    checked = downloadProtection,
+                                    onCheckedChange = {
+                                        downloadProtection = it
+                                        prefs.edit().putBoolean(KEY_DOWNLOAD_PROTECTION, it).apply()
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "禁用 WebRTC",
+                                    checked = disableWebRtc,
+                                    onCheckedChange = {
+                                        disableWebRtc = it
+                                        prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "网页重定向",
+                                    checked = blockRedirects,
+                                    onCheckedChange = {
+                                        blockRedirects = it
+                                        prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "拦截广告",
+                                    checked = siteBlockAds,
+                                    onCheckedChange = {
+                                        siteBlockAds = it
+                                        SecurityStateHolder.setSiteBlockAds(host, it)
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "跟踪防护",
+                                    checked = siteTracking,
+                                    onCheckedChange = {
+                                        siteTracking = it
+                                        SecurityStateHolder.setSiteTrackingProtection(host, it)
+                                    },
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
+            item(key = "permission") {
+                WebSecuritySectionHeader("网页权限")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    MoteSegmentedColumn(
+                        content = listOf(
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "记住表单数据",
+                                    checked = rememberForm,
+                                    onCheckedChange = {
+                                        rememberForm = it
+                                        prefs.edit().putBoolean(KEY_REMEMBER_FORM, it).apply()
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "接受 Cookie",
+                                    checked = acceptCookie,
+                                    onCheckedChange = {
+                                        acceptCookie = it
+                                        prefs.edit().putBoolean(KEY_ACCEPT_COOKIE, it).apply()
+                                    },
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
         }
     }
 }
