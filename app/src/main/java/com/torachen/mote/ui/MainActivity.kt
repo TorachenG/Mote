@@ -1161,6 +1161,19 @@ private val JS_CONTEXTMENU_TRACKER = """
 
 /** 禁用 WebRTC：覆盖 RTCPeerConnection，避免网页通过 ICE 收集本机 IP */
 /** 剪贴板 JS 钩子：接管 navigator.clipboard 的读写 */
+/** 禁止网页自动播放视频：覆盖 HTMLMediaElement.play */
+private val JS_BLOCK_VIDEO_AUTOPLAY = """
+(function() {
+  try {
+    var orig = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function() {
+      try { this.pause && this.pause(); } catch (e) {}
+      return Promise.reject(new DOMException('Autoplay blocked by Mote', 'NotAllowedError'));
+    };
+  } catch (e) {}
+})();
+"""
+
 private val JS_CLIPBOARD_HOOK = """
 (function() {
   try {
@@ -10929,6 +10942,11 @@ private fun createWebView(
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_CLIPBOARD_HOOK, null) } catch (_: Exception) {}
                 try {
+                    if (WebPermissionStore.mode(context, WebPermissionStore.VIDEO_AUTOPLAY) == WebPermissionStore.DENY) {
+                        view?.evaluateJavascript(JS_BLOCK_VIDEO_AUTOPLAY, null)
+                    }
+                } catch (_: Exception) {}
+                try {
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
                     if (SecurityStateHolder.effectiveWebrtc(SecurityStateHolder.info.host)) {
                         view?.evaluateJavascript(JS_DISABLE_WEBRTC, null)
@@ -11207,7 +11225,8 @@ private fun createWebView(
         }, "MotePermission")
         val permSettings = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
         settings.mediaPlaybackRequiresUserGesture =
-            WebPermissionStore.mode(context, WebPermissionStore.AUTOPLAY) != WebPermissionStore.ALLOW
+            WebPermissionStore.mode(context, WebPermissionStore.AUTOPLAY) != WebPermissionStore.ALLOW &&
+            WebPermissionStore.mode(context, WebPermissionStore.VIDEO_AUTOPLAY) != WebPermissionStore.ALLOW
         settings.setGeolocationEnabled(
             WebPermissionStore.mode(context, WebPermissionStore.LOCATION) != WebPermissionStore.DENY
         )
@@ -11311,6 +11330,10 @@ private fun createWebView(
                 result: JsResult?
             ): Boolean {
                 if (result == null) return false
+                if (WebPermissionStore.mode(context, WebPermissionStore.DIALOG) == WebPermissionStore.DENY) {
+                    result.cancel()
+                    return true
+                }
                 post {
                     PendingJsDialogStore.pending = PendingJsDialog(
                         message = message ?: "",

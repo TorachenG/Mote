@@ -2025,7 +2025,7 @@ private fun SettingsSyncBrowsersMiuix(
                             Card(
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp)
-                                    .padding(bottom = 12.dp),
+                                    .padding(top = 12.dp, bottom = 12.dp),
                             ) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                                     Text(
@@ -2040,15 +2040,6 @@ private fun SettingsSyncBrowsersMiuix(
                                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                     )
                                     Spacer(Modifier.height(16.dp))
-                                    Image(
-                                        painter = painterResource(id = com.torachen.mote.R.drawable.sync_browsers_store),
-                                        contentDescription = "扩展商店",
-                                        contentScale = ContentScale.FillWidth,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable { onOpenUrl(BROWSER_SYNC_STORE_URL) },
-                                    )
                                     Spacer(Modifier.height(16.dp))
                                     Text(
                                         "1. 打开扩展商店，点击「获取」安装「Mote 书签同步」。",
@@ -2214,15 +2205,6 @@ private fun SettingsSyncBrowsersMaterial(
                                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.height(16.dp))
-                                Image(
-                                    painter = painterResource(id = com.torachen.mote.R.drawable.sync_browsers_store),
-                                    contentDescription = "扩展商店",
-                                    contentScale = ContentScale.FillWidth,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable { onOpenUrl(BROWSER_SYNC_STORE_URL) },
-                                )
                                 Spacer(Modifier.height(16.dp))
                                 M3Text(
                                     "1. 打开扩展商店，点击「获取」安装「Mote 书签同步」。\n" +

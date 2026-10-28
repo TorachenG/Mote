@@ -98,6 +98,9 @@ import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import androidx.compose.material3.PrimaryTabRow as M3PrimaryTabRow
+import androidx.compose.material3.Tab as M3Tab
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
@@ -659,45 +662,17 @@ private fun SettingsWebSecurityMiuix(
                                 }
                             }
 
-                            SmallTitle("白名单")
                             Card(
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
+                                insideMargin = PaddingValues(0.dp),
                             ) {
-                                SearchableItem(
-                                    title = "跟踪防护白名单",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_tracking_whitelist",
-                                ) {
-                                    ArrowPreference(
-                                        title = "跟踪防护白名单",
-                                        onClick = actions.onOpenWhitelist,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "下载防护白名单",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_download_whitelist",
-                                ) {
-                                    ArrowPreference(
-                                        title = "下载防护白名单",
-                                        onClick = actions.onOpenDownloadWhitelist,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "广告拦截白名单",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_ad_whitelist",
-                                ) {
-                                    ArrowPreference(
-                                        title = "广告拦截白名单",
-                                        onClick = actions.onOpenAdWhitelist,
-                                    )
-                                }
+                                ArrowPreference(
+                                    title = "防护白名单",
+                                    summary = "跟踪防护 / 下载防护 / 广告拦截",
+                                    onClick = actions.onOpenWhitelist,
+                                )
                             }
 
                             SmallTitle("辅助功能")
@@ -1019,11 +994,7 @@ private fun SettingsWebSecurityMaterial(
                     }
                 }
 
-                item(key = "whitelist_header") {
-                    WebSecuritySectionHeader("白名单")
-                }
-
-                item(key = "whitelist_items") {
+                item(key = "whitelist_entry") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1033,15 +1004,12 @@ private fun SettingsWebSecurityMaterial(
                         MoteSegmentedColumn(
                             color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
-                                        {
-                                            M3SegmentArrowItem(title = "跟踪防护白名单", onClick = actions.onOpenWhitelist)
-                                        },
-                                        {
-                                            M3SegmentArrowItem(title = "下载防护白名单", onClick = actions.onOpenDownloadWhitelist)
-                                        },
-                                        {
-                                            M3SegmentArrowItem(title = "广告拦截白名单", onClick = actions.onOpenAdWhitelist)
-                                        },
+                                {
+                                    M3SegmentArrowItem(
+                                        title = "防护白名单",
+                                        onClick = actions.onOpenWhitelist,
+                                    )
+                                },
                             ),
                         )
                     }
@@ -1231,6 +1199,8 @@ fun WhitelistPage(kind: String, onBack: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
+    var currentKind by remember(kind) { mutableStateOf(kind) }
+
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
     val context = LocalContext.current
@@ -1264,7 +1234,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
-    val whitelist = whitelistOf(kind)
+    val whitelist = whitelistOf(currentKind)
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -1373,7 +1343,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                                             )
                                             Spacer(Modifier.height(12.dp))
                                             Text(
-                                                text = whitelistEmptyText(kind),
+                                                text = whitelistEmptyText(currentKind),
                                                 fontSize = 14.sp,
                                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                             )
@@ -1470,7 +1440,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                 val barTitle = if (isMultiSelectMode) {
                     if (selectedHosts.isEmpty()) "请选择项目" else "已选择 ${selectedHosts.size} 项"
                 } else {
-                    whitelistTitle(kind)
+                    whitelistTitle(currentKind)
                 }
                 TopAppBar(
                     title = barTitle,
@@ -1515,6 +1485,26 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                         }
                     }
                 )
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+                TabRowWithContour(
+                    tabs = listOf("跟踪防护", "下载防护", "广告拦截"),
+                    selectedTabIndex = when (currentKind) {
+                        WL_DOWNLOAD -> 1
+                        WL_AD -> 2
+                        else -> 0
+                    },
+                    onTabSelected = { idx ->
+                        currentKind = when (idx) {
+                            1 -> WL_DOWNLOAD
+                            2 -> WL_AD
+                            else -> WL_TRACKING
+                        }
+                        isMultiSelectMode = false
+                        selectedHosts.clear()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             }
 
             Row(
@@ -1575,7 +1565,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
             prefs = prefs,
             onDismiss = { showAddDialog = false },
             onAdd = { host ->
-                whitelistAdd(kind, host)
+                whitelistAdd(currentKind, host)
                 showAddDialog = false
                 Toast.makeText(context, "已添加到白名单", Toast.LENGTH_SHORT).show()
             },
@@ -1610,7 +1600,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                     Button(
                         onClick = {
                             selectedHosts.toList().forEach {
-                                whitelistRemove(kind, it)
+                                whitelistRemove(currentKind, it)
                             }
                             Toast.makeText(context, "已移除选中的白名单", Toast.LENGTH_SHORT).show()
                             exitMultiSelect()
@@ -1631,13 +1621,15 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
+    var currentKind by remember(kind) { mutableStateOf(kind) }
+
     val navOwner = rememberNavigationEventDispatcherOwner()
     val context = LocalContext.current
     val prefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
     }
 
-    val whitelist = whitelistOf(kind)
+    val whitelist = whitelistOf(currentKind)
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
@@ -1687,7 +1679,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
                             M3Text(
                                 if (isMultiSelectMode) {
                                     if (selectedHosts.isEmpty()) "请选择项目" else "已选择 ${selectedHosts.size} 项"
-                                } else whitelistTitle(kind)
+                                } else whitelistTitle(currentKind)
                             )
                         },
                         navigationIcon = {
@@ -1721,6 +1713,34 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
                             containerColor = pageBg,
                         ),
                     )
+            M3PrimaryTabRow(
+                selectedTabIndex = when (currentKind) {
+                    WL_DOWNLOAD -> 1
+                    WL_AD -> 2
+                    else -> 0
+                },
+                containerColor = pageBg,
+            ) {
+                listOf("跟踪防护", "下载防护", "广告拦截").forEachIndexed { idx, title ->
+                    M3Tab(
+                        selected = when (currentKind) {
+                            WL_DOWNLOAD -> idx == 1
+                            WL_AD -> idx == 2
+                            else -> idx == 0
+                        },
+                        onClick = {
+                            currentKind = when (idx) {
+                                1 -> WL_DOWNLOAD
+                                2 -> WL_AD
+                                else -> WL_TRACKING
+                            }
+                            isMultiSelectMode = false
+                            selectedHosts.clear()
+                        },
+                        text = { M3Text(title) },
+                    )
+                }
+            }
                 }
 
                 LazyColumn(
@@ -1765,7 +1785,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
                                                 )
                                                 Spacer(Modifier.height(12.dp))
                                                 M3Text(
-                                                    text = whitelistEmptyText(kind),
+                                                    text = whitelistEmptyText(currentKind),
                                                     style = M3MaterialTheme.typography.bodyMedium,
                                                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -1861,7 +1881,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
                 prefs = prefs,
                 onDismiss = { showAddDialog = false },
                 onAdd = { host ->
-                    whitelistAdd(kind, host)
+                    whitelistAdd(currentKind, host)
                     showAddDialog = false
                     Toast.makeText(context, "已添加到白名单", Toast.LENGTH_SHORT).show()
                 },
@@ -1877,7 +1897,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
                     androidx.compose.material3.TextButton(
                         onClick = {
                             selectedHosts.toList().forEach {
-                                whitelistRemove(kind, it)
+                                whitelistRemove(currentKind, it)
                             }
                             Toast.makeText(context, "已移除选中的白名单", Toast.LENGTH_SHORT).show()
                             exitMultiSelect()
@@ -2950,6 +2970,9 @@ internal object WebPermissionStore {
     const val LOCATION = "location"
     const val AUTOPLAY = "autoplay"
     const val CLIPBOARD = "clipboard"
+    const val POPUP_WINDOW = "popup_window"
+    const val DIALOG = "dialog"
+    const val VIDEO_AUTOPLAY = "video_autoplay"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
@@ -2975,6 +2998,9 @@ internal object WebPermissionStore {
         LOCATION -> "定位权限"
         AUTOPLAY -> "播放声音权限"
         CLIPBOARD -> "剪贴板权限"
+        POPUP_WINDOW -> "新建窗口权限"
+        DIALOG -> "弹出提示权限"
+        VIDEO_AUTOPLAY -> "自动播放视频权限"
         else -> "网页权限"
     }
 }
