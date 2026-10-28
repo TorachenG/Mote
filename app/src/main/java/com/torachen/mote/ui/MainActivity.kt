@@ -605,6 +605,7 @@ internal data class SecurityInfo(
     val certValidTo: String = "",
     val isCertExpired: Boolean = false,
     val hasMixedContent: Boolean = false,
+    val siteManaged: Boolean = false,
     val siteBlockAdsEnabled: Boolean = true,
     val siteTrackingProtectionEnabled: Boolean = true,
     val globalBlockAdsEnabled: Boolean = true,
@@ -614,10 +615,10 @@ internal data class SecurityInfo(
     val blockedTotal: Int = 0,
 ) {
     val effectiveBlockAdsEnabled: Boolean
-        get() = globalBlockAdsEnabled && siteBlockAdsEnabled
+        get() = if (siteManaged) siteBlockAdsEnabled else globalBlockAdsEnabled
 
     val effectiveTrackingProtectionEnabled: Boolean
-        get() = globalTrackingProtectionEnabled && siteTrackingProtectionEnabled
+        get() = if (siteManaged) siteTrackingProtectionEnabled else globalTrackingProtectionEnabled
 }
 
 internal object SecurityStateHolder {
@@ -699,6 +700,7 @@ internal object SecurityStateHolder {
     fun setSiteBlockAds(host: String, enabled: Boolean) {
         val base = getBaseDomain(host)
         if (base.isBlank()) return
+        managedSites.add(base)
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(blockAds = enabled)
         persistSiteProtection()
@@ -708,6 +710,7 @@ internal object SecurityStateHolder {
     fun setSiteTrackingProtection(host: String, enabled: Boolean) {
         val base = getBaseDomain(host)
         if (base.isBlank()) return
+        managedSites.add(base)
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(trackingProtection = enabled)
         persistSiteProtection()
@@ -748,6 +751,8 @@ internal object SecurityStateHolder {
     fun removeManagedSite(host: String) {
         val base = getBaseDomain(host)
         managedSites.remove(base)
+        siteProtectionMap.remove(base)
+        persistSiteProtection()
         whitelistVersion++
     }
 
@@ -760,9 +765,37 @@ internal object SecurityStateHolder {
             .keys)
             .sorted()
 
+    fun isManagedSite(host: String): Boolean {
+        val base = getBaseDomain(host)
+        if (base.isBlank()) return false
+        if (managedSites.contains(base)) return true
+        val sp = siteProtectionMap[base] ?: return false
+        return !sp.blockAds || !sp.trackingProtection || !sp.downloadProtection ||
+            sp.webrtcDisabled || sp.blockRedirects
+    }
+
+    fun effectiveDownloadProtection(host: String): Boolean {
+        val base = getBaseDomain(host)
+        val global = prefsRef?.getBoolean("web_download_protection", true) ?: true
+        return if (base.isNotBlank() && isManagedSite(base)) getSiteProtection(base).downloadProtection else global
+    }
+
+    fun effectiveWebrtc(host: String): Boolean {
+        val base = getBaseDomain(host)
+        val global = prefsRef?.getBoolean("web_disable_webrtc", false) ?: false
+        return if (base.isNotBlank() && isManagedSite(base)) getSiteProtection(base).webrtcDisabled else global
+    }
+
+    fun effectiveRedirects(host: String): Boolean {
+        val base = getBaseDomain(host)
+        val global = prefsRef?.getBoolean("web_block_redirects", false) ?: false
+        return if (base.isNotBlank() && isManagedSite(base)) getSiteProtection(base).blockRedirects else global
+    }
+
     fun setSiteWebrtc(host: String, enabled: Boolean) {
         val base = getBaseDomain(host)
         if (base.isBlank()) return
+        managedSites.add(base)
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(webrtcDisabled = enabled)
         persistSiteProtection()
@@ -772,6 +805,7 @@ internal object SecurityStateHolder {
     fun setSiteBlockRedirects(host: String, enabled: Boolean) {
         val base = getBaseDomain(host)
         if (base.isBlank()) return
+        managedSites.add(base)
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(blockRedirects = enabled)
         persistSiteProtection()
@@ -781,6 +815,7 @@ internal object SecurityStateHolder {
     fun setSiteDownloadProtection(host: String, enabled: Boolean) {
         val base = getBaseDomain(host)
         if (base.isBlank()) return
+        managedSites.add(base)
         val cur = siteProtectionMap[base] ?: SiteProtection()
         siteProtectionMap[base] = cur.copy(downloadProtection = enabled)
         persistSiteProtection()
@@ -853,6 +888,7 @@ internal object SecurityStateHolder {
             url = url,
             host = host,
             isHttps = isHttps,
+            siteManaged = isManagedSite(host),
             siteBlockAdsEnabled = site.blockAds,
             siteTrackingProtectionEnabled = site.trackingProtection,
             globalBlockAdsEnabled = globalBlockAdsEnabled,
@@ -10782,10 +10818,7 @@ private fun createWebView(
                 val lower = url.lowercase()
                 try {
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-                    val redirectHost = SecurityStateHolder.info.host
-                    val siteRedirects = redirectHost.isNotBlank() &&
-                        SecurityStateHolder.getSiteProtection(redirectHost).blockRedirects
-                    if ((siteRedirects || secPrefs.getBoolean("web_block_redirects", false)) &&
+                    if (SecurityStateHolder.effectiveRedirects(SecurityStateHolder.info.host) &&
                         request != null &&
                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
                         request.isRedirect
@@ -10861,10 +10894,7 @@ private fun createWebView(
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
                 try {
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-                    val pageHostForWebrtc = SecurityStateHolder.info.host
-                    val siteWebrtc = pageHostForWebrtc.isNotBlank() &&
-                        SecurityStateHolder.getSiteProtection(pageHostForWebrtc).webrtcDisabled
-                    if (siteWebrtc || secPrefs.getBoolean("web_disable_webrtc", false)) {
+                    if (SecurityStateHolder.effectiveWebrtc(SecurityStateHolder.info.host)) {
                         view?.evaluateJavascript(JS_DISABLE_WEBRTC, null)
                         WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PRIVACY)
                     }
@@ -11251,9 +11281,7 @@ private fun createWebView(
             val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
             val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
             val pageHost = SecurityStateHolder.info.host
-            val siteDownloadAllowed = pageHost.isBlank() ||
-                SecurityStateHolder.getSiteProtection(pageHost).downloadProtection
-            if (secPrefs.getBoolean("web_download_protection", true) && siteDownloadAllowed) {
+            if (SecurityStateHolder.effectiveDownloadProtection(pageHost)) {
                 val lowerName = fileName.lowercase()
                 val riskyExt = listOf(".apk", ".exe", ".bat", ".cmd", ".sh", ".scr", ".msi", ".jar", ".vbs")
                 if (riskyExt.any { lowerName.endsWith(it) } ||
