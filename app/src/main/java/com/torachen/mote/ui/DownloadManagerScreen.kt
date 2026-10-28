@@ -800,7 +800,7 @@ internal object MoteDownloader {
             if (mgr.getNotificationChannel(CHANNEL_ID) == null) {
                 val ch = NotificationChannel(
                     CHANNEL_ID,
-                    "下载管理",
+                    "下载",
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply { setShowBadge(false) }
                 mgr.createNotificationChannel(ch)
@@ -1262,7 +1262,7 @@ private fun DownloadManagerScreenMiuix(
                         }
                     }
             ) {
-                val barTitle = if (isMultiSelectMode) { if (selectedIds.isEmpty()) "请选择项目" else "已选择 ${selectedIds.size} 项" } else "下载管理"
+                val barTitle = if (isMultiSelectMode) { if (selectedIds.isEmpty()) "请选择项目" else "已选择 ${selectedIds.size} 项" } else "下载"
                 TopAppBar(
                     title = barTitle, largeTitle = barTitle, scrollBehavior = scrollBehavior, color = Color.Transparent, defaultWindowInsetsPadding = false,
                     navigationIcon = {
@@ -2029,7 +2029,7 @@ private fun DownloadManagerScreenMaterial(
                         M3Text(
                             if (isMultiSelectMode) {
                                 if (selectedIds.isEmpty()) "请选择项目" else "已选择 ${selectedIds.size} 项"
-                            } else "下载管理"
+                            } else "下载"
                         )
                     },
                     navigationIcon = {

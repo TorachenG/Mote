@@ -1158,6 +1158,35 @@ private val JS_CONTEXTMENU_TRACKER = """
 """.trimIndent()
 
 /** 禁用 WebRTC：覆盖 RTCPeerConnection，避免网页通过 ICE 收集本机 IP */
+/** 剪贴板 JS 钩子：接管 navigator.clipboard 的读写 */
+private val JS_CLIPBOARD_HOOK = """
+(function() {
+  try {
+    if (!navigator.clipboard) return;
+    window.__moteClipRes = null;
+    window.__moteClipRej = null;
+    window.__moteClipResult = function(ok, data) {
+      try {
+        if (ok) { window.__moteClipRes && window.__moteClipRes(data || ''); }
+        else { window.__moteClipRej && window.__moteClipRej(new Error('denied')); }
+      } catch (e) {}
+    };
+    navigator.clipboard.readText = function() {
+      return new Promise(function(res, rej) {
+        window.__moteClipRes = res; window.__moteClipRej = rej;
+        try { MotePermission.request('read', ''); } catch (e) { rej(e); }
+      });
+    };
+    navigator.clipboard.writeText = function(t) {
+      return new Promise(function(res, rej) {
+        window.__moteClipRes = res; window.__moteClipRej = rej;
+        try { MotePermission.request('write', String(t == null ? '' : t)); } catch (e) { rej(e); }
+      });
+    };
+  } catch (e) {}
+})();
+"""
+
 private val JS_DISABLE_WEBRTC = """
 (function() {
   try {
@@ -3020,6 +3049,7 @@ class MainActivity : ComponentActivity() {
                     Box(modifier = Modifier.fillMaxSize()) {
                         AppRoot()
                         PrivacyPolicyDialog()
+                        WebPermissionDialogHost()
                     }
                 }
             }
@@ -10420,6 +10450,7 @@ private fun createWebView(
         setLayerType(View.LAYER_TYPE_HARDWARE, null)
         isHapticFeedbackEnabled = false
 
+        val selfRef: WebView = this
         addJavascriptInterface(object {
             @JavascriptInterface
             fun setPullRefreshAllowed(allowed: Boolean) {
@@ -10894,6 +10925,7 @@ private fun createWebView(
                     SecurityStateHolder.reset(url)
                 }
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
+                try { view?.evaluateJavascript(JS_CLIPBOARD_HOOK, null) } catch (_: Exception) {}
                 try {
                     val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
                     if (SecurityStateHolder.effectiveWebrtc(SecurityStateHolder.info.host)) {
@@ -11147,9 +11179,36 @@ private fun createWebView(
                     layoutParams = ViewGroup.LayoutParams(1, 1)
                     alpha = 0f
                     settings.javaScriptEnabled = true
+        addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun request(kind: String, text: String) {
+                post {
+                    val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val web = selfRef
+                    fun reply(ok: Boolean, data: String) {
+                        val escaped = data.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+                        web.evaluateJavascript("window.__moteClipResult && window.__moteClipResult($ok, '$escaped')", null)
+                    }
+                    WebPermissionPrompt.request(context, WebPermissionStore.CLIPBOARD) { allow, _ ->
+                        if (!allow) {
+                            reply(false, "")
+                        } else if (kind == "write") {
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Mote", text))
+                            reply(true, "")
+                        } else {
+                            val read = cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
+                            reply(true, read)
+                        }
+                    }
+                }
+            }
+        }, "MotePermission")
         val permSettings = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-        settings.mediaPlaybackRequiresUserGesture = !permSettings.getBoolean("web_perm_autoplay", true)
-        settings.setGeolocationEnabled(permSettings.getBoolean("web_perm_location", true))
+        settings.mediaPlaybackRequiresUserGesture =
+            WebPermissionStore.mode(context, WebPermissionStore.AUTOPLAY) != WebPermissionStore.ALLOW
+        settings.setGeolocationEnabled(
+            WebPermissionStore.mode(context, WebPermissionStore.LOCATION) != WebPermissionStore.DENY
+        )
                     settings.domStorageEnabled = true
                 }
                 var handled = false
@@ -11204,46 +11263,42 @@ private fun createWebView(
                 callback: android.webkit.GeolocationPermissions.Callback?,
             ) {
                 if (callback == null) return
-                val allow = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-                    .getBoolean("web_perm_location", true)
-                callback.invoke(origin, allow, false)
+                WebPermissionPrompt.request(context, WebPermissionStore.LOCATION) { allow, _ ->
+                    callback.invoke(origin, allow, false)
+                }
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
                 if (request == null) return
-                val permPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-                val allowCamera = permPrefs.getBoolean("web_perm_camera", true)
-                val allowMic = permPrefs.getBoolean("web_perm_microphone", true)
-                val blocked = request.resources.any { r ->
-                    (r == PermissionRequest.RESOURCE_VIDEO_CAPTURE && !allowCamera) ||
-                        (r == PermissionRequest.RESOURCE_AUDIO_CAPTURE && !allowMic)
-                }
-                if (blocked) {
-                    request.deny()
-                    Toast.makeText(context, "网页权限中已关闭相机/麦克风", Toast.LENGTH_SHORT).show()
-                    return
-                }
                 val resources = request.resources
-                val needed = mutableListOf<String>()
-                for (r in resources) {
-                    when (r) {
-                        PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
-                            needed.add(Manifest.permission.CAMERA)
-                        PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
-                            needed.add(Manifest.permission.RECORD_AUDIO)
-                    }
+                val camera = resources.any { it == PermissionRequest.RESOURCE_VIDEO_CAPTURE }
+                val mic = resources.any { it == PermissionRequest.RESOURCE_AUDIO_CAPTURE }
+                val kind = when {
+                    camera -> WebPermissionStore.CAMERA
+                    mic -> WebPermissionStore.MICROPHONE
+                    else -> return
                 }
-                val granted = needed.all {
-                    ContextCompat.checkSelfPermission(context, it) ==
-                            PackageManager.PERMISSION_GRANTED
-                }
-                when {
-                    granted -> request.grant(resources)
-                    needed.isNotEmpty() -> {
-                        pendingPermission.value = request
-                        permissionLauncher.launch(needed.toTypedArray())
+                WebPermissionPrompt.request(context, kind) { allow, _ ->
+                    post {
+                        if (!allow) {
+                            request.deny()
+                        } else {
+                            val needed = buildList {
+                                if (camera) add(Manifest.permission.CAMERA)
+                                if (mic) add(Manifest.permission.RECORD_AUDIO)
+                            }
+                            val granted = needed.all {
+                                ContextCompat.checkSelfPermission(context, it) ==
+                                    PackageManager.PERMISSION_GRANTED
+                            }
+                            if (granted || needed.isEmpty()) {
+                                request.grant(resources)
+                            } else {
+                                pendingPermission.value = request
+                                permissionLauncher.launch(needed.toTypedArray())
+                            }
+                        }
                     }
-                    else -> request.grant(resources)
                 }
             }
 

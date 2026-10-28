@@ -1093,7 +1093,7 @@ internal fun FileManagerPage(
     onOpenScanner: () -> Unit = {},
     onOpenFileSettings: () -> Unit = {},
     onSubPageChange: (Boolean) -> Unit = {},
-    pageTitle: String = "文件管理",
+    pageTitle: String = "文件",
 ) {
     val context = LocalContext.current
     val realController = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
@@ -2230,7 +2230,7 @@ internal fun FileManagerDirPage(
     onOpenInBrowser: (String) -> Unit,
     initialPath: String? = null,
     initialCategory: String? = null,
-    pageTitle: String = "文件管理",
+    pageTitle: String = "文件",
     requestToken: Long = 0L,
     fromShortcut: Boolean = false,
     onOpenFileBrowser: () -> Unit = {},
@@ -2882,7 +2882,7 @@ private fun FileManagerMaterial(
                 },
         ) {
             M3TopAppBar(
-                title = { M3Text("文件管理") },
+                title = { M3Text("文件") },
                 navigationIcon = {
                     M3IconButton(onClick = {
                         when {

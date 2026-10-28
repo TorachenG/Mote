@@ -408,8 +408,8 @@ internal fun FileManagerHomePage(
                 },
         ) {
             TopAppBar(
-                title = "文件管理",
-                largeTitle = "文件管理",
+                title = "文件",
+                largeTitle = "文件",
                 color = Color.Transparent,
                 defaultWindowInsetsPadding = false,
                 scrollBehavior = scrollBehavior,

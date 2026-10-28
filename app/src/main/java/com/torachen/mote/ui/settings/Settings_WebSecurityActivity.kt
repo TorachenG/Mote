@@ -2935,6 +2935,119 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
 }
 
 
+
+// ============================================================
+// 网页权限：三态（询问 / 允许 / 拒绝）与运行时询问
+// ============================================================
+
+internal object WebPermissionStore {
+    const val ASK = "ask"
+    const val ALLOW = "allow"
+    const val DENY = "deny"
+
+    const val CAMERA = "camera"
+    const val MICROPHONE = "microphone"
+    const val LOCATION = "location"
+    const val AUTOPLAY = "autoplay"
+    const val CLIPBOARD = "clipboard"
+
+    private fun prefs(context: Context) =
+        context.applicationContext.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+
+    private fun key(kind: String) = "web_perm_mode_$kind"
+
+    fun mode(context: Context, kind: String): String =
+        prefs(context).getString(key(kind), ASK) ?: ASK
+
+    fun setMode(context: Context, kind: String, mode: String) {
+        prefs(context).edit().putString(key(kind), mode).apply()
+    }
+
+    fun label(mode: String): String = when (mode) {
+        ALLOW -> "允许"
+        DENY -> "拒绝"
+        else -> "询问"
+    }
+
+    fun title(kind: String): String = when (kind) {
+        CAMERA -> "相机权限"
+        MICROPHONE -> "麦克风权限"
+        LOCATION -> "定位权限"
+        AUTOPLAY -> "播放声音权限"
+        CLIPBOARD -> "剪贴板权限"
+        else -> "网页权限"
+    }
+}
+
+/** 运行时询问：由浏览页触发，主界面负责弹出 */
+internal object WebPermissionPrompt {
+    data class Pending(
+        val kind: String,
+        val onDecision: (allow: Boolean, remember: Boolean) -> Unit,
+    )
+
+    var pending by mutableStateOf<Pending?>(null)
+
+    fun request(context: Context, kind: String, onDecision: (Boolean, Boolean) -> Unit): Boolean {
+        val mode = WebPermissionStore.mode(context, kind)
+        return when (mode) {
+            WebPermissionStore.ALLOW -> { onDecision(true, false); true }
+            WebPermissionStore.DENY -> { onDecision(false, false); true }
+            else -> {
+                pending = Pending(kind, onDecision)
+                true
+            }
+        }
+    }
+}
+
+@Composable
+internal fun WebPermissionDialogHost() {
+    val pending = WebPermissionPrompt.pending ?: return
+    val context = LocalContext.current
+    WindowDialog(
+        show = true,
+        title = WebPermissionStore.title(pending.kind),
+        onDismissRequest = {
+            pending.onDecision(false, false)
+            WebPermissionPrompt.pending = null
+        },
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Text(
+                text = "当前网页申请获取${WebPermissionStore.title(pending.kind).removeSuffix("权限")}权限",
+                fontSize = MiuixTheme.textStyles.body1.fontSize,
+                color = DialogDefaults.summaryColor(),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            )
+            Button(
+                onClick = { pending.onDecision(true, false); WebPermissionPrompt.pending = null },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            ) { Text("仅本次允许") }
+            Button(
+                onClick = {
+                    WebPermissionStore.setMode(context, pending.kind, WebPermissionStore.ALLOW)
+                    pending.onDecision(true, true)
+                    WebPermissionPrompt.pending = null
+                },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            ) { Text("允许") }
+            Button(
+                onClick = { pending.onDecision(false, false); WebPermissionPrompt.pending = null },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            ) { Text("拒绝") }
+            Button(
+                onClick = {
+                    WebPermissionStore.setMode(context, pending.kind, WebPermissionStore.DENY)
+                    pending.onDecision(false, true)
+                    WebPermissionPrompt.pending = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("拒绝并不再询问") }
+        }
+    }
+}
+
 // ============================================================
 // 网页权限
 // ============================================================
@@ -2955,13 +3068,36 @@ fun WebPermissionsPage(onBack: () -> Unit) {
 @Composable
 private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
     val scrollBehavior = MiuixScrollBehavior()
     val surface = MiuixTheme.colorScheme.surface
-    var camera by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CAMERA, true)) }
-    var mic by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_MIC, true)) }
-    var location by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_LOCATION, true)) }
-    var autoplay by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_AUTOPLAY, true)) }
+    var version by remember { mutableIntStateOf(0) }
+    val items = listOf(
+        WebPermissionStore.LOCATION to "定位",
+        WebPermissionStore.CAMERA to "相机",
+        WebPermissionStore.MICROPHONE to "麦克风",
+        WebPermissionStore.AUTOPLAY to "播放声音",
+        WebPermissionStore.CLIPBOARD to "剪贴板",
+    )
+
+    fun pick(kind: String) {
+        val labels = arrayOf("询问", "允许", "拒绝")
+        android.app.AlertDialog.Builder(context)
+            .setTitle(WebPermissionStore.title(kind))
+            .setItems(labels) { _, which ->
+                WebPermissionStore.setMode(
+                    context,
+                    kind,
+                    when (which) {
+                        1 -> WebPermissionStore.ALLOW
+                        2 -> WebPermissionStore.DENY
+                        else -> WebPermissionStore.ASK
+                    },
+                )
+                version++
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(surface)) {
         TopAppBar(
@@ -2982,34 +3118,16 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
             overscrollEffect = null,
         ) {
             item(key = "perms") {
-                Card(
-                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
-                ) {
-                    SwitchPreference(
-                        title = "定位",
-                        summary = "允许网页获取当前位置",
-                        checked = location,
-                        onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() },
-                    )
-                    SwitchPreference(
-                        title = "相机",
-                        summary = "允许网页请求使用相机",
-                        checked = camera,
-                        onCheckedChange = { camera = it; prefs.edit().putBoolean(KEY_PERM_CAMERA, it).apply() },
-                    )
-                    SwitchPreference(
-                        title = "麦克风",
-                        summary = "允许网页请求使用麦克风",
-                        checked = mic,
-                        onCheckedChange = { mic = it; prefs.edit().putBoolean(KEY_PERM_MIC, it).apply() },
-                    )
-
-                    SwitchPreference(
-                        title = "播放声音",
-                        summary = "允许网页自动播放带声音的媒体",
-                        checked = autoplay,
-                        onCheckedChange = { autoplay = it; prefs.edit().putBoolean(KEY_PERM_AUTOPLAY, it).apply() },
-                    )
+                Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    items.forEach { (kind, name) ->
+                        @Suppress("UNUSED_EXPRESSION")
+                        version
+                        ArrowPreference(
+                            title = name,
+                            summary = WebPermissionStore.label(WebPermissionStore.mode(context, kind)),
+                            onClick = { pick(kind) },
+                        )
+                    }
                 }
             }
         }
@@ -3020,16 +3138,39 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
 @Composable
 private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
     val bg = lerp(
         M3MaterialTheme.colorScheme.surfaceContainerLow,
         M3MaterialTheme.colorScheme.secondaryContainer,
         0.10f,
     )
-    var camera by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_CAMERA, true)) }
-    var mic by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_MIC, true)) }
-    var location by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_LOCATION, true)) }
-    var autoplay by remember { mutableStateOf(prefs.getBoolean(KEY_PERM_AUTOPLAY, true)) }
+    var version by remember { mutableIntStateOf(0) }
+    val items = listOf(
+        WebPermissionStore.LOCATION to "定位",
+        WebPermissionStore.CAMERA to "相机",
+        WebPermissionStore.MICROPHONE to "麦克风",
+        WebPermissionStore.AUTOPLAY to "播放声音",
+        WebPermissionStore.CLIPBOARD to "剪贴板",
+    )
+
+    fun pick(kind: String) {
+        val labels = arrayOf("询问", "允许", "拒绝")
+        android.app.AlertDialog.Builder(context)
+            .setTitle(WebPermissionStore.title(kind))
+            .setItems(labels) { _, which ->
+                WebPermissionStore.setMode(
+                    context,
+                    kind,
+                    when (which) {
+                        1 -> WebPermissionStore.ALLOW
+                        2 -> WebPermissionStore.DENY
+                        else -> WebPermissionStore.ASK
+                    },
+                )
+                version++
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
 
     M3Scaffold(
         containerColor = bg,
@@ -3059,12 +3200,16 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
                 ) {
                     MoteSegmentedColumn(
                         color = M3MaterialTheme.colorScheme.surface,
-                        content = listOf(
-                            { M3SegmentSwitchItem(title = "相机", checked = camera, onCheckedChange = { camera = it; prefs.edit().putBoolean(KEY_PERM_CAMERA, it).apply() }) },
-                            { M3SegmentSwitchItem(title = "麦克风", checked = mic, onCheckedChange = { mic = it; prefs.edit().putBoolean(KEY_PERM_MIC, it).apply() }) },
-                            { M3SegmentSwitchItem(title = "定位", checked = location, onCheckedChange = { location = it; prefs.edit().putBoolean(KEY_PERM_LOCATION, it).apply() }) },
-                            { M3SegmentSwitchItem(title = "播放声音", checked = autoplay, onCheckedChange = { autoplay = it; prefs.edit().putBoolean(KEY_PERM_AUTOPLAY, it).apply() }) },
-                        ),
+                        content = items.map { (kind, name) ->
+                            {
+                                @Suppress("UNUSED_EXPRESSION")
+                                version
+                                M3SegmentArrowItem(
+                                    title = "$name：${WebPermissionStore.label(WebPermissionStore.mode(context, kind))}",
+                                    onClick = { pick(kind) },
+                                )
+                            }
+                        },
                     )
                 }
             }
