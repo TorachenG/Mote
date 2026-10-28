@@ -478,13 +478,12 @@ private fun SettingsWebSecurityMiuix(
                             ) {
                                 ArrowPreference(
                                     title = "网页管理",
-                                    summary = "查看并管理单独调整过设置的网站",
+                                    summary = "查看并单独管理网页",
                                     onClick = actions.onOpenSiteManager,
                                 )
                             }
 
-                            SmallTitle("网页权限")
-
+                            SmallTitle("权限")
                             Card(
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp)
@@ -511,33 +510,75 @@ private fun SettingsWebSecurityMiuix(
                                 ) {
                                     SwitchPreference(
                                         title = "接受 Cookie",
-                                        summary = "允许网页保存和读取 Cookie 数据",
+                                        summary = "允许网站保存和读取 Cookie",
                                         checked = state.acceptCookieEnabled,
                                         onCheckedChange = actions.onAcceptCookieChange,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "无痕浏览窗口清空",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_clear_incognito_on_exit",
-                                ) {
-                                    SwitchPreference(
-                                        title = "无痕浏览窗口清空",
-                                        summary = "退出浏览器时清空所有无痕浏览窗口",
-                                        checked = state.clearIncognitoOnExitEnabled,
-                                        onCheckedChange = actions.onClearIncognitoOnExitChange,
                                     )
                                 }
                             }
 
                             SmallTitle("防护")
-
                             Card(
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
                             ) {
+                                SearchableItem(
+                                    title = "跟踪防护",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_tracking_protection",
+                                ) {
+                                    SwitchPreference(
+                                        title = "跟踪防护",
+                                        summary = "限制跟踪器跨站收集浏览数据",
+                                        checked = state.trackingProtectionGlobalEnabled,
+                                        onCheckedChange = actions.onTrackingProtectionGlobalChange,
+                                    )
+                                }
+                                AnimatedVisibility(visible = state.trackingProtectionGlobalEnabled) {
+                                    Column {
+                                        SearchableItem(
+                                            title = "基本",
+                                            pageRoute = "settings_web_security",
+                                            pageTitle = "网页安全中心",
+                                            itemKey = "settings_web_security_tracking_level_0",
+                                        ) {
+                                            RadioButtonPreference(
+                                                title = "基本",
+                                                summary = "允许所有站点中的大部分跟踪器，内容与广告的个性化程度可能较高，网站能够正常运行",
+                                                selected = state.trackingLevel == 0,
+                                                onClick = { actions.onTrackingLevelChange(0) },
+                                            )
+                                        }
+                                        SearchableItem(
+                                            title = "均衡（推荐）",
+                                            pageRoute = "settings_web_security",
+                                            pageTitle = "网页安全中心",
+                                            itemKey = "settings_web_security_tracking_level_1",
+                                        ) {
+                                            RadioButtonPreference(
+                                                title = "均衡（推荐）",
+                                                summary = "阻止陌生站点中的大部分跟踪器，内容与广告的个性化程度可能降低，网站能够正常运行",
+                                                selected = state.trackingLevel == 1,
+                                                onClick = { actions.onTrackingLevelChange(1) },
+                                            )
+                                        }
+                                        SearchableItem(
+                                            title = "严格",
+                                            pageRoute = "settings_web_security",
+                                            pageTitle = "网页安全中心",
+                                            itemKey = "settings_web_security_tracking_level_2",
+                                        ) {
+                                            RadioButtonPreference(
+                                                title = "严格",
+                                                summary = "阻止所有站点中的大部分跟踪器，内容与广告的个性化程度降到最低，部分网站可能无法正常运行",
+                                                selected = state.trackingLevel == 2,
+                                                onClick = { actions.onTrackingLevelChange(2) },
+                                            )
+                                        }
+                                    }
+                                }
                                 SearchableItem(
                                     title = "下载防护",
                                     pageRoute = "settings_web_security",
@@ -549,6 +590,32 @@ private fun SettingsWebSecurityMiuix(
                                         summary = "拦截网页发起的可疑可执行文件下载",
                                         checked = state.downloadProtectionEnabled,
                                         onCheckedChange = actions.onDownloadProtectionChange,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "广告拦截",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_block_ads",
+                                ) {
+                                    SwitchPreference(
+                                        title = "广告拦截",
+                                        summary = "阻止网页中的广告请求",
+                                        checked = state.blockAdsGlobalEnabled,
+                                        onCheckedChange = actions.onBlockAdsGlobalChange,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "跳转拦截",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_block_redirects",
+                                ) {
+                                    SwitchPreference(
+                                        title = "跳转拦截",
+                                        summary = "阻止网页自动跳转到其它站点",
+                                        checked = state.blockRedirectsEnabled,
+                                        onCheckedChange = actions.onBlockRedirectsChange,
                                     )
                                 }
                                 SearchableItem(
@@ -564,93 +631,9 @@ private fun SettingsWebSecurityMiuix(
                                         onCheckedChange = actions.onDisableWebRtcChange,
                                     )
                                 }
-                                SearchableItem(
-                                    title = "网页重定向",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_block_redirects",
-                                ) {
-                                    SwitchPreference(
-                                        title = "网页重定向",
-                                        summary = "阻止网页自动跳转到其它站点",
-                                        checked = state.blockRedirectsEnabled,
-                                        onCheckedChange = actions.onBlockRedirectsChange,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "拦截广告",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_block_ads",
-                                ) {
-                                    SwitchPreference(
-                                        title = "拦截广告",
-                                        summary = "阻止网页中的广告请求",
-                                        checked = state.blockAdsGlobalEnabled,
-                                        onCheckedChange = actions.onBlockAdsGlobalChange,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "跟踪防护",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_tracking_protection",
-                                ) {
-                                    SwitchPreference(
-                                        title = "跟踪防护",
-                                        summary = "限制跟踪器跨站收集浏览数据",
-                                        checked = state.trackingProtectionGlobalEnabled,
-                                        onCheckedChange = actions.onTrackingProtectionGlobalChange,
-                                    )
-                                }
-
-                                AnimatedVisibility(visible = state.trackingProtectionGlobalEnabled) {
-                                    Column {
-                                        SearchableItem(
-                                            title = "基本",
-                                            pageRoute = "settings_web_security",
-                                            pageTitle = "网页安全中心",
-                                            itemKey = "settings_web_security_tracking_level_basic",
-                                        ) {
-                                            RadioButtonPreference(
-                                                title = "基本",
-                                                summary = "允许所有站点中的大部分跟踪器，内容与广告的个性化程度可能较高，网站能够正常运行",
-                                                selected = state.trackingLevel == 0,
-                                                onClick = { actions.onTrackingLevelChange(0) },
-                                            )
-                                        }
-                                        SearchableItem(
-                                            title = "均衡（推荐）",
-                                            pageRoute = "settings_web_security",
-                                            pageTitle = "网页安全中心",
-                                            itemKey = "settings_web_security_tracking_level_balanced",
-                                        ) {
-                                            RadioButtonPreference(
-                                                title = "均衡（推荐）",
-                                                summary = "阻止陌生站点中的大部分跟踪器，内容与广告的个性化程度可能降低，网站能够正常运行",
-                                                selected = state.trackingLevel == 1,
-                                                onClick = { actions.onTrackingLevelChange(1) },
-                                            )
-                                        }
-                                        SearchableItem(
-                                            title = "严格",
-                                            pageRoute = "settings_web_security",
-                                            pageTitle = "网页安全中心",
-                                            itemKey = "settings_web_security_tracking_level_strict",
-                                        ) {
-                                            RadioButtonPreference(
-                                                title = "严格",
-                                                summary = "阻止所有站点中的大部分跟踪器，内容与广告的个性化程度降到最低，部分网站可能无法正常运行",
-                                                selected = state.trackingLevel == 2,
-                                                onClick = { actions.onTrackingLevelChange(2) },
-                                            )
-                                        }
-                                    }
-                                }
                             }
 
-                            SmallTitle("防护白名单")
-
+                            SmallTitle("白名单")
                             Card(
                                 modifier = Modifier
                                     .padding(horizontal = 12.dp)
@@ -665,6 +648,51 @@ private fun SettingsWebSecurityMiuix(
                                     ArrowPreference(
                                         title = "跟踪防护白名单",
                                         onClick = actions.onOpenWhitelist,
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "下载防护白名单",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_download_whitelist",
+                                ) {
+                                    ArrowPreference(
+                                        title = "下载防护白名单",
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "广告拦截白名单",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_ad_whitelist",
+                                ) {
+                                    ArrowPreference(
+                                        title = "广告拦截白名单",
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                }
+                            }
+
+                            SmallTitle("辅助功能")
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                SearchableItem(
+                                    title = "无痕浏览窗口清空",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_clear_incognito",
+                                ) {
+                                    SwitchPreference(
+                                        title = "无痕浏览窗口清空",
+                                        summary = "退出无痕浏览时清空浏览数据",
+                                        checked = state.clearIncognitoOnExitEnabled,
+                                        onCheckedChange = actions.onClearIncognitoOnExitChange,
                                     )
                                 }
                             }
@@ -795,10 +823,7 @@ private fun SettingsWebSecurityMaterial(
                         MoteSegmentedColumn(
                             content = listOf(
                                 {
-                                    M3SegmentArrowItem(
-                                        title = "网页管理",
-                                        onClick = actions.onOpenSiteManager,
-                                    )
+                                    M3SegmentArrowItem(title = "网页管理", onClick = actions.onOpenSiteManager)
                                 },
                             ),
                         )
@@ -806,7 +831,7 @@ private fun SettingsWebSecurityMaterial(
                 }
 
                 item(key = "perm_header") {
-                    WebSecuritySectionHeader("网页权限")
+                    WebSecuritySectionHeader("权限")
                 }
 
                 item(key = "perm_items") {
@@ -818,31 +843,21 @@ private fun SettingsWebSecurityMaterial(
                     ) {
                         MoteSegmentedColumn(
                             content = listOf(
-                                {
-                                    M3SegmentSwitchItem(
-                                        title = "记住表单数据",
-                                        summary = "记住表单中输入的数据以便以后使用",
-                                        checked = state.rememberFormEnabled,
-                                        onCheckedChange = actions.onRememberFormChange,
-                                    )
-                                },
-                                {
-                                    M3SegmentSwitchItem(
-                                        title = "接受 Cookie",
-                                        summary = "允许网页保存和读取 Cookie 数据",
-                                        checked = state.acceptCookieEnabled,
-                                        onCheckedChange = actions.onAcceptCookieChange,
-                                    )
-                                },
-                                {
-                                    M3SegmentSwitchItem(
-                                        title = "无痕浏览窗口清空",
-                                        summary = "退出浏览器时清空所有无痕浏览窗口",
-                                        checked = state.clearIncognitoOnExitEnabled,
-                                        onCheckedChange = actions.onClearIncognitoOnExitChange,
-                                    )
-                                },
-                            )
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "记住表单数据",
+                                                checked = state.rememberFormEnabled,
+                                                onCheckedChange = actions.onRememberFormChange,
+                                            )
+                                        },
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "接受 Cookie",
+                                                checked = state.acceptCookieEnabled,
+                                                onCheckedChange = actions.onAcceptCookieChange,
+                                            )
+                                        },
+                            ),
                         )
                     }
                 }
@@ -858,88 +873,116 @@ private fun SettingsWebSecurityMaterial(
                             .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
-                        val items: List<@Composable () -> Unit> = buildList {
-                            add {
-                                M3SegmentSwitchItem(
-                                    title = "拦截广告",
-                                    summary = "阻止网页中的广告请求",
-                                    checked = state.blockAdsGlobalEnabled,
-                                    onCheckedChange = actions.onBlockAdsGlobalChange,
-                                )
-                            }
-                            add {
-                                M3SegmentSwitchItem(
-                                    title = "跟踪防护",
-                                    summary = "限制跟踪器跨站收集浏览数据",
-                                    checked = state.trackingProtectionGlobalEnabled,
-                                    onCheckedChange = actions.onTrackingProtectionGlobalChange,
-                                )
-                            }
-                            if (state.trackingProtectionGlobalEnabled) {
-                                add {
-                                    M3SegmentItem(
-                                        headline = { M3Text("基本") },
-                                        supporting = {
-                                            M3Text(
-                                                "允许所有站点中的大部分跟踪器，内容与广告的个性化程度可能较高，网站能够正常运行",
-                                                style = M3MaterialTheme.typography.bodyMedium,
-                                                color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "跟踪防护",
+                                                checked = state.trackingProtectionGlobalEnabled,
+                                                onCheckedChange = actions.onTrackingProtectionGlobalChange,
                                             )
                                         },
-                                        leading = {
-                                            M3RadioButton(
-                                                selected = state.trackingLevel == 0,
-                                                onClick = null,
+                                        {
+                                            if (state.trackingProtectionGlobalEnabled) {
+                                                M3SegmentItem(
+                                                    headline = { M3Text("基本") },
+                                                    supporting = {
+                                                        M3Text(
+                                                            "允许所有站点中的大部分跟踪器，内容与广告的个性化程度可能较高，网站能够正常运行",
+                                                            style = M3MaterialTheme.typography.bodyMedium,
+                                                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        )
+                                                    },
+                                                    leading = {
+                                                        M3RadioButton(
+                                                            selected = state.trackingLevel == 0,
+                                                            onClick = null,
+                                                        )
+                                                    },
+                                                    onClick = { actions.onTrackingLevelChange(0) },
+                                                )
+                                            }
+                                        },
+                                        {
+                                            if (state.trackingProtectionGlobalEnabled) {
+                                                M3SegmentItem(
+                                                    headline = { M3Text("均衡（推荐）") },
+                                                    supporting = {
+                                                        M3Text(
+                                                            "阻止陌生站点中的大部分跟踪器，内容与广告的个性化程度可能降低，网站能够正常运行",
+                                                            style = M3MaterialTheme.typography.bodyMedium,
+                                                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        )
+                                                    },
+                                                    leading = {
+                                                        M3RadioButton(
+                                                            selected = state.trackingLevel == 1,
+                                                            onClick = null,
+                                                        )
+                                                    },
+                                                    onClick = { actions.onTrackingLevelChange(1) },
+                                                )
+                                            }
+                                        },
+                                        {
+                                            if (state.trackingProtectionGlobalEnabled) {
+                                                M3SegmentItem(
+                                                    headline = { M3Text("严格") },
+                                                    supporting = {
+                                                        M3Text(
+                                                            "阻止所有站点中的大部分跟踪器，内容与广告的个性化程度降到最低，部分网站可能无法正常运行",
+                                                            style = M3MaterialTheme.typography.bodyMedium,
+                                                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        )
+                                                    },
+                                                    leading = {
+                                                        M3RadioButton(
+                                                            selected = state.trackingLevel == 2,
+                                                            onClick = null,
+                                                        )
+                                                    },
+                                                    onClick = { actions.onTrackingLevelChange(2) },
+                                                )
+                                            }
+                                        },
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "下载防护",
+                                                checked = state.downloadProtectionEnabled,
+                                                onCheckedChange = actions.onDownloadProtectionChange,
                                             )
                                         },
-                                        onClick = { actions.onTrackingLevelChange(0) },
-                                    )
-                                }
-                                add {
-                                    M3SegmentItem(
-                                        headline = { M3Text("均衡（推荐）") },
-                                        supporting = {
-                                            M3Text(
-                                                "阻止陌生站点中的大部分跟踪器，内容与广告的个性化程度可能降低，网站能够正常运行",
-                                                style = M3MaterialTheme.typography.bodyMedium,
-                                                color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "广告拦截",
+                                                checked = state.blockAdsGlobalEnabled,
+                                                onCheckedChange = actions.onBlockAdsGlobalChange,
                                             )
                                         },
-                                        leading = {
-                                            M3RadioButton(
-                                                selected = state.trackingLevel == 1,
-                                                onClick = null,
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "跳转拦截",
+                                                checked = state.blockRedirectsEnabled,
+                                                onCheckedChange = actions.onBlockRedirectsChange,
                                             )
                                         },
-                                        onClick = { actions.onTrackingLevelChange(1) },
-                                    )
-                                }
-                                add {
-                                    M3SegmentItem(
-                                        headline = { M3Text("严格") },
-                                        supporting = {
-                                            M3Text(
-                                                "阻止所有站点中的大部分跟踪器，内容与广告的个性化程度降到最低，部分网站可能无法正常运行",
-                                                style = M3MaterialTheme.typography.bodyMedium,
-                                                color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "禁用 WebRTC",
+                                                checked = state.disableWebRtcEnabled,
+                                                onCheckedChange = actions.onDisableWebRtcChange,
                                             )
                                         },
-                                        leading = {
-                                            M3RadioButton(
-                                                selected = state.trackingLevel == 2,
-                                                onClick = null,
-                                            )
-                                        },
-                                        onClick = { actions.onTrackingLevelChange(2) },
-                                    )
-                                }
-                            }
-                        }
-                        MoteSegmentedColumn(content = items)
+                            ),
+                        )
                     }
                 }
 
-                item(key = "whitelist_entry") {
+                item(key = "whitelist_header") {
+                    WebSecuritySectionHeader("白名单")
+                }
+
+                item(key = "whitelist_items") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -948,16 +991,39 @@ private fun SettingsWebSecurityMaterial(
                     ) {
                         MoteSegmentedColumn(
                             content = listOf(
-                                {
-                                    M3SegmentArrowItem(
-                                        title = "跟踪防护白名单",
-                                        onClick = actions.onOpenWhitelist,
-                                    )
-                                }
-                            )
+                                        {
+                                            M3SegmentArrowItem(title = "跟踪防护白名单", onClick = actions.onOpenWhitelist)
+                                        },
+                            ),
                         )
                     }
                 }
+
+                item(key = "aux_header") {
+                    WebSecuritySectionHeader("辅助功能")
+                }
+
+                item(key = "aux_items") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            content = listOf(
+                                        {
+                                            M3SegmentSwitchItem(
+                                                title = "无痕浏览窗口清空",
+                                                checked = state.clearIncognitoOnExitEnabled,
+                                                onCheckedChange = actions.onClearIncognitoOnExitChange,
+                                            )
+                                        },
+                            ),
+                        )
+                    }
+                }
+
             }
         }
     }
@@ -2024,8 +2090,12 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
             },
         )
         androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .overScrollVertical(),
             contentPadding = PaddingValues(bottom = 24.dp),
+            overscrollEffect = null,
         ) {
             if (sites.isEmpty()) {
                 item(key = "empty") {
@@ -2096,8 +2166,12 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
         },
     ) { innerPadding ->
         androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .overScrollVertical(),
             contentPadding = PaddingValues(bottom = 24.dp),
+            overscrollEffect = null,
         ) {
             if (sites.isEmpty()) {
                 item(key = "empty") {
@@ -2199,8 +2273,12 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
             },
         )
         androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .overScrollVertical(),
             contentPadding = PaddingValues(bottom = 24.dp),
+            overscrollEffect = null,
         ) {
             item(key = "host") {
                 Card(
@@ -2221,6 +2299,15 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         .padding(bottom = 12.dp),
                 ) {
                     SwitchPreference(
+                        title = "跟踪防护",
+                        summary = "限制该网站跨站收集浏览数据",
+                        checked = siteTracking,
+                        onCheckedChange = {
+                            siteTracking = it
+                            SecurityStateHolder.setSiteTrackingProtection(host, it)
+                        },
+                    )
+                    SwitchPreference(
                         title = "下载防护",
                         summary = "拦截网页发起的可疑可执行文件下载",
                         checked = downloadProtection,
@@ -2230,25 +2317,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         },
                     )
                     SwitchPreference(
-                        title = "禁用 WebRTC",
-                        summary = "阻止网页通过 WebRTC 暴露本机 IP 地址",
-                        checked = disableWebRtc,
-                        onCheckedChange = {
-                            disableWebRtc = it
-                            prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
-                        },
-                    )
-                    SwitchPreference(
-                        title = "网页重定向",
-                        summary = "阻止网页自动跳转到其它站点",
-                        checked = blockRedirects,
-                        onCheckedChange = {
-                            blockRedirects = it
-                            prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
-                        },
-                    )
-                    SwitchPreference(
-                        title = "拦截广告",
+                        title = "广告拦截",
                         summary = "阻止该网站中的广告请求",
                         checked = siteBlockAds,
                         onCheckedChange = {
@@ -2257,12 +2326,21 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         },
                     )
                     SwitchPreference(
-                        title = "跟踪防护",
-                        summary = "限制该网站跨站收集浏览数据",
-                        checked = siteTracking,
+                        title = "跳转拦截",
+                        summary = "阻止网页自动跳转到其它站点",
+                        checked = blockRedirects,
                         onCheckedChange = {
-                            siteTracking = it
-                            SecurityStateHolder.setSiteTrackingProtection(host, it)
+                            blockRedirects = it
+                            prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
+                        },
+                    )
+                    SwitchPreference(
+                        title = "禁用 WebRTC",
+                        summary = "阻止网页通过 WebRTC 暴露本机 IP 地址",
+                        checked = disableWebRtc,
+                        onCheckedChange = {
+                            disableWebRtc = it
+                            prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
                         },
                     )
                 }
@@ -2329,8 +2407,12 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
         },
     ) { innerPadding ->
         androidx.compose.foundation.lazy.LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .overScrollVertical(),
             contentPadding = PaddingValues(bottom = 24.dp),
+            overscrollEffect = null,
         ) {
             item(key = "host") {
                 Card(
@@ -2343,70 +2425,6 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                         host,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                         style = M3MaterialTheme.typography.bodyLarge,
-                    )
-                }
-            }
-            item(key = "protect") {
-                WebSecuritySectionHeader("防护")
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
-                ) {
-                    MoteSegmentedColumn(
-                        content = listOf(
-                            {
-                                M3SegmentSwitchItem(
-                                    title = "下载防护",
-                                    checked = downloadProtection,
-                                    onCheckedChange = {
-                                        downloadProtection = it
-                                        prefs.edit().putBoolean(KEY_DOWNLOAD_PROTECTION, it).apply()
-                                    },
-                                )
-                            },
-                            {
-                                M3SegmentSwitchItem(
-                                    title = "禁用 WebRTC",
-                                    checked = disableWebRtc,
-                                    onCheckedChange = {
-                                        disableWebRtc = it
-                                        prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
-                                    },
-                                )
-                            },
-                            {
-                                M3SegmentSwitchItem(
-                                    title = "网页重定向",
-                                    checked = blockRedirects,
-                                    onCheckedChange = {
-                                        blockRedirects = it
-                                        prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
-                                    },
-                                )
-                            },
-                            {
-                                M3SegmentSwitchItem(
-                                    title = "拦截广告",
-                                    checked = siteBlockAds,
-                                    onCheckedChange = {
-                                        siteBlockAds = it
-                                        SecurityStateHolder.setSiteBlockAds(host, it)
-                                    },
-                                )
-                            },
-                            {
-                                M3SegmentSwitchItem(
-                                    title = "跟踪防护",
-                                    checked = siteTracking,
-                                    onCheckedChange = {
-                                        siteTracking = it
-                                        SecurityStateHolder.setSiteTrackingProtection(host, it)
-                                    },
-                                )
-                            },
-                        ),
                     )
                 }
             }
@@ -2437,6 +2455,70 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                                     onCheckedChange = {
                                         acceptCookie = it
                                         prefs.edit().putBoolean(KEY_ACCEPT_COOKIE, it).apply()
+                                    },
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
+            item(key = "protect") {
+                WebSecuritySectionHeader("防护")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    MoteSegmentedColumn(
+                        content = listOf(
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "跟踪防护",
+                                    checked = siteTracking,
+                                    onCheckedChange = {
+                                        siteTracking = it
+                                        SecurityStateHolder.setSiteTrackingProtection(host, it)
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "下载防护",
+                                    checked = downloadProtection,
+                                    onCheckedChange = {
+                                        downloadProtection = it
+                                        prefs.edit().putBoolean(KEY_DOWNLOAD_PROTECTION, it).apply()
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "广告拦截",
+                                    checked = siteBlockAds,
+                                    onCheckedChange = {
+                                        siteBlockAds = it
+                                        SecurityStateHolder.setSiteBlockAds(host, it)
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "跳转拦截",
+                                    checked = blockRedirects,
+                                    onCheckedChange = {
+                                        blockRedirects = it
+                                        prefs.edit().putBoolean(KEY_BLOCK_REDIRECTS, it).apply()
+                                    },
+                                )
+                            },
+                            {
+                                M3SegmentSwitchItem(
+                                    title = "禁用 WebRTC",
+                                    checked = disableWebRtc,
+                                    onCheckedChange = {
+                                        disableWebRtc = it
+                                        prefs.edit().putBoolean(KEY_DISABLE_WEBRTC, it).apply()
                                     },
                                 )
                             },
