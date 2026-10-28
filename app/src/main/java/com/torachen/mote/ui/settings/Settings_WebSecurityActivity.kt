@@ -1079,7 +1079,7 @@ private fun whitelistAdd(kind: String, host: String) {
     when (kind) {
         WL_DOWNLOAD -> SecurityStateHolder.addToDownloadWhitelist(host)
         WL_AD -> SecurityStateHolder.addToAdWhitelist(host)
-        else -> whitelistAdd(kind, host)
+        else -> SecurityStateHolder.addToTrackingWhitelist(host)
     }
 }
 
@@ -1094,7 +1094,7 @@ private fun whitelistRemove(kind: String, host: String) {
 private fun whitelistTitle(kind: String): String = when (kind) {
     WL_DOWNLOAD -> "下载防护白名单"
     WL_AD -> "广告拦截白名单"
-    else -> whitelistTitle(kind)
+    else -> "跟踪防护白名单"
 }
 
 private fun whitelistEmptyText(kind: String): String = when (kind) {
@@ -2172,27 +2172,6 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                         )
                     }
                 },
-                actions = {
-                    if (selecting) {
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(
-                                imageVector = MiuixIcons.Delete,
-                                contentDescription = "删除",
-                                tint = Color(0xFFFF3B30),
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    } else {
-                        IconButton(onClick = { showAddDialog = true }) {
-                            Icon(
-                                imageVector = MiuixIcons.Add,
-                                contentDescription = "添加",
-                                tint = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-                },
             )
             androidx.compose.foundation.lazy.LazyColumn(
                 modifier = Modifier
@@ -2282,6 +2261,46 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                             }
                         }
                     }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .zIndex(10f)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
+                .padding(horizontal = 24.dp)
+                .height(56.dp)
+                .graphicsLayer {
+                    shape = RoundedCornerShape(28.dp)
+                    shadowElevation = 24.dp.toPx()
+                    ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                    spotShadowColor = Color.Transparent
+                }
+                .clip(RoundedCornerShape(28.dp))
+                .background(MiuixTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selecting) {
+                IconButton(onClick = { if (selected.isNotEmpty()) showDeleteDialog = true }) {
+                    Icon(
+                        imageVector = MiuixIcons.Delete,
+                        contentDescription = "删除",
+                        tint = Color(0xFFFF3B30),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            } else {
+                IconButton(onClick = { showAddDialog = true }) {
+                    Icon(
+                        imageVector = MiuixIcons.Add,
+                        contentDescription = "添加",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(22.dp),
+                    )
                 }
             }
         }
