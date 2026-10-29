@@ -675,7 +675,6 @@ private fun SettingsWebSecurityMiuix(
                             ) {
                                 ArrowPreference(
                                     title = "防护白名单",
-                                    summary = "跟踪防护 / 下载防护 / 广告拦截",
                                     onClick = actions.onOpenWhitelist,
                                 )
                             }
@@ -1319,7 +1318,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(
-                        top = contentTopPadding,
+                        top = contentTopPadding + 64.dp,
                         bottom = navBarBottom + 120.dp,
                     ),
                     overscrollEffect = null,
@@ -1490,7 +1489,10 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                         }
                     }
                 )
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+            }
+
+            Box(modifier = Modifier.fillMaxWidth().padding(top = contentTopPadding)
+                    .padding(horizontal = 12.dp)) {
                 TabRowWithContour(
                     tabs = listOf("跟踪防护", "下载防护", "广告拦截"),
                     selectedTabIndex = when (currentKind) {
@@ -1510,8 +1512,6 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            }
-
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
