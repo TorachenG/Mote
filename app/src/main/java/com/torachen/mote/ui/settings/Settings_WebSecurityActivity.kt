@@ -23,6 +23,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1206,6 +1209,7 @@ fun WhitelistPage(kind: String, onBack: () -> Unit) {
 @Composable
 private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
     var currentKind by remember(kind) { mutableStateOf(kind) }
+    var swipeAccum by remember { mutableStateOf(0f) }
 
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -1318,7 +1322,27 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .scrollEndHaptic()
+                        .draggable(
+                        state = rememberDraggableState { delta -> swipeAccum += delta },
+                        orientation = Orientation.Horizontal,
+                        enabled = !isMultiSelectMode,
+                        onDragStopped = {
+                            val order = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)
+                            val idx2 = order.indexOf(currentKind)
+                            when {
+                                swipeAccum < -140f && idx2 < order.lastIndex -> {
+                                    currentKind = order[idx2 + 1]
+                                    exitMultiSelect()
+                                }
+                                swipeAccum > 140f && idx2 > 0 -> {
+                                    currentKind = order[idx2 - 1]
+                                    exitMultiSelect()
+                                }
+                            }
+                            swipeAccum = 0f
+                        },
+                    )
+                    .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(
                         top = contentTopPadding + 64.dp,
