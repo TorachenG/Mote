@@ -3154,7 +3154,7 @@ private fun TopLanguageBarContent(
                             (slideOutHorizontally(targetOffsetX = { it }) + fadeOut()) using
                             SizeTransform(clip = false)
                     },
-                    label = "sourceLangAnim"
+                    label = "sourceLangAnim",
                 ) { text ->
                     Text(text = text, color = Color.White, fontSize = 13.sp)
                 }
@@ -3203,7 +3203,7 @@ private fun TopLanguageBarContent(
                             (slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()) using
                             SizeTransform(clip = false)
                     },
-                    label = "targetLangAnim"
+                    label = "targetLangAnim",
                 ) { text ->
                     Text(text = text, color = Color.White, fontSize = 13.sp)
                 }

@@ -1762,7 +1762,7 @@ private fun SettingsLayoutMiuix(
                     ) {
                         TabRowWithContour(
                             tabs = TAB_TITLES,
-                            selectedTabIndex = selectedTab,
+                            selectedTabIndex = pagerState.currentPage,
                             onTabSelected = { onTabChange(it) },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1916,12 +1916,12 @@ private fun SettingsLayoutMaterial(
                         ),
                     )
                     M3PrimaryTabRow(
-                        selectedTabIndex = selectedTab,
+                        selectedTabIndex = pagerState.currentPage,
                         containerColor = pageBg,
                     ) {
                         TAB_TITLES.forEachIndexed { index, title ->
                             M3Tab(
-                                selected = selectedTab == index,
+                                selected = pagerState.currentPage == index,
                                 onClick = { onTabChange(index) },
                                 text = { M3Text(title) },
                             )
