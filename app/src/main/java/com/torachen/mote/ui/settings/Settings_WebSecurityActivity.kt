@@ -3066,7 +3066,7 @@ internal object WebPermissionStore {
 
     /** 默认值：播放声音与弹出提示默认允许，其余默认询问 */
     fun defaultMode(kind: String): String = when (kind) {
-        AUTOPLAY, DIALOG -> ALLOW
+        AUTOPLAY, DIALOG, VIDEO_AUTOPLAY -> ALLOW
         else -> ASK
     }
 
