@@ -3008,8 +3008,14 @@ internal object WebPermissionStore {
 
     private fun key(kind: String) = "web_perm_mode_$kind"
 
+    /** 默认值：播放声音与弹出提示默认允许，其余默认询问 */
+    fun defaultMode(kind: String): String = when (kind) {
+        AUTOPLAY, DIALOG -> ALLOW
+        else -> ASK
+    }
+
     fun mode(context: Context, kind: String): String =
-        prefs(context).getString(key(kind), ASK) ?: ASK
+        prefs(context).getString(key(kind), defaultMode(kind)) ?: defaultMode(kind)
 
     fun setMode(context: Context, kind: String, mode: String) {
         prefs(context).edit().putString(key(kind), mode).apply()
