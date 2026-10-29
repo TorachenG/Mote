@@ -1200,25 +1200,32 @@ private fun whitelistEmptyText(kind: String): String = when (kind) {
 // ============================================================
 
 @Composable
-fun TrackingWhitelistPage(onBack: () -> Unit) = WhitelistPage(WL_TRACKING, onBack)
+fun TrackingWhitelistPage(onBack: () -> Unit, onOpenSite: (String) -> Unit = {}) =
+    WhitelistPage(WL_TRACKING, onBack, onOpenSite)
 
 @Composable
-fun DownloadWhitelistPage(onBack: () -> Unit) = WhitelistPage(WL_DOWNLOAD, onBack)
+fun DownloadWhitelistPage(onBack: () -> Unit, onOpenSite: (String) -> Unit = {}) =
+    WhitelistPage(WL_DOWNLOAD, onBack, onOpenSite)
 
 @Composable
-fun AdWhitelistPage(onBack: () -> Unit) = WhitelistPage(WL_AD, onBack)
+fun AdWhitelistPage(onBack: () -> Unit, onOpenSite: (String) -> Unit = {}) =
+    WhitelistPage(WL_AD, onBack, onOpenSite)
 
 @Composable
-fun WhitelistPage(kind: String, onBack: () -> Unit) {
+fun WhitelistPage(kind: String, onBack: () -> Unit, onOpenSite: (String) -> Unit = {}) {
     when (LocalUiMode.current) {
-        UiMode.Miuix -> TrackingWhitelistPageMiuix(kind, onBack)
-        UiMode.Material -> TrackingWhitelistPageMaterial(kind, onBack)
+        UiMode.Miuix -> TrackingWhitelistPageMiuix(kind, onBack, onOpenSite)
+        UiMode.Material -> TrackingWhitelistPageMaterial(kind, onBack, onOpenSite)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
+private fun TrackingWhitelistPageMiuix(
+    kind: String,
+    onBack: () -> Unit,
+    onOpenSite: (String) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = whitelistIndexOf(kind)) { 3 }
     var selecting by remember { mutableStateOf(false) }
@@ -1253,6 +1260,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
             WhitelistPaneMiuix(
                 kind = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)[page],
                 active = page == pagerState.currentPage,
+                onOpenSite = onOpenSite,
                 onSelectingChange = { if (page == pagerState.currentPage) selecting = it },
             )
         }
@@ -1263,6 +1271,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
 private fun WhitelistPaneMiuix(
     kind: String,
     active: Boolean,
+    onOpenSite: (String) -> Unit,
     onSelectingChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -1310,7 +1319,13 @@ private fun WhitelistPaneMiuix(
                                     .fillMaxWidth()
                                     .heightIn(min = 56.dp)
                                     .combinedClickable(
-                                        onClick = { if (selecting) { if (host in selected) selected.remove(host) else selected.add(host) } },
+                                        onClick = {
+                                            if (selecting) {
+                                                if (host in selected) selected.remove(host) else selected.add(host)
+                                            } else {
+                                                onOpenSite(host)
+                                            }
+                                        },
                                         onLongClick = {
                                             if (!selecting) {
                                                 selecting = true
@@ -1404,7 +1419,11 @@ private fun WhitelistPaneMiuix(
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
+private fun TrackingWhitelistPageMaterial(
+    kind: String,
+    onBack: () -> Unit,
+    onOpenSite: (String) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = whitelistIndexOf(kind)) { 3 }
     var selecting by remember { mutableStateOf(false) }
@@ -1451,6 +1470,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
                 WhitelistPaneMaterial(
                     kind = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)[page],
                     active = page == pagerState.currentPage,
+                    onOpenSite = onOpenSite,
                     onSelectingChange = { if (page == pagerState.currentPage) selecting = it },
                 )
             }
@@ -1462,6 +1482,7 @@ private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
 private fun WhitelistPaneMaterial(
     kind: String,
     active: Boolean,
+    onOpenSite: (String) -> Unit,
     onSelectingChange: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
@@ -1534,6 +1555,8 @@ private fun WhitelistPaneMaterial(
                                         onClick = {
                                             if (selecting) {
                                                 if (host in selected) selected.remove(host) else selected.add(host)
+                                            } else {
+                                                onOpenSite(host)
                                             }
                                         },
                                     )

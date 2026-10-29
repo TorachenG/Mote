@@ -3812,9 +3812,27 @@ private fun RenderPageContent(
                 host = WebSiteNavArgs.host ?: "",
                 onBack = { onPop() },
             )
-            "settings_tracking_whitelist" -> TrackingWhitelistPage(onBack = { onPop() })
-            "settings_download_whitelist" -> DownloadWhitelistPage(onBack = { onPop() })
-            "settings_ad_whitelist" -> AdWhitelistPage(onBack = { onPop() })
+            "settings_tracking_whitelist" -> TrackingWhitelistPage(
+                onBack = { onPop() },
+                onOpenSite = { host ->
+                    WebSiteNavArgs.host = host
+                    onPush("settings_web_site")
+                },
+            )
+            "settings_download_whitelist" -> DownloadWhitelistPage(
+                onBack = { onPop() },
+                onOpenSite = { host ->
+                    WebSiteNavArgs.host = host
+                    onPush("settings_web_site")
+                },
+            )
+            "settings_ad_whitelist" -> AdWhitelistPage(
+                onBack = { onPop() },
+                onOpenSite = { host ->
+                    WebSiteNavArgs.host = host
+                    onPush("settings_web_site")
+                },
+            )
             "settings_web_permissions" -> WebPermissionsPage(onBack = { onPop() })
             "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
             "settings_personal_info" -> SettingsPersonalInfoPage(
@@ -4128,6 +4146,7 @@ fun BrowserScreen(
     onOpenScripts: () -> Unit = {},
     onOpenNewTabCustomization: () -> Unit,
     onOpenCrop: () -> Unit = {},
+    onOpenSiteSettings: (String) -> Unit = {},
     initialUrl: String? = null,
     isTop: Boolean
 ) {
@@ -7811,6 +7830,7 @@ fun BrowserScreen(
                                         SecurityStateHolder.setSiteTrackingProtection(host, enabled)
                                     }
                                 },
+                                onOpenSiteSettings = onOpenSiteSettings,
                             )
                             1 -> CertDetailContent(
                                 info = secInfo,
@@ -11426,6 +11446,7 @@ private fun createWebView(
 @Composable
 private fun SecurityMenuContent(
     info: SecurityInfo,
+    onOpenSiteSettings: (String) -> Unit,
     onOpenCertDetail: () -> Unit,
     onOpenCookies: () -> Unit,
     onToggleBlockAds: (Boolean) -> Unit,
@@ -11458,17 +11479,6 @@ private fun SecurityMenuContent(
         )
 
         SwitchPreference(
-            title = "拦截广告",
-            summary = if (info.blockedAds > 0) {
-                "已拦截 ${info.blockedAds} 个广告"
-            } else {
-                "阻止网页中的广告请求"
-            },
-            checked = info.effectiveBlockAdsEnabled,
-            onCheckedChange = onToggleBlockAds,
-        )
-
-        SwitchPreference(
             title = "此网站的跟踪防护",
             summary = if (info.blockedTrackers > 0) {
                 "已拦截 ${info.blockedTrackers} 个跟踪器"
@@ -11477,6 +11487,23 @@ private fun SecurityMenuContent(
             },
             checked = info.effectiveTrackingProtectionEnabled,
             onCheckedChange = onToggleTrackingProtection,
+        )
+
+        ArrowPreference(
+            title = "设置该网页",
+            summary = info.host,
+            onClick = { if (info.host.isNotBlank()) onOpenSiteSettings(info.host) },
+        )
+
+        SwitchPreference(
+            title = "此网站的广告拦截",
+            summary = if (info.blockedAds > 0) {
+                "已拦截 ${info.blockedAds} 个广告"
+            } else {
+                "阻止网页中的广告请求"
+            },
+            checked = info.effectiveBlockAdsEnabled,
+            onCheckedChange = onToggleBlockAds,
         )
     }
 }
