@@ -11209,7 +11209,7 @@ private fun createWebView(
                         val escaped = data.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
                         web.evaluateJavascript("window.__moteClipResult && window.__moteClipResult($ok, '$escaped')", null)
                     }
-                    WebPermissionPrompt.request(context, WebPermissionStore.CLIPBOARD) { allow, _ ->
+                    WebPermissionPrompt.request(context, WebPermissionStore.CLIPBOARD, SecurityStateHolder.info.host) { allow, _, _ ->
                         if (!allow) {
                             reply(false, "")
                         } else if (kind == "write") {
@@ -11284,7 +11284,7 @@ private fun createWebView(
                 callback: android.webkit.GeolocationPermissions.Callback?,
             ) {
                 if (callback == null) return
-                WebPermissionPrompt.request(context, WebPermissionStore.LOCATION) { allow, _ ->
+                WebPermissionPrompt.request(context, WebPermissionStore.LOCATION, SecurityStateHolder.info.host) { allow, _, _ ->
                     callback.invoke(origin, allow, false)
                 }
             }
@@ -11299,7 +11299,7 @@ private fun createWebView(
                     mic -> WebPermissionStore.MICROPHONE
                     else -> return
                 }
-                WebPermissionPrompt.request(context, kind) { allow, _ ->
+                WebPermissionPrompt.request(context, kind, SecurityStateHolder.info.host) { allow, _, _ ->
                     post {
                         if (!allow) {
                             request.deny()

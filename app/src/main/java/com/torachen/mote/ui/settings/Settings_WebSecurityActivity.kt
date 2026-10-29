@@ -101,6 +101,9 @@ import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
 import androidx.compose.material3.PrimaryTabRow as M3PrimaryTabRow
 import androidx.compose.material3.Tab as M3Tab
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
+import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Text
@@ -2787,6 +2790,32 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                             prefs.edit().putBoolean(KEY_ACCEPT_COOKIE, it).apply()
                         },
                     )
+
+                    listOf(
+                        WebPermissionStore.LOCATION to "定位",
+                        WebPermissionStore.CAMERA to "相机",
+                        WebPermissionStore.MICROPHONE to "麦克风",
+                        WebPermissionStore.AUTOPLAY to "播放声音",
+                        WebPermissionStore.CLIPBOARD to "剪贴板",
+                        WebPermissionStore.POPUP_WINDOW to "新建窗口",
+                        WebPermissionStore.DIALOG to "弹出提示",
+                        WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
+                    ).forEach { (kind, name) ->
+                        val siteMode = WebPermissionStore.siteMode(context, host, kind) ?: WebPermissionStore.ASK
+                        WindowDropdownPreference(
+                            title = name,
+                            entries = listOf(
+                                DropdownEntry(
+                                    items = listOf(
+                                        DropdownItem("询问", selected = siteMode == WebPermissionStore.ASK, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.ASK) }),
+                                        DropdownItem("允许", selected = siteMode == WebPermissionStore.ALLOW, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.ALLOW) }),
+                                        DropdownItem("拒绝", selected = siteMode == WebPermissionStore.DENY, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.DENY) }),
+                                    ),
+                                ),
+                            ),
+                            collapseOnSelection = true,
+                        )
+                    }
                 }
             }
         }
@@ -2986,6 +3015,25 @@ internal object WebPermissionStore {
         prefs(context).edit().putString(key(kind), mode).apply()
     }
 
+    private fun siteKey(context: Context, host: String, kind: String) =
+        "web_site_perm_${'$'}{host}_${'$'}{kind}"
+
+    fun siteMode(context: Context, host: String, kind: String): String? =
+        prefs(context).getString(siteKey(context, host, kind), null)
+
+    fun setSiteMode(context: Context, host: String, kind: String, mode: String) {
+        prefs(context).edit().putString(siteKey(context, host, kind), mode).apply()
+    }
+
+    /** 生效模式：受管站点优先，否则全局 */
+    fun effectiveMode(context: Context, host: String, kind: String): String {
+        if (host.isNotBlank()) {
+            val site = siteMode(context, host, kind)
+            if (site != null) return site
+        }
+        return mode(context, kind)
+    }
+
     fun label(mode: String): String = when (mode) {
         ALLOW -> "允许"
         DENY -> "拒绝"
@@ -3009,18 +3057,24 @@ internal object WebPermissionStore {
 internal object WebPermissionPrompt {
     data class Pending(
         val kind: String,
-        val onDecision: (allow: Boolean, remember: Boolean) -> Unit,
+        val host: String,
+        val onDecision: (allow: Boolean, remember: Boolean, applyAll: Boolean) -> Unit,
     )
 
     var pending by mutableStateOf<Pending?>(null)
 
-    fun request(context: Context, kind: String, onDecision: (Boolean, Boolean) -> Unit): Boolean {
-        val mode = WebPermissionStore.mode(context, kind)
+    fun request(
+        context: Context,
+        kind: String,
+        host: String,
+        onDecision: (allow: Boolean, remember: Boolean, applyAll: Boolean) -> Unit,
+    ): Boolean {
+        val mode = WebPermissionStore.effectiveMode(context, host, kind)
         return when (mode) {
-            WebPermissionStore.ALLOW -> { onDecision(true, false); true }
-            WebPermissionStore.DENY -> { onDecision(false, false); true }
+            WebPermissionStore.ALLOW -> { onDecision(true, false, false); true }
+            WebPermissionStore.DENY -> { onDecision(false, false, false); true }
             else -> {
-                pending = Pending(kind, onDecision)
+                pending = Pending(kind, host, onDecision)
                 true
             }
         }
@@ -3029,47 +3083,76 @@ internal object WebPermissionPrompt {
 
 @Composable
 internal fun WebPermissionDialogHost() {
-    val pending = WebPermissionPrompt.pending ?: return
     val context = LocalContext.current
+    val pending = WebPermissionPrompt.pending
+    var last by remember { mutableStateOf<WebPermissionPrompt.Pending?>(null) }
+    androidx.compose.runtime.LaunchedEffect(pending) {
+        if (pending != null) last = pending
+    }
+    var applyAll by remember { mutableStateOf(false) }
+    val current = pending ?: last
+    val shown = pending != null
+
+    fun decide(allow: Boolean, remember: Boolean) {
+        val p = pending ?: return
+        if (remember) {
+            val value = if (allow) WebPermissionStore.ALLOW else WebPermissionStore.DENY
+            if (applyAll) {
+                WebPermissionStore.setMode(context, p.kind, value)
+            } else if (p.host.isNotBlank()) {
+                WebPermissionStore.setSiteMode(context, p.host, p.kind, value)
+            }
+        }
+        p.onDecision(allow, remember, applyAll)
+        WebPermissionPrompt.pending = null
+        applyAll = false
+    }
+
     WindowDialog(
-        show = true,
-        title = WebPermissionStore.title(pending.kind),
+        show = shown,
+        title = WebPermissionStore.title(current?.kind ?: WebPermissionStore.CAMERA),
         onDismissRequest = {
-            pending.onDecision(false, false)
+            pending?.onDecision(false, false, false)
             WebPermissionPrompt.pending = null
+            applyAll = false
         },
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
             Text(
-                text = "当前网页申请获取${WebPermissionStore.title(pending.kind).removeSuffix("权限")}权限",
+                text = "当前网页申请获取${WebPermissionStore.title(current?.kind ?: "").removeSuffix("权限")}权限",
                 fontSize = MiuixTheme.textStyles.body1.fontSize,
                 color = DialogDefaults.summaryColor(),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-            )
-            Button(
-                onClick = { pending.onDecision(true, false); WebPermissionPrompt.pending = null },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            ) { Text("仅本次允许") }
-            Button(
-                onClick = {
-                    WebPermissionStore.setMode(context, pending.kind, WebPermissionStore.ALLOW)
-                    pending.onDecision(true, true)
-                    WebPermissionPrompt.pending = null
-                },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            ) { Text("允许") }
-            Button(
-                onClick = { pending.onDecision(false, false); WebPermissionPrompt.pending = null },
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            ) { Text("拒绝") }
-            Button(
-                onClick = {
-                    WebPermissionStore.setMode(context, pending.kind, WebPermissionStore.DENY)
-                    pending.onDecision(false, true)
-                    WebPermissionPrompt.pending = null
-                },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("拒绝并不再询问") }
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    state = if (applyAll) ToggleableState.On else ToggleableState.Off,
+                    onClick = { applyAll = !applyAll },
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "应用所有网站",
+                    fontSize = MiuixTheme.textStyles.body1.fontSize,
+                    color = MiuixTheme.colorScheme.onSurface,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = { decide(true, false) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Text("仅本次允许")
+            }
+            Button(onClick = { decide(true, true) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Text("允许")
+            }
+            Button(onClick = { decide(false, false) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Text("拒绝")
+            }
+            Button(onClick = { decide(false, true) }, modifier = Modifier.fillMaxWidth()) {
+                Text("拒绝并不再询问")
+            }
         }
     }
 }
@@ -3146,12 +3229,19 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
             item(key = "perms") {
                 Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                     items.forEach { (kind, name) ->
-                        @Suppress("UNUSED_EXPRESSION")
-                        version
-                        ArrowPreference(
+                        val mode = WebPermissionStore.mode(context, kind)
+                        WindowDropdownPreference(
                             title = name,
-                            summary = WebPermissionStore.label(WebPermissionStore.mode(context, kind)),
-                            onClick = { pick(kind) },
+                            entries = listOf(
+                                DropdownEntry(
+                                    items = listOf(
+                                        DropdownItem("询问", selected = mode == WebPermissionStore.ASK, onClick = { WebPermissionStore.setMode(context, kind, WebPermissionStore.ASK); version++ }),
+                                        DropdownItem("允许", selected = mode == WebPermissionStore.ALLOW, onClick = { WebPermissionStore.setMode(context, kind, WebPermissionStore.ALLOW); version++ }),
+                                        DropdownItem("拒绝", selected = mode == WebPermissionStore.DENY, onClick = { WebPermissionStore.setMode(context, kind, WebPermissionStore.DENY); version++ }),
+                                    ),
+                                ),
+                            ),
+                            collapseOnSelection = true,
                         )
                     }
                 }
