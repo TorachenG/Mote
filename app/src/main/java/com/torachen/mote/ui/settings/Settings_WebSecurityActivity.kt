@@ -204,6 +204,7 @@ private data class WebSecurityActions(
     val onOpenDownloadWhitelist: () -> Unit,
     val onOpenAdWhitelist: () -> Unit,
     val onOpenWebPermissions: () -> Unit,
+    val onOpenCookieManager: () -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -297,6 +298,7 @@ fun SettingsWebSecurityPage(
     onOpenDownloadWhitelist: () -> Unit = {},
     onOpenAdWhitelist: () -> Unit = {},
     onOpenWebPermissions: () -> Unit = {},
+    onOpenCookieManager: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -388,6 +390,7 @@ fun SettingsWebSecurityPage(
         onOpenDownloadWhitelist = onOpenDownloadWhitelist,
         onOpenAdWhitelist = onOpenAdWhitelist,
         onOpenWebPermissions = onOpenWebPermissions,
+        onOpenCookieManager = onOpenCookieManager,
         onBack = onBack,
     )
 
@@ -560,6 +563,17 @@ private fun SettingsWebSecurityMiuix(
                                 }
                             }
 
+                                SearchableItem(
+                                    title = "查看所有 Cookie 与数据",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_cookie_manager",
+                                ) {
+                                    ArrowPreference(
+                                        title = "查看所有 Cookie 与数据",
+                                        onClick = actions.onOpenCookieManager,
+                                    )
+                                }
                             SmallTitle("防护")
                             Card(
                                 modifier = Modifier
@@ -885,6 +899,12 @@ private fun SettingsWebSecurityMaterial(
                                                 onCheckedChange = actions.onAcceptCookieChange,
                                             )
                                         },
+                            {
+                                M3SegmentArrowItem(
+                                    title = "查看所有 Cookie 与数据",
+                                    onClick = actions.onOpenCookieManager,
+                                )
+                            },
                             ),
                         )
                     }

@@ -3800,6 +3800,7 @@ private fun RenderPageContent(
                 onOpenDownloadWhitelist = { onPush("settings_download_whitelist") },
                 onOpenAdWhitelist = { onPush("settings_ad_whitelist") },
                 onOpenWebPermissions = { onPush("settings_web_permissions") },
+                onOpenCookieManager = { onPush("settings_cookie_manager") },
             )
             "settings_web_sites" -> WebSiteManagerPage(
                 onBack = { onPop() },
@@ -3834,6 +3835,7 @@ private fun RenderPageContent(
                 },
             )
             "settings_web_permissions" -> WebPermissionsPage(onBack = { onPop() })
+            "settings_cookie_manager" -> CookieManagerPage(onBack = { onPop() })
             "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
             "settings_personal_info" -> SettingsPersonalInfoPage(
                 onBack = { onPop() },
