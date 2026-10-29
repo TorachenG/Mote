@@ -1311,29 +1311,7 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
                             Modifier.layerBackdrop(backdrop)
                         } else Modifier
                     )
-                    .pointerInput(currentKind, isMultiSelectMode) {
-                        if (isMultiSelectMode) return@pointerInput
-                        var total = 0f
-                        androidx.compose.foundation.gestures.detectHorizontalDragGestures(
-                            onHorizontalDrag = { _, dragAmount -> total += dragAmount },
-                            onDragEnd = {
-                                val order = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)
-                                val idx = order.indexOf(currentKind)
-                                when {
-                                    total < -140f && idx < order.lastIndex -> {
-                                        currentKind = order[idx + 1]
-                                        exitMultiSelect()
-                                    }
-                                    total > 140f && idx > 0 -> {
-                                        currentKind = order[idx - 1]
-                                        exitMultiSelect()
-                                    }
-                                }
-                                total = 0f
-                            },
-                            onDragCancel = { total = 0f },
-                        )
-                    }
+
             ) {
                 LazyColumn(
                     state = listState,
