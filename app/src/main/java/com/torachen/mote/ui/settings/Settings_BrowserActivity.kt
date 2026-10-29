@@ -694,6 +694,29 @@ private fun SettingsWebMiuix(
                                         onCheckedChange = actions.onIncognitoChange,
                                     )
                                 }
+                                SearchableItem(
+                                    title = "无痕浏览窗口清空",
+                                    pageRoute = "settings_web",
+                                    pageTitle = "网页浏览设置",
+                                    itemKey = "settings_web_clear_incognito",
+                                ) {
+                                    val ctx = LocalContext.current
+                                    val incognitoPrefs = remember {
+                                        ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE)
+                                    }
+                                    var clearOnExit by remember {
+                                        mutableStateOf(incognitoPrefs.getBoolean("web_clear_incognito_on_exit", true))
+                                    }
+                                    SwitchPreference(
+                                        title = "无痕浏览窗口清空",
+                                        summary = "退出无痕浏览时清空浏览数据",
+                                        checked = clearOnExit,
+                                        onCheckedChange = {
+                                            clearOnExit = it
+                                            incognitoPrefs.edit().putBoolean("web_clear_incognito_on_exit", it).apply()
+                                        },
+                                    )
+                                }
                             }
 
                             SmallTitle("其它")
@@ -997,6 +1020,23 @@ private fun SettingsWebMaterial(
                                         summary = null,
                                         checked = state.incognitoEnabled,
                                         onCheckedChange = actions.onIncognitoChange,
+                                    )
+                                },
+                                {
+                                    val ctx = LocalContext.current
+                                    val incognitoPrefs = remember {
+                                        ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE)
+                                    }
+                                    var clearOnExit by remember {
+                                        mutableStateOf(incognitoPrefs.getBoolean("web_clear_incognito_on_exit", true))
+                                    }
+                                    M3SegmentSwitchItem(
+                                        title = "无痕浏览窗口清空",
+                                        checked = clearOnExit,
+                                        onCheckedChange = {
+                                            clearOnExit = it
+                                            incognitoPrefs.edit().putBoolean("web_clear_incognito_on_exit", it).apply()
+                                        },
                                     )
                                 },
                             )

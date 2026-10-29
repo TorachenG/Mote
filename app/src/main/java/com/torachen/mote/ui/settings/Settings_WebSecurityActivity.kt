@@ -702,26 +702,6 @@ private fun SettingsWebSecurityMiuix(
                                 )
                             }
 
-                            SmallTitle("辅助功能")
-                            Card(
-                                modifier = Modifier
-                                    .padding(horizontal = 12.dp)
-                                    .padding(bottom = 12.dp),
-                            ) {
-                                SearchableItem(
-                                    title = "无痕浏览窗口清空",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_clear_incognito",
-                                ) {
-                                    SwitchPreference(
-                                        title = "无痕浏览窗口清空",
-                                        summary = "退出无痕浏览时清空浏览数据",
-                                        checked = state.clearIncognitoOnExitEnabled,
-                                        onCheckedChange = actions.onClearIncognitoOnExitChange,
-                                    )
-                                }
-                            }
 
                             Spacer(
                                 Modifier.height(
@@ -1043,32 +1023,6 @@ private fun SettingsWebSecurityMaterial(
                                         onClick = actions.onOpenWhitelist,
                                     )
                                 },
-                            ),
-                        )
-                    }
-                }
-
-                item(key = "aux_header") {
-                    WebSecuritySectionHeader("辅助功能")
-                }
-
-                item(key = "aux_items") {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
-                    ) {
-                        MoteSegmentedColumn(
-                            color = M3MaterialTheme.colorScheme.surface,
-                            content = listOf(
-                                        {
-                                            M3SegmentSwitchItem(
-                                                title = "无痕浏览窗口清空",
-                                                checked = state.clearIncognitoOnExitEnabled,
-                                                onCheckedChange = actions.onClearIncognitoOnExitChange,
-                                            )
-                                        },
                             ),
                         )
                     }
