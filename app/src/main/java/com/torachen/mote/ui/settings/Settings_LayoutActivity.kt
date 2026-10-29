@@ -63,6 +63,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -899,13 +900,13 @@ private fun SettingsLayoutMiuix(
 
     LaunchedEffect(selectedTab) {
         if (pagerState.currentPage != selectedTab) {
-            pagerState.springAnimateToPage(selectedTab)
+            pagerState.animateScrollToPage(selectedTab)
         }
     }
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (selectedTab != pagerState.currentPage) {
-            onTabChange(pagerState.currentPage)
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            if (selectedTab != page) onTabChange(page)
         }
     }
 

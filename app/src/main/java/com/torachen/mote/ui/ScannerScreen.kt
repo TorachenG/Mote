@@ -3141,8 +3141,8 @@ private fun TopLanguageBarContent(
             Box(
                 modifier = Modifier
                     .height(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(sourceBg)
+                    .animateContentSize()
+                    .background(sourceBg, RoundedCornerShape(16.dp))
                     .clickable(interactionSource = sourceInteraction, indication = null) { sourceExpanded = true }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center,
@@ -3190,8 +3190,8 @@ private fun TopLanguageBarContent(
             Box(
                 modifier = Modifier
                     .height(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(targetBg)
+                    .animateContentSize()
+                    .background(targetBg, RoundedCornerShape(16.dp))
                     .clickable(interactionSource = targetInteraction, indication = null) { targetExpanded = true }
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center,

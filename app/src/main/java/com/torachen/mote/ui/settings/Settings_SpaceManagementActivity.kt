@@ -307,7 +307,12 @@ internal fun formatSize(bytes: Long): String {
 
 internal fun formatSizeMb(bytes: Long): String {
     val mb = bytes / 1024.0 / 1024.0
-    return String.format(java.util.Locale.US, "%.1f MB", mb)
+    return if (mb < 1.0) {
+        val kb = bytes / 1024.0
+        String.format(java.util.Locale.US, "%.1f KB", kb)
+    } else {
+        String.format(java.util.Locale.US, "%.1f MB", mb)
+    }
 }
 
 // ============================================================
