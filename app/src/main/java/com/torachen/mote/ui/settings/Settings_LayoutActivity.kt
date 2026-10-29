@@ -287,7 +287,16 @@ private const val MATERIAL_COLOR_DEFAULT = 0
 private val MATERIAL_STYLE_OPTIONS = listOf("普通材质", "高级材质", "轻透磨砂")
 private const val KEY_MATERIAL_STYLE = "ui_material_style"
 
-private val TAB_TITLES = listOf("通用", "新标签页")
+
+private const val KEY_HEADER_POSITION = "browser_header_position"
+private const val KEY_HEADER_TEXT = "browser_header_text_mode"
+private const val KEY_LAYOUT_TOOL = "web_dynamic_tool"
+private const val KEY_LAYOUT_TOOL_SUGGEST = "web_dynamic_tool_suggest"
+private val LAYOUT_TOOL_OPTIONS = listOf(
+    "关闭", "主页", "刷新", "全屏", "添加书签", "书签列表", "历史记录", "下载管理", "网页翻译", "资源嗅探"
+)
+
+private val TAB_TITLES = listOf("通用", "浏览器", "新标签页")
 
 private const val KEY_BANNER_CONTENT = "home_banner_content"
 private const val KEY_BACKGROUND_CONTENT = "home_background_content"
@@ -902,8 +911,13 @@ private fun SettingsLayoutMiuix(
 
     val listState0 = rememberLazyListState()
     val listState1 = rememberLazyListState()
+    val listState2 = rememberLazyListState()
 
-    val currentListState = if (pagerState.currentPage == 0) listState0 else listState1
+    val currentListState = when (pagerState.currentPage) {
+        0 -> listState0
+        2 -> listState2
+        else -> listState1
+    }
     val isAtTop by remember(currentListState) {
         derivedStateOf {
             currentListState.firstVisibleItemIndex == 0 &&
@@ -925,6 +939,13 @@ private fun SettingsLayoutMiuix(
     val titleBarBlendColorEntries = remember(surfaceColor) {
         listOf(BlendColorEntry(color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)))
     }
+
+    var headerPosition by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_POSITION, 0)) }
+    var headerTextMode by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_TEXT, 0)) }
+    var layoutToolIndex by remember {
+        mutableIntStateOf(prefs.getInt(KEY_LAYOUT_TOOL, 1).coerceIn(0, LAYOUT_TOOL_OPTIONS.lastIndex))
+    }
+    var layoutToolSuggest by remember { mutableStateOf(prefs.getBoolean(KEY_LAYOUT_TOOL_SUGGEST, true)) }
 
     val showAdvancedColorOptions = generalState.keyColorIndex != 0
 
@@ -1360,7 +1381,7 @@ private fun SettingsLayoutMiuix(
                                                     pageRoute = "settings_layout",
                                                     pageTitle = "主题与界面",
                                                     itemKey = "settings_layout_background_content",
-                                                    tabIndex = 1,
+                                                    tabIndex = 2,
                                                 ) {
                                                     WindowDropdownPreference(
                                                         title = "自定义背景",
@@ -1379,7 +1400,7 @@ private fun SettingsLayoutMiuix(
                                                         pageRoute = "settings_layout",
                                                         pageTitle = "主题与界面",
                                                         itemKey = "settings_layout_reselect_image",
-                                                        tabIndex = 1,
+                                                        tabIndex = 2,
                                                     ) {
                                                         ArrowPreference(
                                                             title = "更换背景图片",
@@ -1394,7 +1415,7 @@ private fun SettingsLayoutMiuix(
                                                         pageRoute = "settings_layout",
                                                         pageTitle = "主题与界面",
                                                         itemKey = "settings_layout_background_vignette",
-                                                        tabIndex = 1,
+                                                        tabIndex = 2,
                                                     ) {
                                                         SwitchPreference(
                                                             title = "背景暗角滤镜",
@@ -1410,7 +1431,7 @@ private fun SettingsLayoutMiuix(
                                                         pageRoute = "settings_layout",
                                                         pageTitle = "主题与界面",
                                                         itemKey = "settings_layout_control_color",
-                                                        tabIndex = 1,
+                                                        tabIndex = 2,
                                                     ) {
                                                         WindowDropdownPreference(
                                                             title = "控件颜色",
@@ -1426,7 +1447,7 @@ private fun SettingsLayoutMiuix(
                                                         pageRoute = "settings_layout",
                                                         pageTitle = "主题与界面",
                                                         itemKey = "settings_layout_page_material_color",
-                                                        tabIndex = 1,
+                                                        tabIndex = 2,
                                                     ) {
                                                         WindowDropdownPreference(
                                                             title = "页面材质颜色",
@@ -1450,7 +1471,7 @@ private fun SettingsLayoutMiuix(
                                                     pageRoute = "settings_layout",
                                                     pageTitle = "主题与界面",
                                                     itemKey = "settings_layout_banner_content",
-                                                    tabIndex = 1,
+                                                    tabIndex = 2,
                                                 ) {
                                                     WindowDropdownPreference(
                                                         title = "横幅内容",
@@ -1469,7 +1490,7 @@ private fun SettingsLayoutMiuix(
                                                             pageRoute = "settings_layout",
                                                             pageTitle = "主题与界面",
                                                             itemKey = "settings_layout_custom_banner",
-                                                            tabIndex = 1,
+                                                            tabIndex = 2,
                                                         ) {
                                                             ArrowPreference(
                                                                 title = "自定义图片横幅",
@@ -1482,7 +1503,7 @@ private fun SettingsLayoutMiuix(
                                                                 pageRoute = "settings_layout",
                                                                 pageTitle = "主题与界面",
                                                                 itemKey = "settings_layout_reset_banner",
-                                                                tabIndex = 1,
+                                                                tabIndex = 2,
                                                             ) {
                                                                 ArrowPreference(
                                                                     title = "重置图片横幅",
@@ -1497,7 +1518,7 @@ private fun SettingsLayoutMiuix(
                                                     pageRoute = "settings_layout",
                                                     pageTitle = "主题与界面",
                                                     itemKey = "settings_layout_show_quick_urls",
-                                                    tabIndex = 1,
+                                                    tabIndex = 2,
                                                 ) {
                                                     SwitchPreference(
                                                         title = "快捷网址",
@@ -1542,10 +1563,10 @@ private fun SettingsLayoutMiuix(
                                 }
 
                                 SettingsPageAutoScroll(
-                                    lazyListState = listState1,
+                                    lazyListState = listState2,
                                     pageRoute = "settings_layout",
                                     contentTopPadding = contentTopPadding,
-                                    tabIndex = 1,
+                                    tabIndex = 2,
                                 )
                             }
                         }
@@ -1932,6 +1953,122 @@ private fun SettingsLayoutMaterial(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 24.dp),
                         ) {
+                            item(key = "browser_layout_preview_material") { ThemePreviewMaterial() }
+
+                            item(key = "browser_title_header_material") { LayoutSectionHeader("标题栏") }
+
+                            item(key = "browser_title_items_material") {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                                ) {
+                                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                                    val prefsB = remember { ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE) }
+                                    var posIndex by remember { mutableIntStateOf(prefsB.getInt(KEY_HEADER_POSITION, 0)) }
+                                    var textIndex by remember { mutableIntStateOf(prefsB.getInt(KEY_HEADER_TEXT, 0)) }
+                                    MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
+                                        content = listOf(
+                                            {
+                                                M3SegmentDropdownItem(
+                                                    title = "标题栏位置",
+                                                    summary = null,
+                                                    options = listOf("顶部", "底部"),
+                                                    selectedIndex = posIndex,
+                                                    onSelected = {
+                                                        posIndex = it
+                                                        prefsB.edit().putInt(KEY_HEADER_POSITION, it).apply()
+                                                    },
+                                                )
+                                            },
+                                            {
+                                                M3SegmentDropdownItem(
+                                                    title = "输入框显示",
+                                                    summary = null,
+                                                    options = listOf("网页地址", "网页标题"),
+                                                    selectedIndex = textIndex,
+                                                    onSelected = {
+                                                        textIndex = it
+                                                        prefsB.edit().putInt(KEY_HEADER_TEXT, it).apply()
+                                                    },
+                                                )
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
+
+                            item(key = "browser_tool_header_material") { LayoutSectionHeader("工具栏") }
+
+                            item(key = "browser_tool_items_material") {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                                ) {
+                                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                                    val prefsB = remember { ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE) }
+                                    var toolIndex by remember {
+                                        mutableIntStateOf(prefsB.getInt(KEY_LAYOUT_TOOL, 1).coerceIn(0, LAYOUT_TOOL_OPTIONS.lastIndex))
+                                    }
+                                    var toolSuggest by remember { mutableStateOf(prefsB.getBoolean(KEY_LAYOUT_TOOL_SUGGEST, true)) }
+                                    MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
+                                        content = listOf(
+                                            {
+                                                M3SegmentDropdownItem(
+                                                    title = "工具栏中间位",
+                                                    summary = null,
+                                                    options = LAYOUT_TOOL_OPTIONS,
+                                                    selectedIndex = toolIndex,
+                                                    onSelected = {
+                                                        toolIndex = it
+                                                        prefsB.edit().putInt(KEY_LAYOUT_TOOL, it).apply()
+                                                    },
+                                                )
+                                            },
+                                            {
+                                                M3SegmentSwitchItem(
+                                                    title = "工具栏功能建议",
+                                                    summary = "开启后，会在合适的时候自动更换工具栏中间的功能",
+                                                    checked = toolSuggest,
+                                                    onCheckedChange = {
+                                                        toolSuggest = it
+                                                        prefsB.edit().putBoolean(KEY_LAYOUT_TOOL_SUGGEST, it).apply()
+                                                    },
+                                                )
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
+
+                            item(key = "browser_untitled_header_material") { LayoutSectionHeader("无标题卡片") }
+
+                            item(key = "browser_untitled_items_material") {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                                ) {
+                                    MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
+                                        content = listOf(
+                                            {
+                                                M3SegmentArrowItem(
+                                                    title = "工具弹窗自定义",
+                                                    onClick = {},
+                                                )
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
+
                             item(key = "browser_preview_material") {
                                 BrowserHomePreviewMaterial()
                             }

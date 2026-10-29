@@ -310,67 +310,65 @@ fun ScriptsPage(
     when (LocalUiMode.current) {
         UiMode.Miuix -> {
             // 下载脚本：填写地址
-            if (showUrlDialog) {
-                var urlText by remember { mutableStateOf("") }
-                WindowDialog(
-                    show = showUrlDialog,
-                    title = "下载脚本",
-                    onDismissRequest = { showUrlDialog = false },
+            var urlText by remember { mutableStateOf("") }
+            WindowDialog(
+                show = showUrlDialog,
+                title = "下载脚本",
+                onDismissRequest = { showUrlDialog = false },
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    TextField(
+                        value = urlText,
+                        onValueChange = { urlText = it },
+                        label = "脚本地址",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        TextField(
-                            value = urlText,
-                            onValueChange = { urlText = it },
-                            label = "脚本地址",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Button(
-                                onClick = { showUrlDialog = false },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(
-                                    color = MiuixTheme.colorScheme.secondaryContainer,
-                                    contentColor = MiuixTheme.colorScheme.onSurface,
-                                ),
-                            ) { Text("取消") }
-                            Button(
-                                onClick = {
-                                    val url = urlText.trim()
-                                    if (url.isBlank()) {
-                                        Toast.makeText(context, "请填写脚本地址", Toast.LENGTH_SHORT).show()
-                                        return@Button
+                        Button(
+                            onClick = { showUrlDialog = false },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.secondaryContainer,
+                                contentColor = MiuixTheme.colorScheme.onSurface,
+                            ),
+                        ) { Text("取消") }
+                        Button(
+                            onClick = {
+                                val url = urlText.trim()
+                                if (url.isBlank()) {
+                                    Toast.makeText(context, "请填写脚本地址", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                showUrlDialog = false
+                                busy = true
+                                scope.launch {
+                                    val body = withContext(Dispatchers.IO) {
+                                        runCatching { httpGetText(url) }.getOrNull()
                                     }
-                                    showUrlDialog = false
-                                    busy = true
-                                    scope.launch {
-                                        val body = withContext(Dispatchers.IO) {
-                                            runCatching { httpGetText(url) }.getOrNull()
-                                        }
-                                        busy = false
-                                        if (body.isNullOrBlank()) {
-                                            Toast.makeText(context, "下载失败，请检查地址", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            addScriptFromText(context, body, sourceUrl = url)
-                                            reload()
-                                            Toast.makeText(context, "脚本已添加", Toast.LENGTH_SHORT).show()
-                                        }
+                                    busy = false
+                                    if (body.isNullOrBlank()) {
+                                        Toast.makeText(context, "下载失败，请检查地址", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        addScriptFromText(context, body, sourceUrl = url)
+                                        reload()
+                                        Toast.makeText(context, "脚本已添加", Toast.LENGTH_SHORT).show()
                                     }
-                                },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(
-                                    color = MiuixTheme.colorScheme.primary,
-                                    contentColor = Color.White,
-                                ),
-                            ) { Text("下载") }
-                        }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                color = MiuixTheme.colorScheme.primary,
+                                contentColor = Color.White,
+                            ),
+                        ) { Text("下载") }
                     }
                 }
             }

@@ -671,32 +671,6 @@ private fun SettingsWebMiuix(
                                     )
                                 }
                                 SearchableItem(
-                                    title = "工具栏中间位",
-                                    pageRoute = "settings_web",
-                                    pageTitle = "网页浏览设置",
-                                    itemKey = "settings_web_dynamic_tool",
-                                ) {
-                                    WindowDropdownPreference(
-                                        title = "工具栏中间位",
-                                        summary = "自定义工具栏中间功能",
-                                        entries = dynamicToolEntries,
-                                        collapseOnSelection = true,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "工具栏功能建议",
-                                    pageRoute = "settings_web",
-                                    pageTitle = "网页浏览设置",
-                                    itemKey = "settings_web_dynamic_tool_suggest",
-                                ) {
-                                    SwitchPreference(
-                                        title = "工具栏功能建议",
-                                        summary = "开启后，会在合适的时候自动更换工具栏中间的功能",
-                                        checked = state.dynamicToolSuggestEnabled,
-                                        onCheckedChange = actions.onDynamicToolSuggestChange,
-                                    )
-                                }
-                                SearchableItem(
                                     title = "无痕模式",
                                     pageRoute = "settings_web",
                                     pageTitle = "网页浏览设置",
@@ -1016,23 +990,6 @@ private fun SettingsWebMaterial(
                                         summary = null,
                                         checked = state.swipeNavEnabled,
                                         onCheckedChange = actions.onSwipeNavChange,
-                                    )
-                                },
-                                {
-                                    M3SegmentDropdownItem(
-                                        title = "工具栏中间位",
-                                        summary = "自定义工具栏中间功能",
-                                        options = DYNAMIC_TOOL_OPTIONS,
-                                        selectedIndex = state.dynamicToolIndex,
-                                        onSelected = actions.onDynamicToolChange,
-                                    )
-                                },
-                                {
-                                    M3SegmentSwitchItem(
-                                        title = "工具栏功能建议",
-                                        summary = "开启后，会在合适的时候自动更换工具栏中间的功能",
-                                        checked = state.dynamicToolSuggestEnabled,
-                                        onCheckedChange = actions.onDynamicToolSuggestChange,
                                     )
                                 },
                                 {
