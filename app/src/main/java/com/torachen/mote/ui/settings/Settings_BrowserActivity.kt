@@ -86,6 +86,7 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
@@ -193,6 +194,7 @@ private data class BrowserPageActions(
 @Composable
 fun SettingsWebPage(
     onBack: () -> Unit,
+    onOpenUaSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -314,8 +316,8 @@ fun SettingsWebPage(
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> SettingsWebMiuix(state, actions)
-        UiMode.Material -> SettingsWebMaterial(state, actions)
+        UiMode.Miuix -> SettingsWebMiuix(onOpenUaSettings, state, actions)
+        UiMode.Material -> SettingsWebMaterial(onOpenUaSettings, state, actions)
     }
 }
 
@@ -325,6 +327,7 @@ fun SettingsWebPage(
 
 @Composable
 private fun SettingsWebMiuix(
+    onOpenUaSettings: () -> Unit,
     state: BrowserPageState,
     actions: BrowserPageActions,
 ) {
@@ -657,6 +660,17 @@ private fun SettingsWebMiuix(
                                     )
                                 }
                                 SearchableItem(
+                                    title = "浏览器标识",
+                                    pageRoute = "settings_web",
+                                    pageTitle = "网页浏览设置",
+                                    itemKey = "settings_web_ua",
+                                ) {
+                                    ArrowPreference(
+                                        title = "浏览器标识",
+                                        onClick = onOpenUaSettings,
+                                    )
+                                }
+                                SearchableItem(
                                     title = "工具栏中间位",
                                     pageRoute = "settings_web",
                                     pageTitle = "网页浏览设置",
@@ -826,6 +840,7 @@ private fun SettingsWebMiuix(
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsWebMaterial(
+    onOpenUaSettings: () -> Unit,
     state: BrowserPageState,
     actions: BrowserPageActions,
 ) {
@@ -995,6 +1010,12 @@ private fun SettingsWebMaterial(
                                         summary = null,
                                         checked = state.swipeNavEnabled,
                                         onCheckedChange = actions.onSwipeNavChange,
+                                    )
+                                },
+                                {
+                                    M3SegmentArrowItem(
+                                        title = "浏览器标识",
+                                        onClick = onOpenUaSettings,
                                     )
                                 },
                                 {

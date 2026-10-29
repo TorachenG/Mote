@@ -3805,7 +3805,11 @@ private fun RenderPageContent(
             "settings_custom_engines" -> CustomSearchEnginesPage(
                 onBack = { onPop() },
             )
-            "settings_web" -> SettingsWebPage(onBack = { onPop() })
+            "settings_web" -> SettingsWebPage(
+                onBack = { onPop() },
+                onOpenUaSettings = { onPush("settings_ua") },
+            )
+            "settings_ua" -> UaSettingsPage(onBack = { onPop() })
             "settings_icon" -> SettingsIconPage(onBack = { onPop() })
             "settings_layout" -> SettingsLayoutPage(
                 onBack = { onPop() },
@@ -4759,8 +4763,8 @@ fun BrowserScreen(
                         if (id != null) {
                             updateWindow(id) { it.desktopMode = enabled }
                             webViewMap[id]?.let { wv ->
-                                val ua = if (enabled) DESKTOP_UA
-                                else getMobileUserAgent(context)
+                                val ua = UaStore.effectiveUa(context, enabled)
+                                    ?: if (enabled) DESKTOP_UA else getMobileUserAgent(context)
                                 wv.settings.userAgentString = ua
                                 applyDesktopViewportSettings(wv, enabled)
                                 wv.reload()
@@ -8294,7 +8298,8 @@ fun BrowserScreen(
                 "desktop_mode" -> id?.let { windowId ->
                     updateWindow(windowId) { it.desktopMode = isActive }
                     webViewMap[windowId]?.let { wv ->
-                        wv.settings.userAgentString = if (isActive) DESKTOP_UA else getMobileUserAgent(context)
+                        wv.settings.userAgentString = UaStore.effectiveUa(context, isActive)
+                            ?: if (isActive) DESKTOP_UA else getMobileUserAgent(context)
                         wv.reload()
                     }
                 }
@@ -10496,7 +10501,8 @@ private fun createWebView(
         } catch (_: Exception) { true }
 
         settings.apply {
-            userAgentString = if (initialDesktopMode) DESKTOP_UA else mobileUa
+            userAgentString = UaStore.effectiveUa(context, initialDesktopMode)
+            ?: if (initialDesktopMode) DESKTOP_UA else mobileUa
             textZoom = initialTextZoom
             loadsImagesAutomatically = true
             javaScriptEnabled = true
