@@ -26,6 +26,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -1150,6 +1154,13 @@ private const val WL_TRACKING = "tracking"
 private const val WL_DOWNLOAD = "download"
 private const val WL_AD = "ad"
 
+private fun whitelistIndexOf(kind: String): Int = when (kind) {
+    WL_DOWNLOAD -> 1
+    WL_AD -> 2
+    else -> 0
+}
+
+
 private fun whitelistOf(kind: String): List<String> = when (kind) {
     WL_DOWNLOAD -> SecurityStateHolder.getDownloadWhitelist()
     WL_AD -> SecurityStateHolder.getAdWhitelist()
@@ -1208,441 +1219,182 @@ fun WhitelistPage(kind: String, onBack: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
-    var currentKind by remember(kind) { mutableStateOf(kind) }
-    var swipeAccum by remember { mutableStateOf(0f) }
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = whitelistIndexOf(kind)) { 3 }
+    var selecting by remember { mutableStateOf(false) }
 
-    val navOwner = rememberNavigationEventDispatcherOwner()
-    val scrollBehavior = MiuixScrollBehavior()
+    LaunchedEffect(pagerState.currentPage) { selecting = false }
+
+    Column(modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+        TopAppBar(
+            title = "防护白名单",
+            largeTitle = "防护白名单",
+            color = Color.Transparent,
+            defaultWindowInsetsPadding = true,
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(MiuixIcons.ChevronBackward, contentDescription = "返回", tint = MiuixTheme.colorScheme.onSurface)
+                }
+            },
+        )
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+            TabRowWithContour(
+                tabs = listOf("跟踪防护", "下载防护", "广告拦截"),
+                selectedTabIndex = pagerState.currentPage,
+                onTabSelected = { idx -> scope.launch { pagerState.animateScrollToPage(idx) } },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize(),
+            userScrollEnabled = !selecting,
+        ) { page ->
+            WhitelistPaneMiuix(
+                kind = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)[page],
+                active = page == pagerState.currentPage,
+                onSelectingChange = { if (page == pagerState.currentPage) selecting = it },
+            )
+        }
+    }
+}
+
+@Composable
+private fun WhitelistPaneMiuix(
+    kind: String,
+    active: Boolean,
+    onSelectingChange: (Boolean) -> Unit,
+) {
     val context = LocalContext.current
-    val prefs = remember {
-        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
+    val version = SecurityStateHolder.whitelistVersion
+    val list = remember(version, kind) { whitelistOf(kind) }
+
+    var showAdd by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
+    var selecting by remember { mutableStateOf(false) }
+    val selected = remember { mutableStateListOf<String>() }
+
+    fun exitSelect() {
+        selecting = false
+        selected.clear()
+        onSelectingChange(false)
     }
 
-    val surfaceColor = MiuixTheme.colorScheme.surface
-    val blurSupported = isRuntimeShaderSupported()
-    val backdrop = if (blurSupported) {
-        rememberLayerBackdrop {
-            drawRect(surfaceColor)
-            drawContent()
-        }
-    } else null
+    LaunchedEffect(active) { if (!active) exitSelect() }
 
-    var progressiveTitleBlur by remember {
-        mutableStateOf(prefs.getBoolean(KEY_PROGRESSIVE_TITLE_BLUR, true))
-    }
-    var materialStyle by remember {
-        mutableIntStateOf(prefs.getInt("ui_material_style", 2))
-    }
-    DisposableEffect(Unit) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            when (key) {
-                KEY_PROGRESSIVE_TITLE_BLUR -> progressiveTitleBlur = prefs.getBoolean(key, true)
-                "ui_material_style" -> materialStyle = prefs.getInt(key, 2)
-            }
-        }
-        prefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
-    }
-
-    val whitelist = whitelistOf(currentKind)
-
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-
-    var isMultiSelectMode by remember { mutableStateOf(false) }
-    val selectedHosts = remember { mutableStateListOf<String>() }
-
-    fun exitMultiSelect() {
-        isMultiSelectMode = false
-        selectedHosts.clear()
-    }
-
-    fun toggleSelect(host: String) {
-        if (host in selectedHosts) selectedHosts.remove(host)
-        else selectedHosts.add(host)
-    }
-
-    androidx.activity.compose.BackHandler(enabled = isMultiSelectMode) {
-        exitMultiSelect()
-    }
-
-    val listState = rememberLazyListState()
-    val isAtTop by remember {
-        derivedStateOf {
-            listState.firstVisibleItemIndex == 0 &&
-                    listState.firstVisibleItemScrollOffset == 0 &&
-                    !listState.isScrollInProgress
-        }
-    }
-    val themeIsDark = surfaceColor.luminance() < 0.5f
-    val backCardAlpha by animateFloatAsState(
-        targetValue = if (isAtTop || !progressiveTitleBlur) 0f else 1f,
-        animationSpec = tween(400, easing = SmoothEase),
-        label = "settingsBackCardAlpha",
-    )
-    val backCardMaterialModifier = if (progressiveTitleBlur) {
-        buildBackCardMaterialModifier(materialStyle, blurSupported, backdrop, themeIsDark)
-    } else {
-        Modifier
-    }
-    val titleBarBlendColorEntries = remember(surfaceColor) {
-        listOf(BlendColorEntry(color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)))
-    }
-
-    val density = LocalDensity.current
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    var topBarBottomPx by remember { mutableIntStateOf(0) }
-    val measuredTop = with(density) { topBarBottomPx.toDp() }
-    val contentTopPadding = if (topBarBottomPx > 0) measuredTop else statusBarHeight + TOP_BAR_FALLBACK_HEIGHT
-
-    val navBarBottom = WindowInsets.navigationBars
-        .asPaddingValues()
-        .calculateBottomPadding()
-
-    CompositionLocalProvider(
-        LocalNavigationEventDispatcherOwner provides navOwner
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(surfaceColor)
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp),
+            overscrollEffect = null,
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(
-                        if (blurSupported && backdrop != null) {
-                            Modifier.layerBackdrop(backdrop)
-                        } else Modifier
-                    )
-
-            ) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .draggable(
-                        state = rememberDraggableState { delta -> swipeAccum += delta },
-                        orientation = Orientation.Horizontal,
-                        enabled = !isMultiSelectMode,
-                        onDragStopped = {
-                            val order = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)
-                            val idx2 = order.indexOf(currentKind)
-                            when {
-                                swipeAccum < -140f && idx2 < order.lastIndex -> {
-                                    currentKind = order[idx2 + 1]
-                                    exitMultiSelect()
-                                }
-                                swipeAccum > 140f && idx2 > 0 -> {
-                                    currentKind = order[idx2 - 1]
-                                    exitMultiSelect()
-                                }
+            if (list.isEmpty()) {
+                item(key = "empty") {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(MiuixIcons.Link, contentDescription = null, tint = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.size(48.dp))
+                                Spacer(Modifier.height(12.dp))
+                                Text(whitelistEmptyText(kind), fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             }
-                            swipeAccum = 0f
-                        },
-                    )
-                    .scrollEndHaptic()
-                        .overScrollVertical(),
-                    contentPadding = PaddingValues(
-                        top = contentTopPadding + 64.dp,
-                        bottom = navBarBottom + 120.dp,
-                    ),
-                    overscrollEffect = null,
-                ) {
-                    item(key = "content") {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            if (whitelist.isEmpty()) {
-                                Card(
-                                    modifier = Modifier
-                                        .padding(horizontal = 12.dp)
-                                        .padding(top = 12.dp)
-                                        .padding(bottom = 12.dp),
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 56.dp),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Link,
-                                                contentDescription = null,
-                                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                                modifier = Modifier.size(48.dp),
-                                            )
-                                            Spacer(Modifier.height(12.dp))
-                                            Text(
-                                                text = whitelistEmptyText(currentKind),
-                                                fontSize = 14.sp,
-                                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                Card(
-                                    modifier = Modifier
-                                        .padding(horizontal = 12.dp)
-                                        .padding(top = 12.dp, bottom = 12.dp),
-                                ) {
-                                    whitelist.forEachIndexed { idx, host ->
-                                        val isSelected = host in selectedHosts
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .combinedClickable(
-                                                    onClick = {
-                                                        if (isMultiSelectMode) toggleSelect(host)
-                                                    },
-                                                    onLongClick = {
-                                                        if (!isMultiSelectMode) {
-                                                            isMultiSelectMode = true
-                                                            toggleSelect(host)
-                                                        }
-                                                    }
-                                                )
-                                                .heightIn(min = 56.dp)
-                                                .padding(horizontal = 16.dp, vertical = 13.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            Text(
-                                                text = host,
-                                                style = MiuixTheme.textStyles.headline1,
-                                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                                                color = MiuixTheme.colorScheme.onSurface,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f),
-                                            )
-
-                                            if (isMultiSelectMode) {
-                                                Spacer(Modifier.width(16.dp))
-                                                Checkbox(
-                                                    state = if (isSelected) ToggleableState.On else ToggleableState.Off,
-                                                    onClick = null,
-                                                )
+                        }
+                    }
+                }
+            } else {
+                item(key = "list") {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                        list.forEach { host ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 56.dp)
+                                    .combinedClickable(
+                                        onClick = { if (selecting) { if (host in selected) selected.remove(host) else selected.add(host) } },
+                                        onLongClick = {
+                                            if (!selecting) {
+                                                selecting = true
+                                                onSelectingChange(true)
                                             }
-                                        }
-                                    }
+                                            if (host !in selected) selected.add(host)
+                                        },
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = host,
+                                    style = MiuixTheme.textStyles.headline1,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                    color = MiuixTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (selecting) {
+                                    Spacer(Modifier.width(16.dp))
+                                    Checkbox(state = if (host in selected) ToggleableState.On else ToggleableState.Off, onClick = null)
                                 }
                             }
                         }
                     }
                 }
             }
+        }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .then(
-                        if (blurSupported && backdrop != null && materialStyle != 0) {
-                            if (progressiveTitleBlur) {
-                                Modifier.progressiveTextureBlur(
-                                    backdrop = backdrop,
-                                    shape = RectangleShape,
-                                    blurRadius = TOP_BAR_BLUR_RADIUS,
-                                    gradient = ProgressiveBlur.Top,
-                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
-                                )
-                            } else {
-                                Modifier.textureBlur(
-                                    backdrop = backdrop,
-                                    shape = RectangleShape,
-                                    blurRadius = TOP_BAR_BLUR_RADIUS,
-                                    noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
-                                )
-                            }
-                        } else {
-                            Modifier.background(surfaceColor)
-                        }
-                    )
-                    .statusBarsPadding()
-                    .onGloballyPositioned { coords ->
-                        val bottomPx = coords.boundsInWindow().bottom.toInt()
-                        if (bottomPx != topBarBottomPx) {
-                            topBarBottomPx = bottomPx
-                        }
-                    }
-            ) {
-                val barTitle = if (isMultiSelectMode) {
-                    if (selectedHosts.isEmpty()) "请选择项目" else "已选择 ${selectedHosts.size} 项"
-                } else {
-                    whitelistTitle(currentKind)
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
+                .padding(horizontal = 24.dp)
+                .height(56.dp)
+                .graphicsLayer {
+                    shape = RoundedCornerShape(28.dp)
+                    shadowElevation = 24.dp.toPx()
                 }
-                TopAppBar(
-                    title = barTitle,
-                    largeTitle = barTitle,
-                    scrollBehavior = scrollBehavior,
-                    color = Color.Transparent,
-                    defaultWindowInsetsPadding = false,
-                    navigationIcon = {
-                        if (isMultiSelectMode) {
-                            IconButton(onClick = { exitMultiSelect() }) {
-                                Icon(
-                                    imageVector = MiuixIcons.Close,
-                                    contentDescription = "退出多选",
-                                    tint = MiuixTheme.colorScheme.onSurface,
-                                )
-                            }
-                        } else {
-                            SettingsBackButton(
-                                onBack = onBack,
-                                progressiveTitleBlur = progressiveTitleBlur,
-                                backCardAlpha = backCardAlpha,
-                                backCardMaterialModifier = backCardMaterialModifier,
-                                iconTint = MiuixTheme.colorScheme.onSurface,
-                            )
-                        }
-                    },
-                    actions = {
-                        if (isMultiSelectMode) {
-                            val allSelected = whitelist.isNotEmpty() && selectedHosts.size == whitelist.size
-                            IconButton(onClick = {
-                                if (allSelected) selectedHosts.clear() else {
-                                    selectedHosts.clear()
-                                    selectedHosts.addAll(whitelist)
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = MiuixIcons.SelectAll,
-                                    contentDescription = if (allSelected) "取消全选" else "全选",
-                                    tint = if (allSelected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
-                                )
-                            }
-                        }
-                    }
-                )
-            }
-
-            Box(modifier = Modifier.fillMaxWidth().padding(top = contentTopPadding)
-                    .padding(horizontal = 12.dp)) {
-                TabRowWithContour(
-                    tabs = listOf("跟踪防护", "下载防护", "广告拦截"),
-                    selectedTabIndex = when (currentKind) {
-                        WL_DOWNLOAD -> 1
-                        WL_AD -> 2
-                        else -> 0
-                    },
-                    onTabSelected = { idx ->
-                        currentKind = when (idx) {
-                            1 -> WL_DOWNLOAD
-                            2 -> WL_AD
-                            else -> WL_TRACKING
-                        }
-                        isMultiSelectMode = false
-                        selectedHosts.clear()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(10f) // ★ 修复阴影被卡片盖住的问题
-                    .padding(bottom = navBarBottom + 24.dp)
-                    .padding(horizontal = 24.dp)
-                    .height(56.dp)
-                    .graphicsLayer {
-                        shape = RoundedCornerShape(28.dp)
-                        shadowElevation = 24.dp.toPx()
-                        ambientShadowColor = Color.Black.copy(alpha = 0.35f)
-                        spotShadowColor = Color.Transparent
-                    }
-                    .clip(RoundedCornerShape(28.dp))
-                    .then(
-                        buildBackCardMaterialModifier(
-                            materialStyle = materialStyle,
-                            blurSupported = blurSupported,
-                            backdrop = backdrop,
-                            themeIsDark = themeIsDark,
-                            shape = RoundedCornerShape(28.dp)
-                        )
-                    )
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (isMultiSelectMode) {
-                    IconButton(onClick = {
-                        if (selectedHosts.isNotEmpty()) {
-                            showDeleteConfirmDialog = true
-                        }
-                    }) {
-                        Icon(
-                            imageVector = MiuixIcons.Delete,
-                            contentDescription = "删除",
-                            tint = Color(0xFFFF3B30),
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                } else {
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(
-                            imageVector = MiuixIcons.Add,
-                            contentDescription = "添加",
-                            tint = MiuixTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
+                .clip(RoundedCornerShape(28.dp))
+                .background(MiuixTheme.colorScheme.surfaceContainer)
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selecting) {
+                IconButton(onClick = { if (selected.isNotEmpty()) showDelete = true }) {
+                    Icon(MiuixIcons.Delete, contentDescription = "删除", tint = Color(0xFFFF3B30), modifier = Modifier.size(22.dp))
+                }
+            } else {
+                IconButton(onClick = { showAdd = true }) {
+                    Icon(MiuixIcons.Add, contentDescription = "添加", tint = MiuixTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
                 }
             }
         }
 
         TrackingWhitelistAddDialogMiuix(
-            show = showAddDialog,
+            show = showAdd,
             prefs = prefs,
-            onDismiss = { showAddDialog = false },
-            onAdd = { host ->
-                whitelistAdd(currentKind, host)
-                showAddDialog = false
-                Toast.makeText(context, "已添加到白名单", Toast.LENGTH_SHORT).show()
-            },
+            onDismiss = { showAdd = false },
+            onAdd = { host -> whitelistAdd(kind, host); showAdd = false },
         )
 
-        WindowDialog(
-            show = showDeleteConfirmDialog,
-            title = "删除",
-            onDismissRequest = { showDeleteConfirmDialog = false },
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
+        WindowDialog(show = showDelete, title = "删除", onDismissRequest = { showDelete = false }) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "确定要移除选中的 ${selectedHosts.size} 条白名单吗？",
+                    text = "确定要移除选中的 ${selected.size} 项吗？",
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
                     style = MiuixTheme.textStyles.body1,
                     color = DialogDefaults.summaryColor(),
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = { showDeleteConfirmDialog = false },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("取消") }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { showDelete = false }, modifier = Modifier.weight(1f)) { Text("取消") }
                     Button(
                         onClick = {
-                            selectedHosts.toList().forEach {
-                                whitelistRemove(currentKind, it)
-                            }
-                            Toast.makeText(context, "已移除选中的白名单", Toast.LENGTH_SHORT).show()
-                            exitMultiSelect()
-                            showDeleteConfirmDialog = false
+                            selected.toList().forEach { whitelistRemove(kind, it) }
+                            exitSelect()
+                            showDelete = false
                         },
                         modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            color = MiuixTheme.colorScheme.primary,
-                            contentColor = Color.White,
-                        ),
+                        colors = ButtonDefaults.buttonColors(color = MiuixTheme.colorScheme.primary, contentColor = Color.White),
                     ) { Text("删除") }
                 }
             }
@@ -1650,306 +1402,178 @@ private fun TrackingWhitelistPageMiuix(kind: String, onBack: () -> Unit) {
     }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun TrackingWhitelistPageMaterial(kind: String, onBack: () -> Unit) {
-    var currentKind by remember(kind) { mutableStateOf(kind) }
-
-    val navOwner = rememberNavigationEventDispatcherOwner()
-    val context = LocalContext.current
-    val prefs = remember {
-        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
-    }
-
-    val whitelist = whitelistOf(currentKind)
-
-    var showAddDialog by remember { mutableStateOf(false) }
-    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
-
-    var isMultiSelectMode by remember { mutableStateOf(false) }
-    val selectedHosts = remember { mutableStateListOf<String>() }
-
-    fun exitMultiSelect() {
-        isMultiSelectMode = false
-        selectedHosts.clear()
-    }
-
-    fun toggleSelect(host: String) {
-        if (host in selectedHosts) selectedHosts.remove(host)
-        else selectedHosts.add(host)
-    }
-
-    androidx.activity.compose.BackHandler(enabled = isMultiSelectMode) {
-        exitMultiSelect()
-    }
-
-    val pageBg = lerp(
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = whitelistIndexOf(kind)) { 3 }
+    var selecting by remember { mutableStateOf(false) }
+    val bg = lerp(
         M3MaterialTheme.colorScheme.surfaceContainerLow,
         M3MaterialTheme.colorScheme.secondaryContainer,
         0.10f,
     )
-    val navBarBottom = WindowInsets.navigationBars
-        .asPaddingValues()
-        .calculateBottomPadding()
 
-    CompositionLocalProvider(
-        LocalNavigationEventDispatcherOwner provides navOwner
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(pageBg)
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                ) {
-                    M3TopAppBar(
-                        title = {
-                            M3Text(
-                                if (isMultiSelectMode) {
-                                    if (selectedHosts.isEmpty()) "请选择项目" else "已选择 ${selectedHosts.size} 项"
-                                } else whitelistTitle(currentKind)
-                            )
-                        },
-                        navigationIcon = {
-                            M3IconButton(onClick = {
-                                if (isMultiSelectMode) exitMultiSelect() else onBack()
-                            }) {
-                                M3Icon(
-                                    imageVector = if (isMultiSelectMode) MiuixIcons.Close else MiuixIcons.Back,
-                                    contentDescription = if (isMultiSelectMode) "退出多选" else "返回",
-                                )
-                            }
-                        },
-                        actions = {
-                            if (isMultiSelectMode) {
-                                val allSelected = whitelist.isNotEmpty() && selectedHosts.size == whitelist.size
-                                M3IconButton(onClick = {
-                                    if (allSelected) selectedHosts.clear() else {
-                                        selectedHosts.clear()
-                                        selectedHosts.addAll(whitelist)
-                                    }
-                                }) {
-                                    M3Icon(
-                                        imageVector = MiuixIcons.SelectAll,
-                                        contentDescription = if (allSelected) "取消全选" else "全选",
-                                        tint = if (allSelected) M3MaterialTheme.colorScheme.primary else M3MaterialTheme.colorScheme.onSurface,
-                                    )
-                                }
-                            }
-                        },
-                        colors = M3TopAppBarDefaults.topAppBarColors(
-                            containerColor = pageBg,
-                        ),
-                    )
-            M3PrimaryTabRow(
-                selectedTabIndex = when (currentKind) {
-                    WL_DOWNLOAD -> 1
-                    WL_AD -> 2
-                    else -> 0
+    LaunchedEffect(pagerState.currentPage) { selecting = false }
+
+    M3Scaffold(
+        containerColor = bg,
+        topBar = {
+            M3TopAppBar(
+                title = { M3Text("防护白名单") },
+                navigationIcon = {
+                    M3IconButton(onClick = onBack) {
+                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
                 },
-                containerColor = pageBg,
+                colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+            )
+        },
+    ) { innerPadding ->
+        Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            M3PrimaryTabRow(
+                selectedTabIndex = pagerState.currentPage,
+                containerColor = bg,
             ) {
                 listOf("跟踪防护", "下载防护", "广告拦截").forEachIndexed { idx, title ->
                     M3Tab(
-                        selected = when (currentKind) {
-                            WL_DOWNLOAD -> idx == 1
-                            WL_AD -> idx == 2
-                            else -> idx == 0
-                        },
-                        onClick = {
-                            currentKind = when (idx) {
-                                1 -> WL_DOWNLOAD
-                                2 -> WL_AD
-                                else -> WL_TRACKING
-                            }
-                            isMultiSelectMode = false
-                            selectedHosts.clear()
-                        },
+                        selected = pagerState.currentPage == idx,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(idx) } },
                         text = { M3Text(title) },
                     )
                 }
             }
-                }
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f),
-                    contentPadding = PaddingValues(
-                        top = 8.dp,
-                        bottom = navBarBottom + 120.dp,
-                    ),
-                ) {
-                    item(key = "content") {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            if (whitelist.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                                        .padding(top = 12.dp, bottom = 12.dp)
-                                ) {
-                                    M3Surface(
-                                        shape = RoundedCornerShape(25.dp),
-                                        color = lerp(
-                                            M3MaterialTheme.colorScheme.surfaceContainerLow,
-                                            M3MaterialTheme.colorScheme.secondaryContainer,
-                                            0.10f,
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 56.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                M3Icon(
-                                                    imageVector = MiuixIcons.Link,
-                                                    contentDescription = null,
-                                                    tint = M3MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.size(48.dp),
-                                                )
-                                                Spacer(Modifier.height(12.dp))
-                                                M3Text(
-                                                    text = whitelistEmptyText(currentKind),
-                                                    style = M3MaterialTheme.typography.bodyMedium,
-                                                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
-                                ) {
-                                    val items: List<@Composable () -> Unit> = whitelist.map { host ->
-                                        {
-                                            val isSelected = host in selectedHosts
-                                            M3SegmentItem(
-                                                headline = { M3Text(host) },
-                                                trailing = if (isMultiSelectMode) {
-                                                    {
-                                                        androidx.compose.material3.Checkbox(
-                                                            checked = isSelected,
-                                                            onCheckedChange = null,
-                                                        )
-                                                    }
-                                                } else null,
-                                                onClick = null,
-                                                modifier = Modifier.combinedClickable(
-                                                    onClick = {
-                                                        if (isMultiSelectMode) toggleSelect(host)
-                                                    },
-                                                    onLongClick = {
-                                                        if (!isMultiSelectMode) {
-                                                            isMultiSelectMode = true
-                                                            toggleSelect(host)
-                                                        }
-                                                    }
-                                                )
-                                            )
-                                        }
-                                    }
-                                    MoteSegmentedColumn(content = items)
-                                }
-                            }
-                        }
-                    }
-                }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = !selecting,
+            ) { page ->
+                WhitelistPaneMaterial(
+                    kind = listOf(WL_TRACKING, WL_DOWNLOAD, WL_AD)[page],
+                    active = page == pagerState.currentPage,
+                    onSelectingChange = { if (page == pagerState.currentPage) selecting = it },
+                )
             }
-
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = navBarBottom + 24.dp)
-                    .padding(horizontal = 24.dp)
-                    .height(56.dp)
-                    .graphicsLayer {
-                        shape = RoundedCornerShape(28.dp)
-                        shadowElevation = 8.dp.toPx()
-                    }
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(M3MaterialTheme.colorScheme.surfaceContainerHigh)
-                    .padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (isMultiSelectMode) {
-                    M3IconButton(onClick = {
-                        if (selectedHosts.isNotEmpty()) {
-                            showDeleteConfirmDialog = true
-                        }
-                    }) {
-                        M3Icon(
-                            imageVector = MiuixIcons.Delete,
-                            contentDescription = "删除",
-                            tint = M3MaterialTheme.colorScheme.error,
-                        )
-                    }
-                } else {
-                    M3IconButton(onClick = { showAddDialog = true }) {
-                        M3Icon(
-                            imageVector = MiuixIcons.Add,
-                            contentDescription = "添加",
-                            tint = M3MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-        }
-
-        if (showAddDialog) {
-            TrackingWhitelistAddDialogMaterial(
-                prefs = prefs,
-                onDismiss = { showAddDialog = false },
-                onAdd = { host ->
-                    whitelistAdd(currentKind, host)
-                    showAddDialog = false
-                    Toast.makeText(context, "已添加到白名单", Toast.LENGTH_SHORT).show()
-                },
-            )
-        }
-
-        if (showDeleteConfirmDialog) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { showDeleteConfirmDialog = false },
-                title = { M3Text("删除") },
-                text = { M3Text("确定要移除选中的 ${selectedHosts.size} 条白名单吗？") },
-                confirmButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = {
-                            selectedHosts.toList().forEach {
-                                whitelistRemove(currentKind, it)
-                            }
-                            Toast.makeText(context, "已移除选中的白名单", Toast.LENGTH_SHORT).show()
-                            exitMultiSelect()
-                            showDeleteConfirmDialog = false
-                        }
-                    ) { M3Text("删除") }
-                },
-                dismissButton = {
-                    androidx.compose.material3.TextButton(
-                        onClick = { showDeleteConfirmDialog = false }
-                    ) { M3Text("取消") }
-                },
-            )
         }
     }
 }
 
-// ============================================================
-// 添加白名单对话框
-// ============================================================
+@Composable
+private fun WhitelistPaneMaterial(
+    kind: String,
+    active: Boolean,
+    onSelectingChange: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    val version = SecurityStateHolder.whitelistVersion
+    val list = remember(version, kind) { whitelistOf(kind) }
+    var selecting by remember { mutableStateOf(false) }
+    val selected = remember { mutableStateListOf<String>() }
+
+    fun exitSelect() {
+        selecting = false
+        selected.clear()
+        onSelectingChange(false)
+    }
+
+    LaunchedEffect(active) { if (!active) exitSelect() }
+
+    fun showAdd() {
+        val input = android.widget.EditText(context).apply { hint = "example.com"; setSingleLine() }
+        android.app.AlertDialog.Builder(context)
+            .setTitle("添加网址")
+            .setView(input)
+            .setPositiveButton("添加") { _, _ ->
+                val host = input.text?.toString()?.trim().orEmpty()
+                if (host.isNotBlank()) whitelistAdd(kind, host)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 120.dp),
+            overscrollEffect = null,
+        ) {
+            if (list.isEmpty()) {
+                item(key = "empty") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = 12.dp),
+                    ) {
+                        M3Surface(
+                            shape = RoundedCornerShape(25.dp),
+                            color = M3MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    M3Icon(MiuixIcons.Link, contentDescription = null, tint = M3MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
+                                    Spacer(Modifier.height(12.dp))
+                                    M3Text(whitelistEmptyText(kind), style = M3MaterialTheme.typography.bodyMedium, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                item(key = "list") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = 12.dp),
+                    ) {
+                        MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
+                            content = list.map { host ->
+                                {
+                                    M3SegmentItem(
+                                        headline = { M3Text(host) },
+                                        leading = if (selecting) {
+                                            { androidx.compose.material3.Checkbox(checked = host in selected, onCheckedChange = null) }
+                                        } else null,
+                                        onClick = {
+                                            if (selecting) {
+                                                if (host in selected) selected.remove(host) else selected.add(host)
+                                            }
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        M3Text(
+                            text = if (selecting) "长按列表项进入多选" else "长按列表项可多选",
+                            style = M3MaterialTheme.typography.bodySmall,
+                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selecting) {
+                M3IconButton(onClick = {
+                    selected.toList().forEach { whitelistRemove(kind, it) }
+                    exitSelect()
+                }) {
+                    M3Icon(Icons.Filled.Delete, contentDescription = "删除")
+                }
+            } else {
+                M3IconButton(onClick = { showAdd() }) {
+                    M3Icon(Icons.Filled.Add, contentDescription = "添加")
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun TrackingWhitelistAddDialogMiuix(
