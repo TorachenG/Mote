@@ -3131,7 +3131,9 @@ class MainActivity : ComponentActivity() {
         try {
             val launchUrl = intent.data?.toString()
             if (!launchUrl.isNullOrBlank()) {
-                PendingOpenInNewWindowStore.forceNewWindow = false
+                // 第三方通过 VIEW 唤起时创建的是「直接打开」窗口：无历史时返回应关闭它，
+                // 而不是回到新标签页（forceNewWindow=true 会让 createWindow 标记 isDirectOpen）
+                PendingOpenInNewWindowStore.forceNewWindow = true
                 PendingOpenInNewWindowStore.pending = launchUrl
             }
             if (intent.getBooleanExtra("open_downloads", false) == true) {
