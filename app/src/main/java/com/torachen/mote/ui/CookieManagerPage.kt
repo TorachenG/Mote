@@ -432,7 +432,10 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
                                                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
-                                            M3Icon(Icons.Filled.Delete, contentDescription = "清除", tint = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                                            M3IconButton(onClick = { clearCookieSite(site) }) {
+                                                M3Icon(Icons.Filled.Delete, contentDescription = "清除", tint = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            M3Text("›", style = M3MaterialTheme.typography.bodyLarge, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
                                     Spacer(Modifier.height(6.dp))
