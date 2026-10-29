@@ -163,6 +163,7 @@ private val SmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
 private const val KEY_REMEMBER_FORM = "web_remember_form"
 private const val KEY_ACCEPT_COOKIE = "web_accept_cookie"
+private const val KEY_IGNORE_SSL_WARNINGS = "web_ignore_ssl_warnings"
 private const val KEY_CLEAR_INCOGNITO_ON_EXIT = "web_clear_incognito_on_exit"
 
 private const val KEY_DOWNLOAD_PROTECTION = "web_download_protection"
@@ -180,6 +181,7 @@ private data class WebSecurityUiState(
     val rememberFormEnabled: Boolean,
     val acceptCookieEnabled: Boolean,
     val clearIncognitoOnExitEnabled: Boolean,
+    val ignoreSslWarningsEnabled: Boolean,
     val downloadProtectionEnabled: Boolean,
     val disableWebRtcEnabled: Boolean,
     val blockRedirectsEnabled: Boolean,
@@ -193,6 +195,7 @@ private data class WebSecurityActions(
     val onRememberFormChange: (Boolean) -> Unit,
     val onAcceptCookieChange: (Boolean) -> Unit,
     val onClearIncognitoOnExitChange: (Boolean) -> Unit,
+    val onIgnoreSslWarningsChange: (Boolean) -> Unit,
     val onDownloadProtectionChange: (Boolean) -> Unit,
     val onDisableWebRtcChange: (Boolean) -> Unit,
     val onBlockRedirectsChange: (Boolean) -> Unit,
@@ -314,6 +317,9 @@ fun SettingsWebSecurityPage(
     var clearIncognitoOnExitEnabled by remember {
         mutableStateOf(prefs.getBoolean(KEY_CLEAR_INCOGNITO_ON_EXIT, true))
     }
+    var ignoreSslWarningsEnabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_IGNORE_SSL_WARNINGS, false))
+    }
     var downloadProtectionEnabled by remember {
         mutableStateOf(prefs.getBoolean(KEY_DOWNLOAD_PROTECTION, true))
     }
@@ -337,6 +343,7 @@ fun SettingsWebSecurityPage(
         rememberFormEnabled = rememberFormEnabled,
         acceptCookieEnabled = acceptCookieEnabled,
         clearIncognitoOnExitEnabled = clearIncognitoOnExitEnabled,
+        ignoreSslWarningsEnabled = ignoreSslWarningsEnabled,
         downloadProtectionEnabled = downloadProtectionEnabled,
         disableWebRtcEnabled = disableWebRtcEnabled,
         blockRedirectsEnabled = blockRedirectsEnabled,
@@ -357,6 +364,10 @@ fun SettingsWebSecurityPage(
         onClearIncognitoOnExitChange = {
             clearIncognitoOnExitEnabled = it
             prefs.edit().putBoolean(KEY_CLEAR_INCOGNITO_ON_EXIT, it).apply()
+        },
+        onIgnoreSslWarningsChange = {
+            ignoreSslWarningsEnabled = it
+            prefs.edit().putBoolean(KEY_IGNORE_SSL_WARNINGS, it).apply()
         },
         onDownloadProtectionChange = {
             downloadProtectionEnabled = it
@@ -702,6 +713,28 @@ private fun SettingsWebSecurityMiuix(
                                 )
                             }
 
+                            SmallTitle("其它")
+                            Card(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 12.dp),
+                            ) {
+                                SearchableItem(
+                                    title = "忽略 SSL 证书警告",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_ignore_ssl",
+                                ) {
+                                    SwitchPreference(
+                                        title = "忽略 SSL 证书警告",
+                                        summary = "开启后网站连接会有风险",
+                                        checked = state.ignoreSslWarningsEnabled,
+                                        onCheckedChange = actions.onIgnoreSslWarningsChange,
+                                    )
+                                }
+                            }
+
+
 
                             Spacer(
                                 Modifier.height(
@@ -1002,6 +1035,33 @@ private fun SettingsWebSecurityMaterial(
                                                 onCheckedChange = actions.onDisableWebRtcChange,
                                             )
                                         },
+                            ),
+                        )
+                    }
+                }
+
+                item(key = "other_header") {
+                    WebSecuritySectionHeader("其它")
+                }
+
+                item(key = "other_items") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                            .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                    ) {
+                        MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
+                            content = listOf(
+                                {
+                                    M3SegmentSwitchItem(
+                                        title = "忽略 SSL 证书警告",
+                                        summary = "开启后网站连接会有风险",
+                                        checked = state.ignoreSslWarningsEnabled,
+                                        onCheckedChange = actions.onIgnoreSslWarningsChange,
+                                    )
+                                },
                             ),
                         )
                     }

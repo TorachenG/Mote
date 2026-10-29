@@ -11089,6 +11089,15 @@ private fun createWebView(
                 handler: SslErrorHandler,
                 error: SslError
             ) {
+                // 用户已开启「忽略 SSL 证书警告」时直接放行，不弹窗
+                val ignoreSsl = runCatching {
+                    view.context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+                        .getBoolean("web_ignore_ssl_warnings", false)
+                }.getOrDefault(false)
+                if (ignoreSsl) {
+                    try { handler.proceed() } catch (_: Exception) {}
+                    return
+                }
                 val primaryError = when (error.primaryError) {
                     SslError.SSL_DATE_INVALID -> "证书日期无效"
                     SslError.SSL_EXPIRED -> "证书已过期"
