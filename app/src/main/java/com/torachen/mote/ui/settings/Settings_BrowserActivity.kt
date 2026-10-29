@@ -624,6 +624,17 @@ private fun SettingsWebMiuix(
                                     .padding(bottom = 12.dp),
                             ) {
                                 SearchableItem(
+                                    title = "浏览器标识",
+                                    pageRoute = "settings_web",
+                                    pageTitle = "网页浏览设置",
+                                    itemKey = "settings_web_ua",
+                                ) {
+                                    ArrowPreference(
+                                        title = "浏览器标识",
+                                        onClick = onOpenUaSettings,
+                                    )
+                                }
+                                SearchableItem(
                                     title = "网页视频播放器",
                                     pageRoute = "settings_web",
                                     pageTitle = "网页浏览设置",
@@ -657,17 +668,6 @@ private fun SettingsWebMiuix(
                                         title = "左右滑动后退/前进",
                                         checked = state.swipeNavEnabled,
                                         onCheckedChange = actions.onSwipeNavChange,
-                                    )
-                                }
-                                SearchableItem(
-                                    title = "浏览器标识",
-                                    pageRoute = "settings_web",
-                                    pageTitle = "网页浏览设置",
-                                    itemKey = "settings_web_ua",
-                                ) {
-                                    ArrowPreference(
-                                        title = "浏览器标识",
-                                        onClick = onOpenUaSettings,
                                     )
                                 }
                                 SearchableItem(
@@ -988,6 +988,12 @@ private fun SettingsWebMaterial(
                         MoteSegmentedColumn(
                             content = listOf(
                                 {
+                                    M3SegmentArrowItem(
+                                        title = "浏览器标识",
+                                        onClick = onOpenUaSettings,
+                                    )
+                                },
+                                {
                                     M3SegmentDropdownItem(
                                         title = "网页视频播放器",
                                         summary = null,
@@ -1010,12 +1016,6 @@ private fun SettingsWebMaterial(
                                         summary = null,
                                         checked = state.swipeNavEnabled,
                                         onCheckedChange = actions.onSwipeNavChange,
-                                    )
-                                },
-                                {
-                                    M3SegmentArrowItem(
-                                        title = "浏览器标识",
-                                        onClick = onOpenUaSettings,
                                     )
                                 },
                                 {
