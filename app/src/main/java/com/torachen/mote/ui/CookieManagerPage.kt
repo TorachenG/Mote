@@ -136,7 +136,7 @@ internal fun loadCookieGroups(onLoaded: (List<CookieGroup>) -> Unit) {
     }
 }
 
-internal fun clearCookieSite(site: CookieSite) {
+internal fun clearCookieSite(context: android.content.Context, site: CookieSite) {
     runCatching {
         val cm = CookieManager.getInstance()
         cm.getCookie(site.origin)?.split(';')?.forEach { pair ->
@@ -147,6 +147,7 @@ internal fun clearCookieSite(site: CookieSite) {
         }
         WebStorage.getInstance().deleteOrigin(site.origin)
         cm.flush()
+        CookieMetaStore.removeOrigin(context, site.origin)
     }
 }
 
@@ -294,7 +295,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit, onOpenOrigin: (String, St
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
                                     }
-                                    IconButton(onClick = { clearCookieSite(site) }) {
+                                    IconButton(onClick = { clearCookieSite(context, site) }) {
                                         Icon(
                                             imageVector = MiuixIcons.Delete,
                                             contentDescription = "清除",
@@ -432,7 +433,7 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
                                                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
-                                            M3IconButton(onClick = { clearCookieSite(site) }) {
+                                            M3IconButton(onClick = { clearCookieSite(context, site) }) {
                                                 M3Icon(Icons.Filled.Delete, contentDescription = "清除", tint = M3MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
                                             M3Text("›", style = M3MaterialTheme.typography.bodyLarge, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
@@ -460,7 +461,7 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
                 horizontalArrangement = Arrangement.Center,
             ) {
                 M3IconButton(onClick = {
-                    groups.filter { it.domain in selected }.forEach { g -> g.sites.forEach { clearCookieSite(it) } }
+                    groups.filter { it.domain in selected }.forEach { g -> g.sites.forEach { clearCookieSite(context, it) } }
                     selecting = false
                     selected = emptySet()
                     loadCookieGroups { groups = it }
@@ -498,8 +499,13 @@ fun CookieDetailPage(onBack: () -> Unit) {
 private fun CookieDetailPageMiuix(onBack: () -> Unit) {
     val origin = CookieDetailNav.origin.orEmpty()
     val host = CookieDetailNav.host ?: origin
+    val context = androidx.compose.ui.platform.LocalContext.current
     var cookies by remember { mutableStateOf(loadCookies(origin)) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    LaunchedEffect(origin) {
+        cookies.forEach { CookieMetaStore.ensure(context, origin, it.name, it.value, host) }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
         TopAppBar(
@@ -564,9 +570,15 @@ private fun CookieDetailPageMiuix(onBack: () -> Unit) {
                     }
                     AnimatedVisibility(visible = open) {
                         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                            val meta = CookieMetaStore.find(context, origin, cookie.name)
                             CookieFieldMiuix("名称", cookie.name)
                             CookieFieldMiuix("内容", cookie.value)
-                            CookieFieldMiuix("域", host)
+                            CookieFieldMiuix("域", meta?.domain?.ifBlank { host } ?: host)
+                            CookieFieldMiuix("路径", meta?.path?.ifBlank { "/" } ?: "/")
+                            CookieFieldMiuix("发送", if (meta?.secure == true) "仅限安全连接" else "所有连接")
+                            CookieFieldMiuix("可供脚本使用", if (meta?.scriptAccessible == false) "否" else "是")
+                            CookieFieldMiuix("已创建", formatCookieTime(meta?.created ?: 0L))
+                            CookieFieldMiuix("到期", formatCookieTime(meta?.expires ?: 0L))
                         }
                     }
                 }
@@ -589,9 +601,14 @@ private fun CookieFieldMiuix(label: String, value: String) {
 private fun CookieDetailPageMaterial(onBack: () -> Unit) {
     val origin = CookieDetailNav.origin.orEmpty()
     val host = CookieDetailNav.host ?: origin
+    val context = androidx.compose.ui.platform.LocalContext.current
     var cookies by remember { mutableStateOf(loadCookies(origin)) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     val bg = M3MaterialTheme.colorScheme.surface
+
+    LaunchedEffect(origin) {
+        cookies.forEach { CookieMetaStore.ensure(context, origin, it.name, it.value, host) }
+    }
 
     M3Scaffold(
         containerColor = bg,

@@ -1174,6 +1174,27 @@ private val JS_BLOCK_VIDEO_AUTOPLAY = """
 })();
 """
 
+/** 记录 document.cookie 写入，用于自行维护 Cookie 属性 */
+private val JS_COOKIE_HOOK = """
+(function() {
+  try {
+    var desc = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie');
+    if (!desc || !desc.set || desc.set.__mote) return;
+    var origSet = desc.set;
+    var wrapped = function(v) {
+      try { MoteCookie.set(String(v), location.host); } catch (e) {}
+      return origSet.call(this, v);
+    };
+    wrapped.__mote = true;
+    Object.defineProperty(Document.prototype, 'cookie', {
+      get: function() { return desc.get.call(this); },
+      set: wrapped,
+      configurable: true,
+    });
+  } catch (e) {}
+})();
+"""
+
 private val JS_CLIPBOARD_HOOK = """
 (function() {
   try {
@@ -10971,6 +10992,7 @@ private fun createWebView(
                 }
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_CLIPBOARD_HOOK, null) } catch (_: Exception) {}
+                try { view?.evaluateJavascript(JS_COOKIE_HOOK, null) } catch (_: Exception) {}
                 try {
                     if (WebPermissionStore.mode(context, WebPermissionStore.VIDEO_AUTOPLAY) == WebPermissionStore.DENY) {
                         view?.evaluateJavascript(JS_BLOCK_VIDEO_AUTOPLAY, null)
@@ -11253,6 +11275,12 @@ private fun createWebView(
                 }
             }
         }, "MotePermission")
+        addJavascriptInterface(object {
+            @android.webkit.JavascriptInterface
+            fun set(raw: String, host: String) {
+                post { CookieMetaStore.recordSetCookie(context, raw, host) }
+            }
+        }, "MoteCookie")
         val permSettings = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
         settings.mediaPlaybackRequiresUserGesture =
             WebPermissionStore.mode(context, WebPermissionStore.AUTOPLAY) != WebPermissionStore.ALLOW &&
