@@ -57,8 +57,18 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.SelectAll
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/** Cookie 详情页参数 */
+internal object CookieDetailNav {
+    var origin: String? = null
+    var host: String? = null
+}
 
 /** 单条站点数据 */
 internal data class CookieSite(
@@ -135,12 +145,13 @@ internal fun clearCookieSite(site: CookieSite) {
 }
 
 @Composable
-fun CookieManagerPage(onBack: () -> Unit) {
-    if (LocalUiMode.current == UiMode.Miuix) CookieManagerPageMiuix(onBack) else CookieManagerPageMaterial(onBack)
+fun CookieManagerPage(onBack: () -> Unit, onOpenOrigin: (origin: String, host: String) -> Unit = { _, _ -> }) {
+    if (LocalUiMode.current == UiMode.Miuix) CookieManagerPageMiuix(onBack, onOpenOrigin)
+    else CookieManagerPageMaterial(onBack, onOpenOrigin)
 }
 
 @Composable
-private fun CookieManagerPageMiuix(onBack: () -> Unit) {
+private fun CookieManagerPageMiuix(onBack: () -> Unit, onOpenOrigin: (String, String) -> Unit) {
     val context = LocalContext.current
     var groups by remember { mutableStateOf<List<CookieGroup>>(emptyList()) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -155,24 +166,38 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+        val barTitle = if (selecting) "已选择 ${selected.size} 个网站" else "Cookie 与数据"
         TopAppBar(
-            title = "Cookie 与数据",
-            largeTitle = "Cookie 与数据",
+            title = barTitle,
+            largeTitle = barTitle,
             color = Color.Transparent,
             defaultWindowInsetsPadding = true,
             navigationIcon = {
                 IconButton(onClick = { if (selecting) exitSelect() else onBack() }) {
                     Icon(
-                        imageVector = if (selecting) MiuixIcons.Delete else MiuixIcons.ChevronBackward,
-                        contentDescription = if (selecting) "删除" else "返回",
-                        tint = if (selecting) Color(0xFFFF3B30) else MiuixTheme.colorScheme.onSurface,
+                        imageVector = if (selecting) MiuixIcons.Close else MiuixIcons.ChevronBackward,
+                        contentDescription = if (selecting) "关闭" else "返回",
+                        tint = MiuixTheme.colorScheme.onSurface,
                     )
+                }
+            },
+            actions = {
+                if (selecting) {
+                    val all = groups.map { it.domain }.toSet()
+                    IconButton(onClick = { selected = if (selected.size == all.size) emptySet() else all }) {
+                        Icon(
+                            imageVector = MiuixIcons.SelectAll,
+                            contentDescription = "全选",
+                            tint = if (selected.size == all.size) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             },
         )
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            overscrollEffect = null,
         ) {
             if (groups.isEmpty()) {
                 item(key = "empty") {
@@ -203,7 +228,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit) {
                                     selected = selected + group.domain
                                 },
                             )
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -217,7 +242,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit) {
                             Text(
                                 text = buildString {
                                     append(formatBytes(group.totalBytes))
-                                    if (group.cookieCount > 0) append(" • ${group.cookieCount} 个 Cookie")
+                                    if (group.cookieCount > 0) append(" | ${group.cookieCount} 个 Cookie")
                                 },
                                 fontSize = 12.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
@@ -257,15 +282,23 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit) {
                                         Text(
                                             text = buildString {
                                                 append(formatBytes(site.totalBytes))
-                                                if (site.cookieCount > 0) append(" • ${site.cookieCount} 个 Cookie")
+                                                if (site.cookieCount > 0) append(" | ${site.cookieCount} 个 Cookie")
                                             },
                                             fontSize = 12.sp,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
                                     }
+                                    IconButton(onClick = { clearCookieSite(site) }) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Delete,
+                                            contentDescription = "清除",
+                                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
                                     Icon(
-                                        imageVector = MiuixIcons.Delete,
-                                        contentDescription = "清除",
+                                        imageVector = MiuixIcons.ChevronForward,
+                                        contentDescription = null,
                                         tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         modifier = Modifier.size(18.dp),
                                     )
@@ -282,7 +315,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit) {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun CookieManagerPageMaterial(onBack: () -> Unit) {
+private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String, String) -> Unit) {
     val context = LocalContext.current
     var groups by remember { mutableStateOf<List<CookieGroup>>(emptyList()) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -307,8 +340,9 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit) {
         },
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            modifier = Modifier.fillMaxSize().padding(innerPadding).overScrollVertical(),
             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            overscrollEffect = null,
         ) {
             if (groups.isEmpty()) {
                 item(key = "empty") {
@@ -336,7 +370,7 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit) {
                                         },
                                         onLongClick = { selecting = true; selected = selected + group.domain },
                                     )
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    .padding(horizontal = 16.dp, vertical = 13.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
@@ -345,7 +379,7 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit) {
                                     M3Text(
                                         buildString {
                                             append(formatBytes(group.totalBytes))
-                                            if (group.cookieCount > 0) append(" • ${group.cookieCount} 个 Cookie")
+                                            if (group.cookieCount > 0) append(" | ${group.cookieCount} 个 Cookie")
                                         },
                                         style = M3MaterialTheme.typography.bodySmall,
                                         color = M3MaterialTheme.colorScheme.onSurfaceVariant,
@@ -372,7 +406,7 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit) {
                                                 M3Text(
                                                     buildString {
                                                         append(formatBytes(site.totalBytes))
-                                                        if (site.cookieCount > 0) append(" • ${site.cookieCount} 个 Cookie")
+                                                        if (site.cookieCount > 0) append(" | ${site.cookieCount} 个 Cookie")
                                                     },
                                                     style = M3MaterialTheme.typography.bodySmall,
                                                     color = M3MaterialTheme.colorScheme.onSurfaceVariant,
@@ -382,6 +416,196 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit) {
                                         }
                                     }
                                     Spacer(Modifier.height(6.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+// ============================================================
+// 单个站点的 Cookie 列表
+// ============================================================
+
+internal data class CookieItem(val name: String, val value: String)
+
+internal fun loadCookies(origin: String): List<CookieItem> {
+    val raw = runCatching { CookieManager.getInstance().getCookie(origin) }.getOrNull().orEmpty()
+    return raw.split(';').mapNotNull { part ->
+        val trimmed = part.trim()
+        if (trimmed.isBlank()) return@mapNotNull null
+        CookieItem(trimmed.substringBefore('='), trimmed.substringAfter('=', ""))
+    }
+}
+
+@Composable
+fun CookieDetailPage(onBack: () -> Unit) {
+    if (LocalUiMode.current == UiMode.Miuix) CookieDetailPageMiuix(onBack) else CookieDetailPageMaterial(onBack)
+}
+
+@Composable
+private fun CookieDetailPageMiuix(onBack: () -> Unit) {
+    val origin = CookieDetailNav.origin.orEmpty()
+    val host = CookieDetailNav.host ?: origin
+    var cookies by remember { mutableStateOf(loadCookies(origin)) }
+    var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    Column(modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+        TopAppBar(
+            title = host,
+            largeTitle = host,
+            color = Color.Transparent,
+            defaultWindowInsetsPadding = true,
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(MiuixIcons.ChevronBackward, contentDescription = "返回", tint = MiuixTheme.colorScheme.onSurface)
+                }
+            },
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            overscrollEffect = null,
+        ) {
+            if (cookies.isEmpty()) {
+                item(key = "empty") {
+                    Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), contentAlignment = Alignment.Center) {
+                            Text("该站点没有 Cookie", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        }
+                    }
+                }
+            }
+            items(cookies, key = { it.name }) { cookie ->
+                val open = cookie.name in expanded
+                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable { expanded = if (open) expanded - cookie.name else expanded + cookie.name }
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = cookie.name,
+                            style = MiuixTheme.textStyles.headline1,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                            color = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = {
+                            runCatching {
+                                val cm = CookieManager.getInstance()
+                                cm.setCookie(origin, "${cookie.name}=; Max-Age=0; Path=/")
+                                cm.flush()
+                            }
+                            cookies = loadCookies(origin)
+                        }) {
+                            Icon(MiuixIcons.Delete, contentDescription = "删除", tint = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.size(18.dp))
+                        }
+                        Icon(
+                            imageVector = MiuixIcons.ChevronForward,
+                            contentDescription = null,
+                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = if (open) 90f else -90f },
+                        )
+                    }
+                    AnimatedVisibility(visible = open) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                            CookieFieldMiuix("名称", cookie.name)
+                            CookieFieldMiuix("内容", cookie.value)
+                            CookieFieldMiuix("域", host)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CookieFieldMiuix(label: String, value: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text(label, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
+        Spacer(Modifier.height(2.dp))
+        Text(value, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun CookieDetailPageMaterial(onBack: () -> Unit) {
+    val origin = CookieDetailNav.origin.orEmpty()
+    val host = CookieDetailNav.host ?: origin
+    var cookies by remember { mutableStateOf(loadCookies(origin)) }
+    var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val bg = M3MaterialTheme.colorScheme.surface
+
+    M3Scaffold(
+        containerColor = bg,
+        topBar = {
+            M3TopAppBar(
+                title = { M3Text(host) },
+                navigationIcon = {
+                    M3IconButton(onClick = onBack) {
+                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                    }
+                },
+                colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
+            )
+        },
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).overScrollVertical(),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            overscrollEffect = null,
+        ) {
+            if (cookies.isEmpty()) {
+                item(key = "empty") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp), contentAlignment = Alignment.Center) {
+                        M3Text("该站点没有 Cookie", style = M3MaterialTheme.typography.bodyMedium, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            items(cookies, key = { it.name }) { cookie ->
+                val open = cookie.name in expanded
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    M3Surface(shape = RoundedCornerShape(16.dp), color = M3MaterialTheme.colorScheme.surface) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 56.dp)
+                                    .clickable { expanded = if (open) expanded - cookie.name else expanded + cookie.name }
+                                    .padding(horizontal = 16.dp, vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                M3Text(cookie.name, modifier = Modifier.weight(1f), style = M3MaterialTheme.typography.bodyLarge)
+                                M3IconButton(onClick = {
+                                    runCatching {
+                                        val cm = CookieManager.getInstance()
+                                        cm.setCookie(origin, "${cookie.name}=; Max-Age=0; Path=/")
+                                        cm.flush()
+                                    }
+                                    cookies = loadCookies(origin)
+                                }) { M3Icon(Icons.Filled.Delete, contentDescription = "删除") }
+                                M3Text(if (open) "收起" else "展开", style = M3MaterialTheme.typography.bodySmall)
+                            }
+                            AnimatedVisibility(visible = open) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp)) {
+                                    M3Text("名称", style = M3MaterialTheme.typography.bodyMedium)
+                                    M3Text(cookie.name, style = M3MaterialTheme.typography.bodySmall, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(Modifier.height(8.dp))
+                                    M3Text("内容", style = M3MaterialTheme.typography.bodyMedium)
+                                    M3Text(cookie.value, style = M3MaterialTheme.typography.bodySmall, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(Modifier.height(8.dp))
+                                    M3Text("域", style = M3MaterialTheme.typography.bodyMedium)
+                                    M3Text(host, style = M3MaterialTheme.typography.bodySmall, color = M3MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }

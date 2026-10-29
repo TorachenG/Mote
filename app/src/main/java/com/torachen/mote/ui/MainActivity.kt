@@ -3835,7 +3835,15 @@ private fun RenderPageContent(
                 },
             )
             "settings_web_permissions" -> WebPermissionsPage(onBack = { onPop() })
-            "settings_cookie_manager" -> CookieManagerPage(onBack = { onPop() })
+            "settings_cookie_manager" -> CookieManagerPage(
+                onBack = { onPop() },
+                onOpenOrigin = { origin, host ->
+                    CookieDetailNav.origin = origin
+                    CookieDetailNav.host = host
+                    onPush("settings_cookie_origin")
+                },
+            )
+            "settings_cookie_origin" -> CookieDetailPage(onBack = { onPop() })
             "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
             "settings_personal_info" -> SettingsPersonalInfoPage(
                 onBack = { onPop() },
