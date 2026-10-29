@@ -99,6 +99,8 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.TabRowWithContour
+import androidx.compose.material3.DropdownMenu as M3DropdownMenu
+import androidx.compose.material3.DropdownMenuItem as M3DropdownMenuItem
 import androidx.compose.material3.PrimaryTabRow as M3PrimaryTabRow
 import androidx.compose.material3.Tab as M3Tab
 import top.yukonga.miuix.kmp.basic.DropdownEntry
@@ -2979,6 +2981,60 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                     )
                 }
             }
+            item(key = "site_perms") {
+                WebSecuritySectionHeader("网页权限")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    var menuFor by remember { mutableStateOf<String?>(null) }
+                    val perms = listOf(
+                        WebPermissionStore.LOCATION to "定位",
+                        WebPermissionStore.CAMERA to "相机",
+                        WebPermissionStore.MICROPHONE to "麦克风",
+                        WebPermissionStore.AUTOPLAY to "播放声音",
+                        WebPermissionStore.CLIPBOARD to "剪贴板",
+                        WebPermissionStore.POPUP_WINDOW to "新建窗口",
+                        WebPermissionStore.DIALOG to "弹出提示",
+                        WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
+                    )
+                    MoteSegmentedColumn(
+                        color = M3MaterialTheme.colorScheme.surface,
+                        content = perms.map { (kind, name) ->
+                            {
+                                val mode = WebPermissionStore.siteMode(context, host, kind)
+                                    ?: WebPermissionStore.defaultMode(kind)
+                                Box {
+                                    M3SegmentArrowItem(
+                                        title = "$name：${WebPermissionStore.label(mode)}",
+                                        onClick = { menuFor = kind },
+                                    )
+                                    M3DropdownMenu(
+                                        expanded = menuFor == kind,
+                                        onDismissRequest = { menuFor = null },
+                                    ) {
+                                        listOf(
+                                            "询问" to WebPermissionStore.ASK,
+                                            "允许" to WebPermissionStore.ALLOW,
+                                            "拒绝" to WebPermissionStore.DENY,
+                                        ).forEach { (label, value) ->
+                                            M3DropdownMenuItem(
+                                                text = { M3Text(label) },
+                                                onClick = {
+                                                    WebPermissionStore.setSiteMode(context, host, kind, value)
+                                                    menuFor = null
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
         }
     }
 }
@@ -3326,16 +3382,38 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
                         .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                 ) {
+                    var menuFor by remember { mutableStateOf<String?>(null) }
                     MoteSegmentedColumn(
                         color = M3MaterialTheme.colorScheme.surface,
                         content = items.map { (kind, name) ->
                             {
                                 @Suppress("UNUSED_EXPRESSION")
                                 version
-                                M3SegmentArrowItem(
-                                    title = "$name：${WebPermissionStore.label(WebPermissionStore.mode(context, kind))}",
-                                    onClick = { pick(kind) },
-                                )
+                                Box {
+                                    M3SegmentArrowItem(
+                                        title = "$name：${WebPermissionStore.label(WebPermissionStore.mode(context, kind))}",
+                                        onClick = { menuFor = kind },
+                                    )
+                                    M3DropdownMenu(
+                                        expanded = menuFor == kind,
+                                        onDismissRequest = { menuFor = null },
+                                    ) {
+                                        listOf(
+                                            "询问" to WebPermissionStore.ASK,
+                                            "允许" to WebPermissionStore.ALLOW,
+                                            "拒绝" to WebPermissionStore.DENY,
+                                        ).forEach { (label, mode) ->
+                                            M3DropdownMenuItem(
+                                                text = { M3Text(label) },
+                                                onClick = {
+                                                    WebPermissionStore.setMode(context, kind, mode)
+                                                    menuFor = null
+                                                    version++
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         },
                     )
