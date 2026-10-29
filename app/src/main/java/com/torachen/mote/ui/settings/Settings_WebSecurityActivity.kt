@@ -550,6 +550,17 @@ private fun SettingsWebSecurityMiuix(
                                     )
                                 }
                                 SearchableItem(
+                                    title = "查看所有 Cookie 与数据",
+                                    pageRoute = "settings_web_security",
+                                    pageTitle = "网页安全中心",
+                                    itemKey = "settings_web_security_cookie_manager",
+                                ) {
+                                    ArrowPreference(
+                                        title = "查看所有 Cookie 与数据",
+                                        onClick = actions.onOpenCookieManager,
+                                    )
+                                }
+                                SearchableItem(
                                     title = "网页权限",
                                     pageRoute = "settings_web_security",
                                     pageTitle = "网页安全中心",
@@ -563,17 +574,6 @@ private fun SettingsWebSecurityMiuix(
                                 }
                             }
 
-                                SearchableItem(
-                                    title = "查看所有 Cookie 与数据",
-                                    pageRoute = "settings_web_security",
-                                    pageTitle = "网页安全中心",
-                                    itemKey = "settings_web_security_cookie_manager",
-                                ) {
-                                    ArrowPreference(
-                                        title = "查看所有 Cookie 与数据",
-                                        onClick = actions.onOpenCookieManager,
-                                    )
-                                }
                             SmallTitle("防护")
                             Card(
                                 modifier = Modifier
