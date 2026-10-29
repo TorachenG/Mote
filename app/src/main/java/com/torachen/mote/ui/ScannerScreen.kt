@@ -3150,7 +3150,9 @@ private fun TopLanguageBarContent(
                 AnimatedContent(
                     targetState = sourceLang,
                     transitionSpec = {
-                        (slideInHorizontally(initialOffsetX = { -it }) + fadeIn()) togetherWith (slideOutHorizontally(targetOffsetX = { it }) + fadeOut())
+                        (slideInHorizontally(initialOffsetX = { -it }) + fadeIn()) togetherWith
+                            (slideOutHorizontally(targetOffsetX = { it }) + fadeOut()) using
+                            SizeTransform(clip = false)
                     },
                     label = "sourceLangAnim"
                 ) { text ->
@@ -3197,7 +3199,9 @@ private fun TopLanguageBarContent(
                 AnimatedContent(
                     targetState = targetLang,
                     transitionSpec = {
-                        (slideInHorizontally(initialOffsetX = { it }) + fadeIn()) togetherWith (slideOutHorizontally(targetOffsetX = { -it }) + fadeOut())
+                        (slideInHorizontally(initialOffsetX = { it }) + fadeIn()) togetherWith
+                            (slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()) using
+                            SizeTransform(clip = false)
                     },
                     label = "targetLangAnim"
                 ) { text ->

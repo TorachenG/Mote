@@ -681,7 +681,10 @@ private fun SettingsSpaceManagementMiuix(
                                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                     AnimatedContent(
                                         targetState = formatSizeMb(displayTotalBytes),
-                                        transitionSpec = { (fadeIn(tween(180, easing = SmoothEase)) + scaleIn(animationSpec = tween(200, easing = SmoothEase), initialScale = 0.92f)).togetherWith(fadeOut(tween(120, easing = SmoothEase)) + scaleOut(animationSpec = tween(140, easing = SmoothEase), targetScale = 1.04f)) },
+                                        transitionSpec = {
+                                            ((fadeIn(tween(180, easing = SmoothEase)) + scaleIn(animationSpec = tween(200, easing = SmoothEase), initialScale = 0.92f)).togetherWith(fadeOut(tween(120, easing = SmoothEase)) + scaleOut(animationSpec = tween(140, easing = SmoothEase), targetScale = 1.04f))) using
+                                                androidx.compose.animation.SizeTransform(clip = false)
+                                        },
                                         label = "spaceTotalAnim",
                                     ) { text ->
                                         Text(text = text, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.onSurface)
@@ -929,7 +932,10 @@ private fun SettingsSpaceManagementMaterial(
                                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                                     AnimatedContent(
                                         targetState = formatSizeMb(displayTotalBytes),
-                                        transitionSpec = { (fadeIn(tween(180, easing = SmoothEase)) + scaleIn(animationSpec = tween(200, easing = SmoothEase), initialScale = 0.92f)).togetherWith(fadeOut(tween(120, easing = SmoothEase)) + scaleOut(animationSpec = tween(140, easing = SmoothEase), targetScale = 1.04f)) },
+                                        transitionSpec = {
+                                            ((fadeIn(tween(180, easing = SmoothEase)) + scaleIn(animationSpec = tween(200, easing = SmoothEase), initialScale = 0.92f)).togetherWith(fadeOut(tween(120, easing = SmoothEase)) + scaleOut(animationSpec = tween(140, easing = SmoothEase), targetScale = 1.04f))) using
+                                                androidx.compose.animation.SizeTransform(clip = false)
+                                        },
                                         label = "spaceTotalAnim",
                                     ) { text -> M3Text(text = text, fontSize = 40.sp, fontWeight = FontWeight.Bold, color = M3MaterialTheme.colorScheme.onSurface) }
                                 }

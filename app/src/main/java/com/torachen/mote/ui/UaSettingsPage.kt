@@ -100,6 +100,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Send
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -246,14 +247,23 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                             if (customList.isEmpty()) {
                                 Box(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Text(
-                                        "暂无自定义浏览器标识",
-                                        fontSize = 14.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = MiuixIcons.Send,
+                                            contentDescription = null,
+                                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            modifier = Modifier.size(48.dp),
+                                        )
+                                        Spacer(Modifier.height(12.dp))
+                                        Text(
+                                            "暂无自定义浏览器标识",
+                                            fontSize = 14.sp,
+                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                        )
+                                    }
                                 }
                             } else {
                                 customList.forEach { ua ->
@@ -334,9 +344,19 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                         .graphicsLayer {
                             shape = RoundedCornerShape(28.dp)
                             shadowElevation = 24.dp.toPx()
+                            ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                            spotShadowColor = Color.Transparent
                         }
                         .clip(RoundedCornerShape(28.dp))
-                        .background(MiuixTheme.colorScheme.surfaceContainer)
+                        .then(
+                            buildBackCardMaterialModifier(
+                                materialStyle = materialStyle,
+                                blurSupported = blurSupported,
+                                backdrop = backdrop,
+                                themeIsDark = themeIsDark,
+                                shape = RoundedCornerShape(28.dp),
+                            )
+                        )
                         .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
