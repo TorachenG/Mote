@@ -1361,6 +1361,132 @@ private fun SettingsLayoutMiuix(
                                     contentPadding = PaddingValues(top = contentTopPadding),
                                     overscrollEffect = null,
                                 ) {
+                                    item(key = "browser_layout_content") {
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            ThemePreview()
+
+                                            SmallTitle("标题栏")
+                                            Card(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 12.dp)
+                                                    .padding(bottom = 12.dp),
+                                            ) {
+                                                WindowDropdownPreference(
+                                                    title = "标题栏位置",
+                                                    entries = listOf(
+                                                        DropdownEntry(
+                                                            items = listOf(
+                                                                DropdownItem(
+                                                                    text = "顶部",
+                                                                    selected = headerPosition == 0,
+                                                                    onClick = {
+                                                                        headerPosition = 0
+                                                                        prefs.edit().putInt(KEY_HEADER_POSITION, 0).apply()
+                                                                    },
+                                                                ),
+                                                                DropdownItem(
+                                                                    text = "底部",
+                                                                    selected = headerPosition == 1,
+                                                                    onClick = {
+                                                                        headerPosition = 1
+                                                                        prefs.edit().putInt(KEY_HEADER_POSITION, 1).apply()
+                                                                    },
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                    collapseOnSelection = true,
+                                                )
+                                                WindowDropdownPreference(
+                                                    title = "输入框显示",
+                                                    entries = listOf(
+                                                        DropdownEntry(
+                                                            items = listOf(
+                                                                DropdownItem(
+                                                                    text = "网页地址",
+                                                                    selected = headerTextMode == 0,
+                                                                    onClick = {
+                                                                        headerTextMode = 0
+                                                                        prefs.edit().putInt(KEY_HEADER_TEXT, 0).apply()
+                                                                    },
+                                                                ),
+                                                                DropdownItem(
+                                                                    text = "网页标题",
+                                                                    selected = headerTextMode == 1,
+                                                                    onClick = {
+                                                                        headerTextMode = 1
+                                                                        prefs.edit().putInt(KEY_HEADER_TEXT, 1).apply()
+                                                                    },
+                                                                ),
+                                                            ),
+                                                        ),
+                                                    ),
+                                                    collapseOnSelection = true,
+                                                )
+                                            }
+
+                                            SmallTitle("工具栏")
+                                            Card(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 12.dp)
+                                                    .padding(bottom = 12.dp),
+                                            ) {
+                                                WindowDropdownPreference(
+                                                    title = "工具栏中间位",
+                                                    entries = listOf(
+                                                        DropdownEntry(
+                                                            items = LAYOUT_TOOL_OPTIONS.mapIndexed { index, label ->
+                                                                DropdownItem(
+                                                                    text = label,
+                                                                    selected = layoutToolIndex == index,
+                                                                    onClick = {
+                                                                        layoutToolIndex = index
+                                                                        prefs.edit().putInt(KEY_LAYOUT_TOOL, index).apply()
+                                                                    },
+                                                                )
+                                                            },
+                                                        ),
+                                                    ),
+                                                    collapseOnSelection = true,
+                                                )
+                                                SwitchPreference(
+                                                    title = "工具栏功能建议",
+                                                    summary = "开启后，会在合适的时候自动更换工具栏中间的功能",
+                                                    checked = layoutToolSuggest,
+                                                    onCheckedChange = {
+                                                        layoutToolSuggest = it
+                                                        prefs.edit().putBoolean(KEY_LAYOUT_TOOL_SUGGEST, it).apply()
+                                                    },
+                                                )
+                                            }
+
+                                            SmallTitle("无标题卡片")
+                                            Card(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 12.dp)
+                                                    .padding(bottom = 12.dp),
+                                            ) {
+                                                ArrowPreference(
+                                                    title = "工具弹窗自定义",
+                                                    onClick = {},
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            2 -> {
+                                LazyColumn(
+                                    state = listState2,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .nestedScroll(scrollBehavior.nestedScrollConnection)
+                                        .scrollEndHaptic()
+                                        .overScrollVertical(),
+                                    contentPadding = PaddingValues(top = contentTopPadding),
+                                    overscrollEffect = null,
+                                ) {
                                     item(key = "newtab_content") {
                                         Column(modifier = Modifier.fillMaxWidth()) {
                                             BrowserHomePreview()
@@ -2069,6 +2195,14 @@ private fun SettingsLayoutMaterial(
                                 }
                             }
 
+                        }
+                    }
+
+                    2 -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 24.dp),
+                        ) {
                             item(key = "browser_preview_material") {
                                 BrowserHomePreviewMaterial()
                             }
