@@ -3192,6 +3192,9 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
         WebPermissionStore.MICROPHONE to "麦克风",
         WebPermissionStore.AUTOPLAY to "播放声音",
         WebPermissionStore.CLIPBOARD to "剪贴板",
+        WebPermissionStore.POPUP_WINDOW to "新建窗口",
+        WebPermissionStore.DIALOG to "弹出提示",
+        WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
     )
 
     fun pick(kind: String) {
@@ -3272,6 +3275,9 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
         WebPermissionStore.MICROPHONE to "麦克风",
         WebPermissionStore.AUTOPLAY to "播放声音",
         WebPermissionStore.CLIPBOARD to "剪贴板",
+        WebPermissionStore.POPUP_WINDOW to "新建窗口",
+        WebPermissionStore.DIALOG to "弹出提示",
+        WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
     )
 
     fun pick(kind: String) {
