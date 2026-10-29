@@ -3,6 +3,12 @@ package com.torachen.mote.ui
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -271,7 +277,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit, onOpenOrigin: (String, St
                                         .clickable(
                                             interactionSource = remember { MutableInteractionSource() },
                                             indication = null,
-                                            onClick = { clearCookieSite(site) },
+                                            onClick = { onOpenOrigin(site.origin, site.host) },
                                         )
                                         .padding(horizontal = 16.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -329,16 +335,30 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
         containerColor = bg,
         topBar = {
             M3TopAppBar(
-                title = { M3Text("Cookie 与数据") },
+                title = {
+                    M3Text(if (selecting) "已选择 ${selected.size} 个网站" else "Cookie 与数据")
+                },
                 navigationIcon = {
                     M3IconButton(onClick = { if (selecting) { selecting = false; selected = emptySet() } else onBack() }) {
-                        M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
+                        M3Icon(
+                            if (selecting) Icons.Filled.Close else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = if (selecting) "关闭" else "返回",
+                        )
+                    }
+                },
+                actions = {
+                    if (selecting) {
+                        val all = groups.map { it.domain }.toSet()
+                        M3IconButton(onClick = { selected = if (selected.size == all.size) emptySet() else all }) {
+                            M3Icon(Icons.Filled.SelectAll, contentDescription = "全选")
+                        }
                     }
                 },
                 colors = M3TopAppBarDefaults.topAppBarColors(containerColor = bg),
             )
         },
     ) { innerPadding ->
+        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(innerPadding).overScrollVertical(),
             contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
@@ -397,7 +417,7 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable { clearCookieSite(site) }
+                                                .clickable { onOpenOrigin(site.origin, site.host) }
                                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
@@ -422,6 +442,30 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
                     }
                 }
             }
+        }
+
+        if (selecting) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(M3MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                M3IconButton(onClick = {
+                    groups.filter { it.domain in selected }.forEach { g -> g.sites.forEach { clearCookieSite(it) } }
+                    selecting = false
+                    selected = emptySet()
+                    loadCookieGroups { groups = it }
+                }) {
+                    M3Icon(Icons.Filled.Delete, contentDescription = "删除", tint = M3MaterialTheme.colorScheme.error)
+                }
+            }
+        }
         }
     }
 }
