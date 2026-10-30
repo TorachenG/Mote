@@ -330,7 +330,7 @@ internal class FileManagerController(
         if (!isSelected(entry)) selected = selected + entry
     }
 
-    var paintStartIndex = -1
+    var paintStartIndex by mutableIntStateOf(-1)
     private var paintTarget = false
     private var paintRowHeightPx = 0f
     /** 涂抹过程中手指在窗口坐标系中的 Y，用于边缘自动滚动 */
