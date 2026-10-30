@@ -109,7 +109,7 @@ import androidx.compose.material3.TopAppBarDefaults as M3TopAppBarDefaults
 // 常量
 // ============================================================
 
-private const val TOP_BAR_BLUR_RADIUS = 16f
+private const val TOP_BAR_BLUR_RADIUS = 25f
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
 

@@ -559,7 +559,7 @@ fun ToolMenuCustomizePage(onBack: () -> Unit) {
                                 Modifier.progressiveTextureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = 16f,
+                                    blurRadius = 24f,
                                     gradient = ProgressiveBlur.Top,
                                     colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                                 )
@@ -567,7 +567,7 @@ fun ToolMenuCustomizePage(onBack: () -> Unit) {
                                 Modifier.textureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = 16f,
+                                    blurRadius = 24f,
                                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                                     colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                                 )

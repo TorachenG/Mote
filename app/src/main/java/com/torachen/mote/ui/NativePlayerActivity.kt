@@ -236,7 +236,7 @@ private const val UI_SPRING_DAMPING = 0.85f
 private const val UI_SPRING_STIFFNESS = 800f
 private const val SIDE_UI_SLIDE_DISTANCE_DP = 400f
 private const val CONTROL_BLUR_RADIUS = 15f
-private const val PANEL_BLUR_RADIUS = 16f
+private const val PANEL_BLUR_RADIUS = 25f
 private const val ASPECT_ANIM_MS = 450
 
 private const val UI_TOGGLE_ANIM_MS = 220
@@ -630,7 +630,7 @@ private fun buildPlayerMaterialModifier(
                 .textureBlur(
                     backdrop = backdrop,
                     shape = shape,
-                    blurRadius = 16f,
+                    blurRadius = 25f,
                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                     colors = blurColors,
                     highlight = highlight,

@@ -284,7 +284,7 @@ private const val SEARCH_MORPH_MS = 300
 private const val HISTORY_DELAY_MS = 100L
 private val HISTORY_GAP = 10.dp
 
-private const val HOME_BLUR_RADIUS = 16f
+private const val HOME_BLUR_RADIUS = 25f
 
 private val SWIPE_WINDOW_TRIGGER = 72.dp
 
@@ -1149,7 +1149,7 @@ private fun buildMaterialBlurModifier(
                 .textureBlur(
                     backdrop = backdrop,
                     shape = shape,
-                    blurRadius = 16f,
+                    blurRadius = 25f,
                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                     colors = blurColors,
                     highlight = highlight,

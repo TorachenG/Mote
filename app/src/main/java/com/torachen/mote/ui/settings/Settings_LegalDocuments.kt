@@ -75,7 +75,7 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 // 法律文档：开放源代码许可 / 第三方源代码许可
 // ============================================================
 
-private const val LEGAL_DOC_TOP_BAR_BLUR_RADIUS = 16f
+private const val LEGAL_DOC_TOP_BAR_BLUR_RADIUS = 25f
 private const val LEGAL_DOC_TOP_BAR_BLEND_ALPHA = 0.8f
 private val LEGAL_DOC_TOP_BAR_FALLBACK_HEIGHT = 128.dp
 private val LegalDocSmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)

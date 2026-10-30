@@ -170,7 +170,7 @@ import kotlinx.coroutines.withContext
 // 常量
 // ============================================================
 
-private const val TOP_BAR_BLUR_RADIUS = 16f
+private const val TOP_BAR_BLUR_RADIUS = 25f
 private const val TAB_BLUR_RADIUS = 15f
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp

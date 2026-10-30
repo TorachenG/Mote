@@ -205,7 +205,7 @@ internal enum class FileCategory(val label: String, val extensions: Set<String>)
 
 internal enum class PendingOp { COPY, MOVE }
 
-private const val FM_BLUR_RADIUS = 16f
+private const val FM_BLUR_RADIUS = 25f
 private const val FM_BLEND_ALPHA = 0.8f
 private val FM_FALLBACK_HEIGHT = 128.dp
 
