@@ -60,7 +60,7 @@
   <div class="wrap" style="padding-top:12px">
     <div class="page-head">
       <h1>更新日志</h1>
-      <p class="sub">按发布时间倒序，内容来自 GitHub Releases</p>
+      <p class="sub">按发布时间倒序，内容来自 GitHub / Gitee Releases（按访问地区自动选择，失败自动切换）</p>
     </div>
 
     <div id="list">
@@ -69,11 +69,12 @@
   </div>
 
   <footer>
-    源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" target="_blank" rel="noopener">NOTICE</a><br>
+    源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" data-mote-src="license" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" data-mote-src="notice" target="_blank" rel="noopener">NOTICE</a><br>
     版权所有 © 2026 Torachen
   </footer>
 
-  <script src="assets/nav.js"></script>
+  <script src="assets/source.js"></script>
+<script src="assets/nav.js"></script>
   <script src="assets/doc.js"></script>
   <script>
   (function () {
@@ -81,8 +82,8 @@
     const p = (n) => String(n).padStart(2, '0');
 
     function card(r) {
-      const tag = (r.tag_name || '').replace(/^v/i, '') || '未命名版本';
-      const d = r.published_at ? new Date(r.published_at) : null;
+      const tag = r.tag || '未命名版本';
+      const d = r.publishedAt ? new Date(r.publishedAt) : null;
       const date = d ? d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) : '';
       const body = window.renderMarkdown(r.body || '') || '<p>该版本没有附加说明。</p>';
       const badge = r.prerelease ? '<span class="release-badge">预发布</span>' : '';
@@ -96,13 +97,7 @@
       '</div>';
     }
 
-    fetch('https://api.github.com/repos/TorachenG/Mote/releases?per_page=30', {
-      headers: { Accept: 'application/vnd.github+json' }
-    })
-      .then(function (res) {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.json();
-      })
+    MoteSource.releases(30)
       .then(function (items) {
         if (!Array.isArray(items) || !items.length) {
           list.innerHTML = '<div class="card"><div class="state">还没有发布记录。</div></div>';
@@ -111,9 +106,13 @@
         list.innerHTML = items.map(card).join('');
       })
       .catch(function () {
-        list.innerHTML = '<div class="card"><div class="state">' +
-          '加载失败，请前往 <a href="https://github.com/TorachenG/Mote/releases" target="_blank" rel="noopener">GitHub Releases</a> 查看。' +
-          '</div></div>';
+        MoteSource.releasesPageUrl().then(function (url) {
+          list.innerHTML = '<div class="card"><div class="state">' +
+            '加载失败，请前往 <a href="' + url + '" target="_blank" rel="noopener">Releases</a> 查看。' +
+            '</div></div>';
+        }).catch(function () {
+          list.innerHTML = '<div class="card"><div class="state">加载失败，请稍后重试。</div></div>';
+        });
       });
   })();
   </script>

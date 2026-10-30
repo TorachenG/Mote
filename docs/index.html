@@ -158,10 +158,11 @@
   </main>
 
   <footer>
-    源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" target="_blank" rel="noopener">NOTICE</a><br>
+    源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" data-mote-src="license" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" data-mote-src="notice" target="_blank" rel="noopener">NOTICE</a><br>
     版权所有 © 2026 Torachen
   </footer>
 
+<script src="assets/source.js"></script>
 <script>
 (async function () {
   const verEl = document.getElementById('ver');
@@ -169,22 +170,23 @@
   const sizeEl = document.getElementById('size');
   const dl = document.getElementById('dl');
   try {
-    const res = await fetch('https://api.github.com/repos/TorachenG/Mote/releases/latest', {
-      headers: { Accept: 'application/vnd.github+json' }
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    const apk = (data.assets || []).find(a => /\.apk$/i.test(a.name));
-    const tag = (data.tag_name || '').replace(/^v/i, '');
-    if (tag) verEl.textContent = tag;
-    if (data.published_at) {
-      const d = new Date(data.published_at);
-      const p = n => String(n).padStart(2, '0');
+    const p = n => String(n).padStart(2, '0');
+
+    MoteSource.releasesPageUrl().then(url => { dl.href = url; }).catch(() => {});
+
+    const rel = await MoteSource.latestRelease();
+    if (!rel) return;
+    if (rel.tag) verEl.textContent = rel.tag;
+    if (rel.publishedAt) {
+      const d = new Date(rel.publishedAt);
       dateEl.textContent = `${d.getFullYear()} / ${p(d.getMonth() + 1)} / ${p(d.getDate())}`;
     }
+    const apk = (rel.assets || []).find(a => /\.apk$/i.test(a.name || ''));
     if (apk) {
-      sizeEl.textContent = `（${(apk.size / 1048576).toFixed(1)}MB）`;
-      dl.href = apk.browser_download_url;
+      if (apk.size) sizeEl.textContent = `（${(apk.size / 1048576).toFixed(1)}MB）`;
+      dl.href = apk.url;
+    } else if (rel.pageUrl) {
+      dl.href = rel.pageUrl;
     }
   } catch (e) {}
 })();
