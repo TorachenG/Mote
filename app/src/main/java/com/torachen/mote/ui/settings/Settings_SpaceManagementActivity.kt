@@ -733,7 +733,11 @@ private fun SettingsSpaceManagementMiuix(
             }
 
             // 顶部栏与菜单
-            Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).then(if (blurSupported && backdrop != null && materialStyle != 0) { if (progressiveTitleBlur) Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(curve = 2.2f), colors = BlurDefaults.blurColors(
+            Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).then(if (blurSupported && backdrop != null && materialStyle != 0) { if (progressiveTitleBlur) Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(
+     startFraction = 0.35f,
+     endFraction = 1.35f,
+     curve = 2.2f,
+ ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
         )) else Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries)) } else Modifier.background(surfaceColor)).statusBarsPadding().onGloballyPositioned { coords -> val bottomPx = coords.boundsInWindow().bottom.toInt(); if (bottomPx != topBarBottomPx) { topBarBottomPx = bottomPx } }) {
                 TopAppBar(
@@ -1143,7 +1147,11 @@ private fun CacheSettingsMiuix(onBack: () -> Unit) {
                 SettingsPageAutoScroll(lazyListState = listState, pageRoute = "settings_cache_settings", contentTopPadding = contentTopPadding)
             }
 
-            Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).then(if (blurSupported && backdrop != null && materialStyle != 0) { if (progressiveTitleBlur) Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(curve = 2.2f), colors = BlurDefaults.blurColors(
+            Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).then(if (blurSupported && backdrop != null && materialStyle != 0) { if (progressiveTitleBlur) Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(
+     startFraction = 0.35f,
+     endFraction = 1.35f,
+     curve = 2.2f,
+ ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
         )) else Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries)) } else Modifier.background(surfaceColor)).statusBarsPadding().onGloballyPositioned { coords -> val bottomPx = coords.boundsInWindow().bottom.toInt(); if (bottomPx != topBarBottomPx) { topBarBottomPx = bottomPx } }) {
                 TopAppBar(

@@ -1238,7 +1238,11 @@ private fun DownloadManagerScreenMiuix(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
                                     blurRadius = 10f,
-                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                    gradient = ProgressiveBlur.Top.copy(
+                                        startFraction = 0.35f,
+                                        endFraction = 1.35f,
+                                        curve = 2.2f,
+                                    ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
                                     ),
@@ -1664,7 +1668,11 @@ private fun TaskDetailScreenMiuix(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
                                     blurRadius = 10f,
-                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                    gradient = ProgressiveBlur.Top.copy(
+                                        startFraction = 0.35f,
+                                        endFraction = 1.35f,
+                                        curve = 2.2f,
+                                    ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
                                     ),
@@ -3054,7 +3062,11 @@ private fun DownloadSettingsMiuix(onBack: () -> Unit) {
                                     backdrop = backdrop,
                                     shape = RectangleShape,
                                     blurRadius = 10f,
-                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                    gradient = ProgressiveBlur.Top.copy(
+                                        startFraction = 0.35f,
+                                        endFraction = 1.35f,
+                                        curve = 2.2f,
+                                    ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
                                     ),

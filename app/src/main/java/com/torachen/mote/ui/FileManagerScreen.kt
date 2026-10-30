@@ -1952,7 +1952,7 @@ private fun FileManagerMiuix(
                                 gradient = ProgressiveBlur(
                                     angle = 90f,
                                     startFraction = headerFraction,
-                                    endFraction = 1f, curve = 2.2f,
+                                    endFraction = 1.35f, curve = 2.2f,
                                 ),
                                 colors = BlurDefaults.blurColors(
                                     blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
