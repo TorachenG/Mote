@@ -130,6 +130,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.compose.animation.core.animateFloatAsState
@@ -2987,7 +2988,7 @@ private fun FileManagerMaterial(
             )
         }
 
-        Box(modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 20.dp)) {
+        Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f).padding(bottom = navBottom + 20.dp)) {
             androidx.compose.animation.AnimatedVisibility(
                 visible = controller.selected.isNotEmpty(),
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),

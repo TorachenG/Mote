@@ -1406,8 +1406,7 @@ private fun WhitelistPaneMiuix(
                     ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                     spotShadowColor = Color.Transparent
                 }
-                .clip(RoundedCornerShape(28.dp))
-                .background(MiuixTheme.colorScheme.surfaceContainer)
+                .background(MiuixTheme.colorScheme.surfaceContainer, RoundedCornerShape(28.dp))
                 .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
@@ -2126,8 +2125,7 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                     ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                     spotShadowColor = Color.Transparent
                 }
-                .clip(RoundedCornerShape(28.dp))
-                .background(MiuixTheme.colorScheme.surfaceContainer)
+                .background(MiuixTheme.colorScheme.surfaceContainer, RoundedCornerShape(28.dp))
                 .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,

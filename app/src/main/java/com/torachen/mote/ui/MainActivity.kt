@@ -14014,7 +14014,9 @@ private fun HistorySheet(
                 visible = multiSelect,
                 enter = slideInVertically(animationSpec = tween(220), initialOffsetY = { it + 40 }) + fadeIn(tween(180)),
                 exit = slideOutVertically(animationSpec = tween(200), targetOffsetY = { it + 40 }) + fadeOut(tween(150)),
-                modifier = Modifier.align(Alignment.BottomCenter),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(10f),
             ) {
                 Box(
                     modifier = Modifier
@@ -14031,7 +14033,6 @@ private fun HistorySheet(
                                 ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                                 spotShadowColor = Color.Transparent
                             }
-                            .clip(RoundedCornerShape(28.dp))
                             .background(color = MiuixTheme.colorScheme.surfaceContainer, shape = RoundedCornerShape(28.dp))
                             .padding(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -14667,7 +14668,9 @@ private fun BookmarkSheet(
                     animationSpec = tween(200),
                     targetOffsetY = { it + 40 },
                 ) + fadeOut(tween(150)),
-                modifier = Modifier.align(Alignment.BottomCenter),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(10f),
             ) {
                 Box(
                     modifier = Modifier
@@ -14684,7 +14687,6 @@ private fun BookmarkSheet(
                                 ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                                 spotShadowColor = Color.Transparent
                             }
-                            .clip(RoundedCornerShape(28.dp))
                             .background(
                                 color = MiuixTheme.colorScheme.surfaceContainer,
                                 shape = RoundedCornerShape(28.dp),

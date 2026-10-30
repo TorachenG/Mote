@@ -1185,7 +1185,6 @@ private fun PasswordManagerPageMiuix(onBack: () -> Unit) {
                         ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                         spotShadowColor = Color.Transparent
                     }
-                    .clip(RoundedCornerShape(28.dp))
                     .then(
                         buildBackCardMaterialModifier(
                             materialStyle = materialStyle,
@@ -1819,6 +1818,7 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .zIndex(10f)
                     .padding(bottom = navBarBottom + 24.dp)
                     .padding(horizontal = 24.dp)
                     .height(56.dp)
@@ -1826,8 +1826,10 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
                         shape = RoundedCornerShape(28.dp)
                         shadowElevation = 8.dp.toPx()
                     }
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(M3MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .background(
+                        color = M3MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = RoundedCornerShape(28.dp),
+                    )
                     .padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
