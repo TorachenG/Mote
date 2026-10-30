@@ -78,6 +78,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
@@ -344,6 +345,8 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        // 抬到列表之上，阴影才能落在卡片上而不是被卡片盖住
+                        .zIndex(10f)
                         .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
                         .height(56.dp)
                         .graphicsLayer {
