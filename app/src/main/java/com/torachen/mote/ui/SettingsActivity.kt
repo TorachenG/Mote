@@ -1390,6 +1390,12 @@ internal fun buildBackCardMaterialModifier(
                 // 全分辨率采样：纹理模糊的自适应降采样会在文字这类高频内容移动时，
                 // 因 offsetResidual 的近似补偿产生抖动闪烁，这里强制 downscaleFactor = 1。
                 Modifier
+                    // 与底部悬浮胶囊栏一致的自然阴影：只有环境阴影，不投影
+                    .graphicsLayer {
+                        shadowElevation = 24.dp.toPx()
+                        ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                        spotShadowColor = Color.Transparent
+                    }
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { shape },
@@ -1401,7 +1407,7 @@ internal fun buildBackCardMaterialModifier(
                         },
                     )
                     // 背景色蒙版：压住下方模糊内容的明暗起伏，避免高光描边看起来在抖
-                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.25f), shape = shape)
+                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.625f), shape = shape)
                     .background(color = tint, shape = shape)
             } else {
                 Modifier.background(
@@ -1456,7 +1462,7 @@ internal fun buildBackCardMaterialModifier(
                         },
                         highlight = { highlight },
                     )
-                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.25f), shape = shape)
+                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.625f), shape = shape)
                     .background(color = blendColor, shape = shape)
             } else {
                 Modifier.background(
