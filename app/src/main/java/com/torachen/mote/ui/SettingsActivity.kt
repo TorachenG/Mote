@@ -1406,6 +1406,7 @@ internal fun buildBackCardMaterialModifier(
                                 .asComposeRenderEffect()
                         },
                     )
+                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.625f), shape = shape)
                     .background(color = tint, shape = shape)
             } else {
                 Modifier.background(
@@ -1460,6 +1461,7 @@ internal fun buildBackCardMaterialModifier(
                         },
                         highlight = { highlight },
                     )
+                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.625f), shape = shape)
                     .background(color = blendColor, shape = shape)
             } else {
                 Modifier.background(
