@@ -350,9 +350,13 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                         .zIndex(10f)
                         .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
                         .height(56.dp)
-                        // 用 shadow 而不是 graphicsLayer 阴影：前者不会被后续 clip 裁掉
-                        .shadow(elevation = 12.dp, shape = RoundedCornerShape(28.dp))
-                        .clip(RoundedCornerShape(28.dp))
+                        // 只要环境阴影：spot 透明，避免硬边投影；不额外 clip，避免裁掉阴影
+                        .graphicsLayer {
+                            shape = RoundedCornerShape(28.dp)
+                            shadowElevation = 24.dp.toPx()
+                            ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                            spotShadowColor = Color.Transparent
+                        }
                         .then(
                             buildBackCardMaterialModifier(
                                 materialStyle = materialStyle,
