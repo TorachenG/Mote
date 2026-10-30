@@ -116,7 +116,6 @@ import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
-import top.yukonga.miuix.kmp.blur.highlight.Highlight
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.ProgressiveBlur
@@ -1787,36 +1786,11 @@ private fun SettingsLayoutMiuix(
                         }
                     )
 
-                    // Tab 栏材质：与返回按钮共用同一套材质（跟随「渐进模糊/材质样式」设置），
-                    // 只是形状换成包住 TabRowWithContour 轮廓边距的圆角矩形。
-                    val tabRowShape = RoundedCornerShape(TAB_ROW_CORNER + 5.dp)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 8.dp)
-                            .then(
-                                if (generalState.progressiveTitleBlur) {
-                                    buildBackCardMaterialModifier(
-                                        materialStyle = materialStyle,
-                                        blurSupported = blurSupported,
-                                        backdrop = backdrop,
-                                        themeIsDark = themeIsDark,
-                                        shape = tabRowShape,
-                                        // 横条面积大，混合色压低一点、模糊半径加大，
-                                        // 让后面的内容真的透出来，而不是糊成一片同色
-                                        blendAlpha = 0.55f,
-                                        blurRadius = 32f,
-                                        highlight = if (themeIsDark) {
-                                            Highlight.GlassStrokeMiddleDark
-                                        } else {
-                                            Highlight.GlassStrokeMiddleLight
-                                        },
-                                    )
-                                } else {
-                                    Modifier
-                                }
-                            )
                     ) {
                         TabRowWithContour(
                             tabs = TAB_TITLES,
@@ -1828,7 +1802,27 @@ private fun SettingsLayoutMiuix(
                                     }
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (blurSupported && backdrop != null && materialStyle != 0) {
+                                        Modifier.textureBlur(
+                                            backdrop = backdrop,
+                                            shape = RoundedCornerShape(TAB_ROW_CORNER),
+                                            blurRadius = TAB_BLUR_RADIUS,
+                                            noiseCoefficient = BlurDefaults.NoiseCoefficient,
+                                            colors = BlurDefaults.blurColors(
+                                                blendColors = listOf(
+                                                    BlendColorEntry(
+                                                        color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA),
+                                                    ),
+                                                ),
+                                            ),
+                                        )
+                                    } else {
+                                        Modifier
+                                    }
+                                )
                         )
                     }
                 }

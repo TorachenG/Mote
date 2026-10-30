@@ -1371,10 +1371,6 @@ internal fun buildBackCardMaterialModifier(
     shape: Shape = CircleShape, // ★ 新增参数，默认圆形，保证返回按钮不受影响
     /** 材质混合透明度倍率：1f 为原始效果，越小越透明 */
     blendAlpha: Float = 1f,
-    /** 模糊半径；小尺寸控件用默认值，大尺寸横条需要更大的半径才看得出玻璃感 */
-    blurRadius: Float = 25f,
-    /** 高光预设；默认沿用返回按钮那档，大尺寸横条改用更柔的一档 */
-    highlight: Highlight? = null,
 ): Modifier {
     return when (materialStyle) {
         1 -> {
@@ -1387,7 +1383,7 @@ internal fun buildBackCardMaterialModifier(
                 Modifier.textureBlur(
                     backdrop = backdrop,
                     shape = shape, // ★ 替换
-                    blurRadius = blurRadius,
+                    blurRadius = 25f,
                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                     colors = BlurDefaults.blurColors(
                         blendColors = listOf(
@@ -1404,7 +1400,7 @@ internal fun buildBackCardMaterialModifier(
         }
         2 -> {
             if (blurSupported && backdrop != null) {
-                val resolvedHighlight = highlight ?: if (themeIsDark) {
+                val highlight = if (themeIsDark) {
                     Highlight.GlassStrokeSmallDark
                 } else {
                     Highlight.GlassStrokeSmallLight
@@ -1440,10 +1436,10 @@ internal fun buildBackCardMaterialModifier(
                     .textureBlur(
                         backdrop = backdrop,
                         shape = shape, // ★ 替换
-                        blurRadius = blurRadius,
+                        blurRadius = 25f,
                         noiseCoefficient = BlurDefaults.NoiseCoefficient,
                         colors = blurColors,
-                        highlight = resolvedHighlight,
+                        highlight = highlight,
                     )
             } else {
                 Modifier.background(
