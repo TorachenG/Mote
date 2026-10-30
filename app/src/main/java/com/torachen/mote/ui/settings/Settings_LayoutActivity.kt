@@ -1347,14 +1347,6 @@ private fun SettingsLayoutMiuix(
                                         }
                                     }
 
-                                    item(key = "general_bottom") {
-                                        Spacer(
-                                            Modifier.height(
-                                                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                                                        WindowInsets.captionBar.asPaddingValues().calculateBottomPadding()
-                                            )
-                                        )
-                                    }
                                 }
 
                                 SettingsPageAutoScroll(
@@ -1385,7 +1377,8 @@ private fun SettingsLayoutMiuix(
                                         Column(modifier = Modifier.fillMaxWidth()) {
                                             BrowserChromePreview()
 
-                                            // 无标题卡片：沉浸式页面
+                                            SmallTitle("通用")
+
                                             Card(
                                                 modifier = Modifier
                                                     .padding(horizontal = 12.dp)
@@ -1721,14 +1714,6 @@ private fun SettingsLayoutMiuix(
                                         }
                                     }
 
-                                    item(key = "newtab_bottom") {
-                                        Spacer(
-                                            Modifier.height(
-                                                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-                                                        WindowInsets.captionBar.asPaddingValues().calculateBottomPadding()
-                                            )
-                                        )
-                                    }
                                 }
 
                                 SettingsPageAutoScroll(
