@@ -265,6 +265,7 @@ footer a:hover{color:#6b7480;border-bottom-color:rgba(107,116,128,.6)}
 }
 #size {
   display: inline-block;
+  vertical-align: middle;
   overflow: hidden;
   white-space: nowrap;
 }
