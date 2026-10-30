@@ -13,11 +13,11 @@
   .release-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
   .dl-mini{
     margin-left:auto;
-    display:inline-flex;align-items:center;
-    padding:4px 12px;border-radius:8px;
+    display:inline-flex;align-items:center;justify-content:center;
+    padding:7px 14px;border-radius:9px;
     background:#3482ff;color:#fff;
     font-size:12.5px;font-weight:500;letter-spacing:.2px;
-    line-height:1.45;text-decoration:none;white-space:nowrap;
+    line-height:1.2;text-decoration:none;white-space:nowrap;
     transition:background .16s ease;
   }
   .dl-mini:hover{background:#2a70e4}
@@ -159,7 +159,30 @@
           } catch (e) {}
         }
         if (bytes > 0) {
-          btn.textContent = '下载（' + (bytes / 1048576).toFixed(1) + 'MB）';
+          const label = '下载（' + (bytes / 1048576).toFixed(1) + 'MB）';
+          const from = btn.getBoundingClientRect().width;
+          btn.textContent = label;
+          const to = btn.getBoundingClientRect().width;
+          if (from && to && Math.abs(to - from) > 0.5) {
+            // 与主页下载按钮一致的宽度展开动画
+            btn.style.width = from + 'px';
+            btn.style.overflow = 'hidden';
+            btn.style.transition = 'background .16s ease, width 280ms cubic-bezier(0.22, 0.61, 0.36, 1)';
+            void btn.offsetWidth;
+            btn.style.width = to + 'px';
+            await new Promise(function (resolve) {
+              let done = false;
+              function finish() {
+                if (done) return;
+                done = true;
+                btn.style.width = '';
+                btn.style.transition = '';
+                resolve();
+              }
+              btn.addEventListener('transitionend', finish, { once: true });
+              setTimeout(finish, 420);
+            });
+          }
         }
       }));
     }
