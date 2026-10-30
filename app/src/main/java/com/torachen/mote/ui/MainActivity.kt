@@ -7205,7 +7205,7 @@ fun BrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val faviconWindowState = rememberUpdatedState(activeWindow)
-                                Box(
+                    Box(
                                     modifier = Modifier
                                         .size(28.dp)
                                         .clip(RoundedCornerShape(5.dp))
