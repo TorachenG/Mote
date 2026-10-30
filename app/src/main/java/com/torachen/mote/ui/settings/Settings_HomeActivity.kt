@@ -569,7 +569,7 @@ private fun SettingsHomeMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
-                                        startFraction = 0.75f,
+                                        startFraction = 0.625f,
                                         curve = 1f,
                                     ),
                                     colors = BlurDefaults.blurColors(

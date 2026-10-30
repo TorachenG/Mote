@@ -1233,7 +1233,7 @@ private fun SettingsMainPageMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
-                                        startFraction = 0.75f,
+                                        startFraction = 0.625f,
                                         curve = 1f,
                                     ),
                                     colors = BlurDefaults.blurColors(
@@ -1400,6 +1400,8 @@ internal fun buildBackCardMaterialModifier(
                                 .asComposeRenderEffect()
                         },
                     )
+                    // 背景色蒙版：压住下方模糊内容的明暗起伏，避免高光描边看起来在抖
+                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.25f), shape = shape)
                     .background(color = tint, shape = shape)
             } else {
                 Modifier.background(
@@ -1454,6 +1456,7 @@ internal fun buildBackCardMaterialModifier(
                         },
                         highlight = { highlight },
                     )
+                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.25f), shape = shape)
                     .background(color = blendColor, shape = shape)
             } else {
                 Modifier.background(
