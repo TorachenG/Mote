@@ -150,7 +150,7 @@
       版本 <span id="ver">0.3.0</span><span class="sep">｜</span><span id="date">2026 / 10 / 22</span>
     </p>
 
-    <a class="dl" id="dl" href="https://github.com/TorachenG/Mote/releases/latest">下载<span id="size">（83.7MB）</span></a>
+    <a class="dl" id="dl" href="https://github.com/TorachenG/Mote/releases/latest">下载<span id="size"></span></a>
 
     <p class="tags">
       简洁纯净<i>｜</i>极速流畅<i>｜</i>功能全面<i>｜</i>高度定制
@@ -183,8 +183,17 @@
     }
     const apk = (rel.assets || []).find(a => /\.apk$/i.test(a.name || ''));
     if (apk) {
-      if (apk.size) sizeEl.textContent = `（${(apk.size / 1048576).toFixed(1)}MB）`;
       dl.href = apk.url;
+      // Gitee 的 assets 不带大小，退化为 HEAD 请求读取 Content-Length；拿不到就不显示
+      let bytes = apk.size || 0;
+      if (!bytes && apk.url) {
+        try {
+          const head = await fetch(apk.url, { method: 'HEAD' });
+          const len = head.headers.get('content-length');
+          if (len) bytes = Number(len) || 0;
+        } catch (e) {}
+      }
+      sizeEl.textContent = bytes > 0 ? `（${(bytes / 1048576).toFixed(1)}MB）` : '';
     } else if (rel.pageUrl) {
       dl.href = rel.pageUrl;
     }
