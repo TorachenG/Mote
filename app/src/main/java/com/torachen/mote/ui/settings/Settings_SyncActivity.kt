@@ -1031,7 +1031,6 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
                         if (blurSupported && backdrop != null && materialStyle != 0) {
                             if (progressiveTitleBlur) {
                                 Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(
-     startFraction = 0.35f,
      endFraction = 1.35f,
      curve = 2.2f,
  ), colors = BlurDefaults.blurColors(
@@ -2116,7 +2115,6 @@ private fun SettingsSyncBrowsersMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
-                                        startFraction = 0.35f,
                                         endFraction = 1.35f,
                                         curve = 2.2f,
                                     ),

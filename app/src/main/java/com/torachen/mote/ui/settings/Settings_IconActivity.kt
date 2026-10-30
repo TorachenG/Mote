@@ -284,7 +284,6 @@ private fun SettingsIconMiuix(onBack: () -> Unit) {
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
-                                        startFraction = 0.35f,
                                         endFraction = 1.35f,
                                         curve = 2.2f,
                                     ),
