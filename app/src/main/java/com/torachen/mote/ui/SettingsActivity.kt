@@ -67,6 +67,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -115,6 +116,7 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.progressiveTextureBlur
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.drawBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -1385,17 +1387,20 @@ internal fun buildBackCardMaterialModifier(
                 } else {
                     Color.White.copy(alpha = 0.2f * blendAlpha)
                 }
-                Modifier.textureBlur(
-                    backdrop = backdrop,
-                    shape = shape, // ★ 替换
-                    blurRadius = 25f,
-                    noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                    colors = BlurDefaults.blurColors(
-                        blendColors = listOf(
-                            BlendColorEntry(color = tint),
-                        ),
-                    ),
-                )
+                // 全分辨率采样：纹理模糊的自适应降采样会在文字这类高频内容移动时，
+                // 因 offsetResidual 的近似补偿产生抖动闪烁，这里强制 downscaleFactor = 1。
+                Modifier
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { shape },
+                        effects = {
+                            downscaleFactor = 1
+                            renderEffect = android.graphics.RenderEffect
+                                .createBlurEffect(25f, 25f, android.graphics.Shader.TileMode.CLAMP)
+                                .asComposeRenderEffect()
+                        },
+                    )
+                    .background(color = tint, shape = shape)
             } else {
                 Modifier.background(
                     color = MiuixTheme.colorScheme.surfaceContainer,
@@ -1438,14 +1443,18 @@ internal fun buildBackCardMaterialModifier(
                         ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                         spotShadowColor = Color.Transparent
                     }
-                    .textureBlur(
+                    .drawBackdrop(
                         backdrop = backdrop,
-                        shape = shape, // ★ 替换
-                        blurRadius = 25f,
-                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                        colors = blurColors,
-                        highlight = highlight,
+                        shape = { shape },
+                        effects = {
+                            downscaleFactor = 1
+                            renderEffect = android.graphics.RenderEffect
+                                .createBlurEffect(25f, 25f, android.graphics.Shader.TileMode.CLAMP)
+                                .asComposeRenderEffect()
+                        },
+                        highlight = { highlight },
                     )
+                    .background(color = blendColor, shape = shape)
             } else {
                 Modifier.background(
                     color = MiuixTheme.colorScheme.surfaceContainer,
