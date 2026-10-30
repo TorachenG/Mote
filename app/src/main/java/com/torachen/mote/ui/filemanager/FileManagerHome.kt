@@ -395,7 +395,7 @@ internal fun FileManagerHomePage(
                             blurRadius = 10f,
                             gradient = ProgressiveBlur.Top.copy(
                                 startFraction = 0.5f,
-                                curve = 2.2f,
+                                curve = 1f,
                             ),
                             colors = BlurDefaults.blurColors(
                                 blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
