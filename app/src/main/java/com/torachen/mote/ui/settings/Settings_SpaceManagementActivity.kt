@@ -735,7 +735,7 @@ private fun SettingsSpaceManagementMiuix(
 
             // 顶部栏与菜单
             Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).then(if (blurSupported && backdrop != null && materialStyle != 0) { if (progressiveTitleBlur) Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(
-     endFraction = 0.75f,
+     startFraction = 0.25f,
      curve = 2.2f,
  ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
@@ -1152,7 +1152,7 @@ private fun CacheSettingsMiuix(onBack: () -> Unit) {
             }
 
             Box(modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).then(if (blurSupported && backdrop != null && materialStyle != 0) { if (progressiveTitleBlur) Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(
-     endFraction = 0.75f,
+     startFraction = 0.25f,
      curve = 2.2f,
  ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),

@@ -210,7 +210,7 @@ internal fun FileManagerSettingsPage(
                                 shape = RectangleShape,
                                 blurRadius = 10f,
                                 gradient = ProgressiveBlur.Top.copy(
-                                    endFraction = 0.75f,
+                                    startFraction = 0.25f,
                                     curve = 2.2f,
                                 ),
                                 colors = BlurDefaults.blurColors(
