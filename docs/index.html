@@ -169,6 +169,30 @@
   const dateEl = document.getElementById('date');
   const sizeEl = document.getElementById('size');
   const dl = document.getElementById('dl');
+
+  // 大小文字出现时让按钮宽度平滑展开
+  function applySize(text) {
+    sizeEl.textContent = text;
+    sizeEl.style.display = 'inline-block';
+    sizeEl.style.overflow = 'hidden';
+    sizeEl.style.whiteSpace = 'nowrap';
+    const target = sizeEl.getBoundingClientRect().width || sizeEl.scrollWidth;
+    if (!target || !sizeEl.animate) {
+      sizeEl.style.width = '';
+      return;
+    }
+    sizeEl.style.width = '0px';
+    // 强制回流，保证从 0 开始过渡
+    void sizeEl.offsetWidth;
+    sizeEl.style.transition = 'width 320ms cubic-bezier(0.22, 0.61, 0.36, 1)';
+    sizeEl.style.width = target + 'px';
+    sizeEl.addEventListener('transitionend', function done() {
+      sizeEl.removeEventListener('transitionend', done);
+      sizeEl.style.width = '';
+      sizeEl.style.transition = '';
+    });
+  }
+
   try {
     const p = n => String(n).padStart(2, '0');
 
@@ -215,7 +239,7 @@
         } catch (e) {}
       }
       if (bytes > 0) {
-        sizeEl.textContent = `（${(bytes / 1048576).toFixed(1)}MB）`;
+        applySize(`（${(bytes / 1048576).toFixed(1)}MB）`);
       }
     } else if (rel.pageUrl) {
       dl.href = rel.pageUrl;

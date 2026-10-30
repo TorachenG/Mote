@@ -263,3 +263,14 @@ footer a:hover{color:#6b7480;border-bottom-color:rgba(107,116,128,.6)}
   footer a{border-bottom-color:rgba(150,160,175,.3)}
   footer a:hover{color:#c6ccd6}
 }
+#size {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #size {
+    transition: none !important;
+  }
+}
