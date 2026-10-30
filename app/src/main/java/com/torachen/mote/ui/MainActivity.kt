@@ -146,6 +146,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import top.yukonga.miuix.kmp.basic.SearchBarDefaults
+import top.yukonga.miuix.kmp.icon.basic.Search
+import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -3893,6 +3905,7 @@ private fun RenderPageContent(
             "browser" -> {
                 BrowserScreen(
                     onOpenSettings = openSettings,
+                    onOpenToolCustomize = { onPush("settings_tool_menu") },
                     onOpenScanner = openScanner,
                     onOpenDownloads = { onPush("downloads") },
                     onOpenScripts = { onPush("scripts") },
@@ -4710,6 +4723,7 @@ fun BrowserScreen(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val textToolbar = LocalTextToolbar.current
     val scope = rememberCoroutineScope()
 
     val surfaceColor = MiuixTheme.colorScheme.surface
@@ -4819,6 +4833,7 @@ fun BrowserScreen(
     var securityPage by remember { mutableIntStateOf(0) }
     var securitySheetBounds by remember { mutableStateOf<Rect?>(null) }
     var searchBarBounds by remember { mutableStateOf<Rect?>(null) }
+    var inputBounds by remember { mutableStateOf(Rect.Zero) }
     var bottomHeaderContentHeightPx by remember { mutableIntStateOf(0) }
     val secInfo = SecurityStateHolder.info
 
@@ -7215,9 +7230,9 @@ fun BrowserScreen(
                                 }
                                 Spacer(Modifier.width(8.dp))
 
-                                InputField(
-                                    query = urlInput.text,
-                                    onQueryChange = { urlInput = TextFieldValue(it) },
+                                MoteUrlInputField(
+                                    value = urlInput,
+                                    onValueChange = { urlInput = it },
                                     onSearch = {
                                         loadUrlInActive(urlInput.text)
                                         focusManager.clearFocus()
@@ -7227,16 +7242,79 @@ fun BrowserScreen(
                                     onExpandedChange = { searchBarExpanded = it },
                                     modifier = Modifier
                                         .weight(1f)
+                                        .onGloballyPositioned { coords ->
+                                            val b = coords.boundsInWindow()
+                                            inputBounds = Rect(b.left, b.top, b.right, b.bottom)
+                                        }
                                         .onFocusChanged { focusState: FocusState ->
                                             isSearchFocused = focusState.isFocused
                                             if (focusState.isFocused) {
                                                 showSecuritySheet = false
                                                 activeWindow?.let { win ->
-                                                    if (urlInput.text == win.title) {
+                                                    val target =
+                                                        if (urlInput.text == win.title) win.url
+                                                        else urlInput.text
+                                                    if (target.isNotEmpty()) {
+                                                        // 聚焦时整体选中，并唤起文本工具栏
                                                         urlInput = TextFieldValue(
-                                                            text = win.url,
-                                                            selection = TextRange(win.url.length)
+                                                            text = target,
+                                                            selection = TextRange(0, target.length),
                                                         )
+                                                        scope.launch {
+                                                            delay(80)
+                                                            runCatching {
+                                                                textToolbar.showMenu(
+                                                                    rect = inputBounds,
+                                                                    onCopyRequested = {
+                                                                        val sel = urlInput.selection
+                                                                        val start = minOf(sel.start, sel.end)
+                                                                        val end = maxOf(sel.start, sel.end)
+                                                                        if (end > start) {
+                                                                            copyToClipboard(
+                                                                                context,
+                                                                                urlInput.text.substring(start, end),
+                                                                            )
+                                                                        }
+                                                                    },
+                                                                    onCutRequested = {
+                                                                        val sel = urlInput.selection
+                                                                        val start = minOf(sel.start, sel.end)
+                                                                        val end = maxOf(sel.start, sel.end)
+                                                                        if (end > start) {
+                                                                            copyToClipboard(
+                                                                                context,
+                                                                                urlInput.text.substring(start, end),
+                                                                            )
+                                                                            val next = urlInput.text.removeRange(start, end)
+                                                                            urlInput = TextFieldValue(
+                                                                                next,
+                                                                                TextRange(start.coerceAtMost(next.length)),
+                                                                            )
+                                                                        }
+                                                                    },
+                                                                    onPasteRequested = {
+                                                                        pastedText(context)?.let { text ->
+                                                                            val sel = urlInput.selection
+                                                                            val start = minOf(sel.start, sel.end)
+                                                                            val end = maxOf(sel.start, sel.end)
+                                                                            val next = urlInput.text.replaceRange(start, end, text)
+                                                                            urlInput = TextFieldValue(
+                                                                                next,
+                                                                                TextRange(start + text.length),
+                                                                            )
+                                                                        }
+                                                                    },
+                                                                    onSelectAllRequested = {
+                                                                        urlInput = TextFieldValue(
+                                                                            urlInput.text,
+                                                                            TextRange(0, urlInput.text.length),
+                                                                        )
+                                                                    },
+                                                                )
+                                                            }
+                                                        }
+                                                    } else if (urlInput.text == win.title) {
+                                                        urlInput = TextFieldValue(win.url)
                                                     }
                                                 }
                                             } else {
@@ -16393,3 +16471,147 @@ fun PrivacyPolicyDialog() {
         }
     }
 }
+
+
+/**
+ * 与 Miuix InputField 外观完全一致的网址输入框，仅把状态换成 TextFieldValue，
+ * 以便在获得焦点时可以整体选中内容并唤起文本工具栏。
+ */
+@Composable
+private fun MoteUrlInputField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    onSearch: () -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "",
+) {
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnSearch by rememberUpdatedState(onSearch)
+    val currentOnExpandedChange by rememberUpdatedState(onExpandedChange)
+    val interactionSource = remember { MutableInteractionSource() }
+    val capsuleShape = CircleShape
+    val focused = interactionSource.collectIsFocusedAsState().value
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val textColor = LocalContentColor.current
+
+    val inputTextStyle = MiuixTheme.textStyles.main
+        .copy(fontWeight = FontWeight.Medium)
+        .copy(color = textColor)
+
+    val labelText by remember(value.text, expanded, label) {
+        derivedStateOf { if (!(value.text.isNotEmpty() || expanded)) label else "" }
+    }
+
+    BasicTextField(
+        value = value,
+        onValueChange = currentOnValueChange,
+        modifier = modifier
+            .focusRequester(focusRequester)
+            .onFocusChanged { if (it.isFocused) currentOnExpandedChange(true) }
+            .semantics {
+                onClick {
+                    focusRequester.requestFocus()
+                    true
+                }
+            },
+        singleLine = true,
+        textStyle = inputTextStyle,
+        cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { currentOnSearch() }),
+        interactionSource = interactionSource,
+        decorationBox = { innerTextField ->
+            Box(
+                modifier = Modifier.background(
+                    color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    shape = capsuleShape,
+                ),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Basic.Search,
+                        contentDescription = "搜索",
+                        tint = MiuixTheme.colorScheme.onSurfaceContainerHigh,
+                        modifier = Modifier.padding(
+                            start = SearchBarDefaults.LeadingIconStartPadding,
+                            end = SearchBarDefaults.LeadingIconEndPadding,
+                        ),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = SearchBarDefaults.InputFieldMinHeight),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Text(
+                            text = labelText,
+                            style = TextStyle(
+                                fontSize = SearchBarDefaults.InputFieldFontSize,
+                                fontWeight = FontWeight.Medium,
+                            ),
+                            color = MiuixTheme.colorScheme.onSurfaceContainerHigh,
+                        )
+                        Box(modifier = Modifier.graphicsLayer { }) {
+                            innerTextField()
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = value.text.isNotEmpty(),
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(
+                                start = SearchBarDefaults.TrailingIconStartPadding,
+                                end = SearchBarDefaults.TrailingIconEndPadding,
+                            ),
+                            contentAlignment = Alignment.CenterStart,
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Basic.SearchCleanup,
+                                contentDescription = "清除",
+                                tint = MiuixTheme.colorScheme.onSurfaceContainerHighest,
+                                modifier = Modifier
+                                    .clip(capsuleShape)
+                                    .clickable { currentOnValueChange(TextFieldValue("")) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    )
+
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            focusRequester.requestFocus()
+        } else if (focused) {
+            focusManager.clearFocus()
+        }
+    }
+}
+
+
+/** 复制文本到系统剪贴板 */
+private fun copyToClipboard(context: Context, text: String) {
+    runCatching {
+        val manager = context.getSystemService(Context.CLIPBOARD_SERVICE)
+            as? android.content.ClipboardManager ?: return
+        manager.setPrimaryClip(android.content.ClipData.newPlainText("Mote", text))
+    }
+}
+
+/** 读取系统剪贴板纯文本 */
+private fun pastedText(context: Context): String? = runCatching {
+    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE)
+        as? android.content.ClipboardManager ?: return null
+    manager.primaryClip?.takeIf { it.itemCount > 0 }
+        ?.getItemAt(0)?.coerceToText(context)?.toString()
+}.getOrNull()?.takeIf { it.isNotEmpty() }
