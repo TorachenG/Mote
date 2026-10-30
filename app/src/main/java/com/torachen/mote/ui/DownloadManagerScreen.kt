@@ -1240,6 +1240,7 @@ private fun DownloadManagerScreenMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
+                                        endFraction = 0.75f,
                                         curve = 2.2f,
                                     ),
                                     colors = BlurDefaults.blurColors(
@@ -1672,6 +1673,7 @@ private fun TaskDetailScreenMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
+                                        endFraction = 0.75f,
                                         curve = 2.2f,
                                     ),
                                     colors = BlurDefaults.blurColors(
@@ -3068,6 +3070,7 @@ private fun DownloadSettingsMiuix(onBack: () -> Unit) {
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
+                                        endFraction = 0.75f,
                                         curve = 2.2f,
                                     ),
                                     colors = BlurDefaults.blurColors(

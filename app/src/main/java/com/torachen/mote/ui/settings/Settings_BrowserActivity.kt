@@ -764,6 +764,7 @@ private fun SettingsWebMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
+                                        endFraction = 0.75f,
                                         curve = 2.2f,
                                     ),
                                     colors = BlurDefaults.blurColors(
