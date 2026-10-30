@@ -85,6 +85,7 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
@@ -104,6 +105,7 @@ import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Send
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
+import top.yukonga.miuix.kmp.window.WindowDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 
@@ -452,35 +454,45 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
         }
     }
 
-    if (showAddDialog) {
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showAddDialog = false }) {
-            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text("添加浏览器标识", style = MiuixTheme.textStyles.headline1, color = MiuixTheme.colorScheme.onSurface)
-                    Spacer(Modifier.height(12.dp))
-                    TextField(
-                        value = addInput,
-                        onValueChange = { addInput = it },
-                        label = "User-Agent",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = { showAddDialog = false }, modifier = Modifier.weight(1f)) { Text("取消") }
-                        Button(
-                            onClick = {
-                                val ua = addInput.trim()
-                                if (ua.isNotBlank() && ua !in customList) {
-                                    customList = customList + ua
-                                    UaStore.setCustomList(context, customList)
-                                }
-                                addInput = ""
-                                showAddDialog = false
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("添加") }
-                    }
-                }
+    WindowDialog(
+        show = showAddDialog,
+        title = "添加浏览器标识",
+        onDismissRequest = { showAddDialog = false },
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            TextField(
+                value = addInput,
+                onValueChange = { addInput = it },
+                label = "User-Agent",
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(
+                    onClick = { showAddDialog = false },
+                    modifier = Modifier.weight(1f),
+                ) { Text("取消") }
+                Button(
+                    onClick = {
+                        val ua = addInput.trim()
+                        if (ua.isNotBlank() && ua !in customList) {
+                            customList = customList + ua
+                            UaStore.setCustomList(context, customList)
+                        }
+                        addInput = ""
+                        showAddDialog = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        color = MiuixTheme.colorScheme.primary,
+                        contentColor = Color.White,
+                    ),
+                ) { Text("添加") }
             }
         }
     }
