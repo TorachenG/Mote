@@ -150,7 +150,7 @@
       版本 <span id="ver">0.3.0</span><span class="sep">｜</span><span id="date">2026 / 10 / 22</span>
     </p>
 
-    <a class="dl" id="dl" href="https://github.com/TorachenG/Mote/releases/latest">下载<span id="size"></span></a>
+    <a class="dl" id="dl" href="https://github.com/TorachenG/Mote/releases/latest">下载<span id="size">（33.0MB）</span></a>
 
     <p class="tags">
       简洁纯净<i>｜</i>极速流畅<i>｜</i>功能全面<i>｜</i>高度定制
@@ -184,7 +184,8 @@
     const apk = (rel.assets || []).find(a => /\.apk$/i.test(a.name || ''));
     if (apk) {
       dl.href = apk.url;
-      // Gitee 的 assets 不带大小，退化为 HEAD 请求读取 Content-Length；拿不到就不显示
+      // Gitee 的 assets 不带大小：优先 HEAD 读取 Content-Length，
+      // 再退化为 GitHub API 的 asset.size，三层都失败才保留页面原有文字
       let bytes = apk.size || 0;
       if (!bytes && apk.url) {
         try {
@@ -193,7 +194,29 @@
           if (len) bytes = Number(len) || 0;
         } catch (e) {}
       }
-      sizeEl.textContent = bytes > 0 ? `（${(bytes / 1048576).toFixed(1)}MB）` : '';
+      if (!bytes) {
+        try {
+          const gh = await fetch(
+            'https://api.github.com/repos/TorachenG/Mote/releases?per_page=10',
+            { headers: { Accept: 'application/vnd.github+json' } }
+          );
+          if (gh.ok) {
+            const list = await gh.json();
+            if (Array.isArray(list) && list.length) {
+              const same = list.find(function (r) {
+                return String(r.tag_name || '').replace(/^v/i, '') === rel.tag;
+              });
+              const pick = same || list[0];
+              const asset = ((pick && pick.assets) || [])
+                .find(function (a) { return /\.apk$/i.test(a.name || ''); });
+              if (asset && asset.size) bytes = asset.size;
+            }
+          }
+        } catch (e) {}
+      }
+      if (bytes > 0) {
+        sizeEl.textContent = `（${(bytes / 1048576).toFixed(1)}MB）`;
+      }
     } else if (rel.pageUrl) {
       dl.href = rel.pageUrl;
     }
