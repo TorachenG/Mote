@@ -1396,12 +1396,15 @@ private fun WhitelistPaneMiuix(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .zIndex(10f)
                 .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp)
                 .padding(horizontal = 24.dp)
                 .height(56.dp)
                 .graphicsLayer {
                     shape = RoundedCornerShape(28.dp)
                     shadowElevation = 24.dp.toPx()
+                    ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                    spotShadowColor = Color.Transparent
                 }
                 .clip(RoundedCornerShape(28.dp))
                 .background(MiuixTheme.colorScheme.surfaceContainer)
