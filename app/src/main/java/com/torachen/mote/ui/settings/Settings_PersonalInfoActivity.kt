@@ -543,7 +543,6 @@ private fun SettingsPersonalInfoMiuix(
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
-                                        endFraction = 1.35f,
                                         curve = 2.2f,
                                     ),
                                     colors = BlurDefaults.blurColors(
@@ -1098,7 +1097,6 @@ private fun PasswordManagerPageMiuix(onBack: () -> Unit) {
                                     shape = RectangleShape,
                                     blurRadius = 10f,
                                     gradient = ProgressiveBlur.Top.copy(
-                                        endFraction = 1.35f,
                                         curve = 2.2f,
                                     ),
                                     colors = BlurDefaults.blurColors(
