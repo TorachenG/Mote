@@ -333,6 +333,15 @@ internal class FileManagerController(
     var paintStartIndex = -1
     private var paintTarget = false
     private var paintRowHeightPx = 0f
+    /** 涂抹过程中手指在窗口坐标系中的 Y，用于边缘自动滚动 */
+    var paintPointerY by mutableFloatStateOf(0f)
+    /** 涂抹过程中列表自动滚动累计的位移，需要补偿进涂抹范围计算 */
+    var paintScrollAccum by mutableFloatStateOf(0f)
+    /** 涂抹过程中手指相对起始行的累计位移 */
+    var paintDy by mutableFloatStateOf(0f)
+    /** 列表可视区在窗口坐标系中的上下边界 */
+    var listViewportTop by mutableFloatStateOf(0f)
+    var listViewportBottom by mutableFloatStateOf(0f)
     /** 本次涂抹开始前各行的选中状态，用于手指返回时还原 */
     private val paintOriginal = mutableMapOf<Int, Boolean>()
 
@@ -343,12 +352,15 @@ internal class FileManagerController(
         paintRowHeightPx = rowHeightPx.coerceAtLeast(1f)
         // 起始行已在长按中切换过，后续按切换后的状态涂抹
         paintTarget = isSelected(entry)
+        paintScrollAccum = 0f
+        paintDy = 0f
         paintOriginal.clear()
         paintOriginal[index] = paintTarget
     }
 
-    fun paintBy(offsetPx: Float) {
+    fun paintBy() {
         if (paintStartIndex < 0) return
+        val offsetPx = paintDy + paintScrollAccum
         val list = visibleEntries(currentDir)
         if (list.isEmpty()) return
         val index = (paintStartIndex + (offsetPx / paintRowHeightPx).roundToInt())
@@ -376,6 +388,8 @@ internal class FileManagerController(
 
     fun endPaint() {
         paintStartIndex = -1
+        paintScrollAccum = 0f
+        paintDy = 0f
         paintOriginal.clear()
     }
 
@@ -426,6 +440,18 @@ internal class FileManagerController(
 
     /** 目录的可读列表：先普通路径，再备用路径；两者都读不了返回 null（空目录返回空列表） */
     private fun listSource(dir: java.io.File): List<FsEntry>? {
+        if (dir.absolutePath == recycleRoot.absolutePath) {
+            recycleRoot.mkdirs()
+            val flat = mutableListOf<java.io.File>()
+            recycleRoot.listFiles()?.forEach { f ->
+                if (f.isDirectory) {
+                    f.listFiles()?.let { flat.addAll(it) }
+                } else {
+                    flat.add(f)
+                }
+            }
+            return mapEntries(flat.toTypedArray())
+        }
         dir.listFiles()?.let { return mapEntries(it) }
         val base = altBaseOrNull() ?: return null
         val rel = dir.absolutePath.removePrefix(root.absolutePath)
@@ -652,6 +678,7 @@ internal class FileManagerController(
 
     suspend fun reload() {
         val dir = currentDir
+        dirEntries = dirEntries - dir.absolutePath
         // 已有缓存或处于回退浏览时不再遮盖，避免切回目录瞬间出现“闪白/闪内容”
         reloading = entriesOf(dir).isEmpty() && !safMode
         val list = withContext(Dispatchers.IO) { listSource(dir) }
@@ -819,10 +846,20 @@ internal class FileManagerController(
                     reload()
                 }
             } else {
-                val bucket = java.io.File(recycleRoot, System.currentTimeMillis().toString())
-                bucket.mkdirs()
+                recycleRoot.mkdirs()
                 items.forEach { item ->
-                    val target = java.io.File(bucket, item.file.name)
+                    // 直接平铺存放在回收站根目录，避免多一层时间戳文件夹
+                    var target = java.io.File(recycleRoot, item.file.name)
+                    if (target.exists()) {
+                        val base = item.file.name.substringBeforeLast('.', item.file.name)
+                        val ext = item.file.name.substringAfterLast('.', "")
+                        var n = 1
+                        while (target.exists()) {
+                            val name = if (ext.isEmpty()) "$base ($n)" else "$base ($n).$ext"
+                            target = java.io.File(recycleRoot, name)
+                            n++
+                        }
+                    }
                     runCatching {
                         // 跨分区 renameTo 会失败，改用复制后删除
                         if (!item.file.renameTo(target)) {
@@ -848,7 +885,10 @@ internal class FileManagerController(
             val expire = System.currentTimeMillis() -
                 FileManagerPrefs.RECYCLE_RETENTION_DAYS * 24L * 60 * 60 * 1000
             recycleRoot.listFiles()?.forEach { bucket ->
-                if (!bucket.isDirectory) return@forEach
+                if (!bucket.isDirectory) {
+                    if (bucket.lastModified() < expire) runCatching { bucket.delete() }
+                    return@forEach
+                }
                 // 每个文件单独按修改时间计算保留天数
                 bucket.walkTopDown().filter { it.isFile }.forEach { file ->
                     if (file.lastModified() < expire) {
@@ -925,8 +965,11 @@ internal class FileManagerController(
         if (docId != null) {
             if (shizukuMode) {
                 val local = ShizukuBridge.copyToCache(context, docId)
-                if (local == null || !ShizukuBridge.openLocal(context, local)) {
+                if (local == null) {
                     android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    // 缓存副本已可被本进程读取：图片/文本/PDF 走内置查看器，其余交给系统
+                    openFile(context, local, onOpenInBrowser) { onOpenFileBrowser() }
                 }
             } else if (!FmSafStore.open(context, docId)) {
                 android.widget.Toast.makeText(context, "无法打开该文件", android.widget.Toast.LENGTH_SHORT).show()
@@ -1098,6 +1141,32 @@ internal fun FileManagerPage(
     val context = LocalContext.current
     val realController = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
     val controller = realController
+
+    // 多选涂抹：手指停在列表上下边缘时自动滚动，并把滚动位移补偿进涂抹范围
+    val paintDensity = LocalDensity.current
+    LaunchedEffect(controller.selecting, controller.paintStartIndex) {
+        if (!controller.selecting || controller.paintStartIndex < 0) return@LaunchedEffect
+        val edgePx = with(paintDensity) { 72.dp.toPx() }
+        val stepPx = with(paintDensity) { 10.dp.toPx() }
+        while (controller.selecting && controller.paintStartIndex >= 0) {
+            kotlinx.coroutines.android.awaitFrame()
+            val state = controller.listStateFor(controller.currentDir.absolutePath) ?: continue
+            val y = controller.paintPointerY
+            val top = controller.listViewportTop
+            val bottom = controller.listViewportBottom
+            if (bottom <= top) continue
+            val delta = when {
+                y < top + edgePx -> -stepPx
+                y > bottom - edgePx -> stepPx
+                else -> 0f
+            }
+            if (delta != 0f) {
+                val consumed = state.scrollBy(delta)
+                controller.paintScrollAccum += consumed
+                controller.paintBy()
+            }
+        }
+    }
 
     val safLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()
@@ -1737,7 +1806,11 @@ private fun FileManagerMiuix(
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                         .graphicsLayer { alpha = 1f }
-                        .overScrollVertical(),
+                        .overScrollVertical()
+                        .onGloballyPositioned { coords ->
+                            controller.listViewportTop = coords.boundsInWindow().top
+                            controller.listViewportBottom = coords.boundsInWindow().bottom
+                        },
                     contentPadding = PaddingValues(
                         top = if (hasBreadcrumbRow) topPadding + breadcrumbHeightDp else topPadding,
                         bottom = navBottom + 96.dp,
@@ -1787,7 +1860,7 @@ private fun FileManagerMiuix(
                             }
                         }
                     }
-                    if (controller.dirUnreadable && !controller.safMode) {
+                    if (controller.dirUnreadable && !controller.safMode && !controller.isInRecycle) {
                         item(key = "unreadable_hint") {
                             Card(
                                 modifier = Modifier
@@ -1810,7 +1883,7 @@ private fun FileManagerMiuix(
                             }
                         }
                     }
-                    if (controller.needsAllFiles) {
+                    if (controller.needsAllFiles && !controller.isInRecycle) {
                         item {
                             Card(
                                 modifier = Modifier
@@ -2415,12 +2488,15 @@ private fun MiuixEntryRow(
         }
     }
     var rowHeightPx by remember { mutableFloatStateOf(1f) }
-    var paintDy by remember { mutableFloatStateOf(0f) }
+    var windowTop by remember { mutableFloatStateOf(0f) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { rowHeightPx = it.size.height.toFloat().coerceAtLeast(1f) }
+            .onGloballyPositioned {
+                rowHeightPx = it.size.height.toFloat().coerceAtLeast(1f)
+                windowTop = it.boundsInWindow().top
+            }
             .pointerInput(entry.file.absolutePath) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = {
@@ -2432,11 +2508,11 @@ private fun MiuixEntryRow(
                     },
                     onDrag = { change, amount ->
                         change.consume()
-                        paintDy += amount.y
-                        controller.paintBy(paintDy)
+                        controller.paintDy += amount.y
+                        controller.paintPointerY = windowTop + change.position.y
+                        controller.paintBy()
                     },
                     onDragEnd = {
-                        paintDy = 0f
                         controller.endPaint()
                         // 稍后解除 click 抑制：若系统补发了 click 则已被上面的 onClick 消费
                         rowScope.launch {
@@ -2445,7 +2521,6 @@ private fun MiuixEntryRow(
                         }
                     },
                     onDragCancel = {
-                        paintDy = 0f
                         controller.endPaint()
                         rowScope.launch {
                             kotlinx.coroutines.delay(300)
@@ -2798,7 +2873,11 @@ private fun FileManagerMaterial(
                     modifier = Modifier
                         .fillMaxSize()
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
-                        .graphicsLayer { alpha = 1f },
+                        .graphicsLayer { alpha = 1f }
+                        .onGloballyPositioned { coords ->
+                            controller.listViewportTop = coords.boundsInWindow().top
+                            controller.listViewportBottom = coords.boundsInWindow().bottom
+                        },
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
                     if (controller.safMode && controller.safFailed) {
@@ -2840,7 +2919,7 @@ private fun FileManagerMaterial(
                             }
                         }
                     }
-                    if (controller.needsAllFiles) {
+                    if (controller.needsAllFiles && !controller.isInRecycle) {
                         item {
                             Column(
                                 modifier = Modifier
@@ -2948,6 +3027,8 @@ private fun FileManagerMaterial(
                                 showMoreMenu = true
                             }
                                 M3DropdownMenu(
+                                    shape = RoundedCornerShape(16.dp),
+                                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
                                     expanded = showMoreMenu,
                                     onDismissRequest = { showMoreMenu = false },
                                 ) {

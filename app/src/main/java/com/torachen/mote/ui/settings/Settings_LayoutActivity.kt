@@ -291,6 +291,7 @@ private const val KEY_MATERIAL_STYLE = "ui_material_style"
 
 private const val KEY_HEADER_POSITION = "browser_header_position"
 private const val KEY_HEADER_TEXT = "browser_header_text_mode"
+private const val KEY_IMMERSIVE_PAGE = "web_immersive_page"
 private const val KEY_LAYOUT_TOOL = "web_dynamic_tool"
 private const val KEY_LAYOUT_TOOL_SUGGEST = "web_dynamic_tool_suggest"
 private val LAYOUT_TOOL_OPTIONS = listOf(
@@ -367,6 +368,7 @@ fun SettingsLayoutPage(
     onBack: () -> Unit,
     onOpenCrop: () -> Unit,
     onNavigateToSearchSettings: () -> Unit = {},
+    onOpenToolMenu: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -661,6 +663,7 @@ fun SettingsLayoutPage(
             actions = actions,
             selectedTab = selectedTab,
             onTabChange = { selectedTab = it },
+            onOpenToolMenu = onOpenToolMenu,
         )
         UiMode.Material -> SettingsLayoutMaterial(
             generalState = generalState,
@@ -668,6 +671,7 @@ fun SettingsLayoutPage(
             actions = actions,
             selectedTab = selectedTab,
             onTabChange = { selectedTab = it },
+            onOpenToolMenu = onOpenToolMenu,
         )
     }
 
@@ -852,6 +856,7 @@ private fun SettingsLayoutMiuix(
     actions: LayoutActions,
     selectedTab: Int,
     onTabChange: (Int) -> Unit,
+    onOpenToolMenu: () -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -897,6 +902,9 @@ private fun SettingsLayoutMiuix(
         initialPage = selectedTab,
         pageCount = { TAB_TITLES.size },
     )
+    // 点击 tab 时直接驱动 pager，避免 selectedTab 与 pager 状态不同步时
+    // 再次点击同一个 tab 因状态未变化而无响应。
+    val tabScope = rememberCoroutineScope()
 
     LaunchedEffect(selectedTab) {
         if (pagerState.currentPage != selectedTab) {
@@ -942,7 +950,8 @@ private fun SettingsLayoutMiuix(
     }
 
     var headerPosition by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_POSITION, 0)) }
-    var headerTextMode by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_TEXT, 0)) }
+    var headerTextMode by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_TEXT, 1)) }
+    var immersivePageEnabled by remember { mutableStateOf(prefs.getBoolean(KEY_IMMERSIVE_PAGE, true)) }
     var layoutToolIndex by remember {
         mutableIntStateOf(prefs.getInt(KEY_LAYOUT_TOOL, 1).coerceIn(0, LAYOUT_TOOL_OPTIONS.lastIndex))
     }
@@ -1160,7 +1169,12 @@ private fun SettingsLayoutMiuix(
                                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
-                                    contentPadding = PaddingValues(top = contentTopPadding),
+                                    contentPadding = PaddingValues(
+                                        top = contentTopPadding,
+                                        bottom = WindowInsets.navigationBars.asPaddingValues()
+                                            .calculateBottomPadding() +
+                                            WindowInsets.captionBar.asPaddingValues().calculateBottomPadding(),
+                                    ),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "general_content") {
@@ -1359,12 +1373,36 @@ private fun SettingsLayoutMiuix(
                                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
-                                    contentPadding = PaddingValues(top = contentTopPadding),
+                                    contentPadding = PaddingValues(
+                                        top = contentTopPadding,
+                                        bottom = WindowInsets.navigationBars.asPaddingValues()
+                                            .calculateBottomPadding() +
+                                            WindowInsets.captionBar.asPaddingValues().calculateBottomPadding(),
+                                    ),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "browser_layout_content") {
                                         Column(modifier = Modifier.fillMaxWidth()) {
-                                            ThemePreview()
+                                            BrowserChromePreview()
+
+                                            // 无标题卡片：沉浸式页面
+                                            Card(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 12.dp)
+                                                    .padding(bottom = 12.dp),
+                                            ) {
+                                                SwitchPreference(
+                                                    title = "沉浸式页面",
+                                                    summary = "开启后，标题栏与工具栏将跟随网页颜色变换",
+                                                    checked = immersivePageEnabled,
+                                                    onCheckedChange = {
+                                                        immersivePageEnabled = it
+                                                        prefs.edit()
+                                                            .putBoolean(KEY_IMMERSIVE_PAGE, it)
+                                                            .apply()
+                                                    },
+                                                )
+                                            }
 
                                             SmallTitle("标题栏")
                                             Card(
@@ -1404,19 +1442,19 @@ private fun SettingsLayoutMiuix(
                                                         DropdownEntry(
                                                             items = listOf(
                                                                 DropdownItem(
-                                                                    text = "网页地址",
-                                                                    selected = headerTextMode == 0,
-                                                                    onClick = {
-                                                                        headerTextMode = 0
-                                                                        prefs.edit().putInt(KEY_HEADER_TEXT, 0).apply()
-                                                                    },
-                                                                ),
-                                                                DropdownItem(
                                                                     text = "网页标题",
                                                                     selected = headerTextMode == 1,
                                                                     onClick = {
                                                                         headerTextMode = 1
                                                                         prefs.edit().putInt(KEY_HEADER_TEXT, 1).apply()
+                                                                    },
+                                                                ),
+                                                                DropdownItem(
+                                                                    text = "网页地址",
+                                                                    selected = headerTextMode == 0,
+                                                                    onClick = {
+                                                                        headerTextMode = 0
+                                                                        prefs.edit().putInt(KEY_HEADER_TEXT, 0).apply()
                                                                     },
                                                                 ),
                                                             ),
@@ -1461,7 +1499,6 @@ private fun SettingsLayoutMiuix(
                                                 )
                                             }
 
-                                            SmallTitle("无标题卡片")
                                             Card(
                                                 modifier = Modifier
                                                     .padding(horizontal = 12.dp)
@@ -1469,7 +1506,7 @@ private fun SettingsLayoutMiuix(
                                             ) {
                                                 ArrowPreference(
                                                     title = "工具弹窗自定义",
-                                                    onClick = {},
+                                                    onClick = onOpenToolMenu,
                                                 )
                                             }
                                         }
@@ -1485,7 +1522,12 @@ private fun SettingsLayoutMiuix(
                                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                                         .scrollEndHaptic()
                                         .overScrollVertical(),
-                                    contentPadding = PaddingValues(top = contentTopPadding),
+                                    contentPadding = PaddingValues(
+                                        top = contentTopPadding,
+                                        bottom = WindowInsets.navigationBars.asPaddingValues()
+                                            .calculateBottomPadding() +
+                                            WindowInsets.captionBar.asPaddingValues().calculateBottomPadding(),
+                                    ),
                                     overscrollEffect = null,
                                 ) {
                                     item(key = "newtab_content") {
@@ -1763,7 +1805,13 @@ private fun SettingsLayoutMiuix(
                         TabRowWithContour(
                             tabs = TAB_TITLES,
                             selectedTabIndex = pagerState.currentPage,
-                            onTabSelected = { onTabChange(it) },
+                            onTabSelected = { index ->
+                                if (index != pagerState.currentPage) {
+                                    tabScope.launch {
+                                        pagerState.animateScrollToPage(index)
+                                    }
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .then(
@@ -1872,14 +1920,22 @@ private fun SettingsLayoutMaterial(
     actions: LayoutActions,
     selectedTab: Int,
     onTabChange: (Int) -> Unit,
+    onOpenToolMenu: () -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     val pagerState = rememberPagerState(
         initialPage = selectedTab,
         pageCount = { TAB_TITLES.size },
     )
+    // 点击 tab 时直接驱动 pager，避免 selectedTab 与 pager 状态不同步时
+    // 再次点击同一个 tab 因状态未变化而无响应。
+    val tabScope = rememberCoroutineScope()
 
     LaunchedEffect(selectedTab) {
         if (pagerState.currentPage != selectedTab) {
@@ -1922,7 +1978,13 @@ private fun SettingsLayoutMaterial(
                         TAB_TITLES.forEachIndexed { index, title ->
                             M3Tab(
                                 selected = pagerState.currentPage == index,
-                                onClick = { onTabChange(index) },
+                                onClick = {
+                                    if (index != pagerState.currentPage) {
+                                        tabScope.launch {
+                                            pagerState.animateScrollToPage(index)
+                                        }
+                                    }
+                                },
                                 text = { M3Text(title) },
                             )
                         }
@@ -1959,6 +2021,7 @@ private fun SettingsLayoutMaterial(
                                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                                 ) {
                                     MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
                                             {
                                                 M3SegmentDropdownItem(
@@ -2003,6 +2066,7 @@ private fun SettingsLayoutMaterial(
                                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                                 ) {
                                     MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
                                             {
                                                 M3SegmentSwitchItem(
@@ -2040,6 +2104,7 @@ private fun SettingsLayoutMaterial(
                                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                                 ) {
                                     MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
                                             {
                                                 M3SegmentDropdownItem(
@@ -2080,7 +2145,40 @@ private fun SettingsLayoutMaterial(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 24.dp),
                         ) {
-                            item(key = "browser_layout_preview_material") { ThemePreviewMaterial() }
+                            item(key = "browser_layout_preview_material") { BrowserChromePreview() }
+
+                            item(key = "browser_immersive_material") {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                                ) {
+                                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                                    val prefsB = remember { ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE) }
+                                    var immersiveEnabled by remember {
+                                        mutableStateOf(prefsB.getBoolean(KEY_IMMERSIVE_PAGE, true))
+                                    }
+                                    MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
+                                        content = listOf(
+                                            {
+                                                M3SegmentSwitchItem(
+                                                    title = "沉浸式页面",
+                                                    summary = "开启后，标题栏与工具栏将跟随网页颜色变换",
+                                                    checked = immersiveEnabled,
+                                                    onCheckedChange = {
+                                                        immersiveEnabled = it
+                                                        prefsB.edit()
+                                                            .putBoolean(KEY_IMMERSIVE_PAGE, it)
+                                                            .apply()
+                                                    },
+                                                )
+                                            },
+                                        ),
+                                    )
+                                }
+                            }
 
                             item(key = "browser_title_header_material") { LayoutSectionHeader("标题栏") }
 
@@ -2094,7 +2192,10 @@ private fun SettingsLayoutMaterial(
                                     val ctx = androidx.compose.ui.platform.LocalContext.current
                                     val prefsB = remember { ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE) }
                                     var posIndex by remember { mutableIntStateOf(prefsB.getInt(KEY_HEADER_POSITION, 0)) }
-                                    var textIndex by remember { mutableIntStateOf(prefsB.getInt(KEY_HEADER_TEXT, 0)) }
+                                    // 显示顺序：0=网页标题（存储值1），1=网页地址（存储值0）
+                                    var textIndex by remember {
+                                        mutableIntStateOf(if (prefsB.getInt(KEY_HEADER_TEXT, 1) == 1) 0 else 1)
+                                    }
                                     MoteSegmentedColumn(
                                         color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
@@ -2114,11 +2215,11 @@ private fun SettingsLayoutMaterial(
                                                 M3SegmentDropdownItem(
                                                     title = "输入框显示",
                                                     summary = null,
-                                                    options = listOf("网页地址", "网页标题"),
+                                                    options = listOf("网页标题", "网页地址"),
                                                     selectedIndex = textIndex,
                                                     onSelected = {
                                                         textIndex = it
-                                                        prefsB.edit().putInt(KEY_HEADER_TEXT, it).apply()
+                                                        prefsB.edit().putInt(KEY_HEADER_TEXT, if (it == 0) 1 else 0).apply()
                                                     },
                                                 )
                                             },
@@ -2173,8 +2274,6 @@ private fun SettingsLayoutMaterial(
                                 }
                             }
 
-                            item(key = "browser_untitled_header_material") { LayoutSectionHeader("无标题卡片") }
-
                             item(key = "browser_untitled_items_material") {
                                 Column(
                                     modifier = Modifier
@@ -2188,7 +2287,7 @@ private fun SettingsLayoutMaterial(
                                             {
                                                 M3SegmentArrowItem(
                                                     title = "工具弹窗自定义",
-                                                    onClick = {},
+                                                    onClick = onOpenToolMenu,
                                                 )
                                             },
                                         ),
@@ -2275,7 +2374,8 @@ private fun SettingsLayoutMaterial(
                                             // ★ Material 主题下隐藏「材质风格」「材质颜色」
                                         }
                                     }
-                                    MoteSegmentedColumn(content = themeItems)
+                                    MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,content = themeItems)
                                 }
                             }
 
@@ -2291,6 +2391,7 @@ private fun SettingsLayoutMaterial(
                                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                                 ) {
                                     MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
                                         content = buildList<@Composable () -> Unit> {
                                             add {
                                                 M3SegmentDropdownItem(
@@ -2343,6 +2444,7 @@ private fun SettingsLayoutMaterial(
                                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                                 ) {
                                     MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
                                             {
                                                 M3SegmentItem(
@@ -2391,12 +2493,8 @@ private fun M3ColorModeToggleRow(
     val haptic = LocalHapticFeedback.current
     val cs = M3MaterialTheme.colorScheme
 
-    // 与 M3SegmentItem / M3SegmentDropdownItem 的卡片色完全一致
-    val unifiedCardColor = lerp(
-        cs.surfaceContainerLow,
-        cs.secondaryContainer,
-        0.10f,
-    )
+    // 与页面其它卡片一致（页面为偏蓝底，卡片用 surface）
+    val unifiedCardColor = cs.surface
 
     val icons = listOf(
         Icons.Filled.Brightness4,   // 跟随系统

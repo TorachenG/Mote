@@ -1133,8 +1133,10 @@ private fun SecurityShieldHeaderMaterial() {
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             SecurityStatCardMaterial("$smart", "智能拦截", Modifier.weight(1f))
             SecurityStatCardMaterial("$privacy", "隐私保护", Modifier.weight(1f))
@@ -1148,7 +1150,7 @@ private fun SecurityShieldHeaderMaterial() {
 private fun SecurityStatCardMaterial(count: String, label: String, modifier: Modifier = Modifier) {
     M3Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(25.dp),
         color = M3MaterialTheme.colorScheme.surface,
     ) {
         Column(
@@ -2697,7 +2699,6 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                         .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                 ) {
-                    var menuFor by remember { mutableStateOf<String?>(null) }
                     val perms = listOf(
                         WebPermissionStore.LOCATION to "定位",
                         WebPermissionStore.CAMERA to "相机",
@@ -2714,30 +2715,28 @@ private fun WebSiteSettingsPageMaterial(host: String, onBack: () -> Unit) {
                             {
                                 val mode = WebPermissionStore.siteMode(context, host, kind)
                                     ?: WebPermissionStore.defaultMode(kind)
-                                Box {
-                                    M3SegmentArrowItem(
-                                        title = "$name：${WebPermissionStore.label(mode)}",
-                                        onClick = { menuFor = kind },
-                                    )
-                                    M3DropdownMenu(
-                                        expanded = menuFor == kind,
-                                        onDismissRequest = { menuFor = null },
-                                    ) {
-                                        listOf(
-                                            "询问" to WebPermissionStore.ASK,
-                                            "允许" to WebPermissionStore.ALLOW,
-                                            "拒绝" to WebPermissionStore.DENY,
-                                        ).forEach { (label, value) ->
-                                            M3DropdownMenuItem(
-                                                text = { M3Text(label) },
-                                                onClick = {
-                                                    WebPermissionStore.setSiteMode(context, host, kind, value)
-                                                    menuFor = null
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
+                                M3SegmentDropdownItem(
+                                    title = name,
+                                    summary = null,
+                                    options = listOf("询问", "允许", "拒绝"),
+                                    selectedIndex = when (mode) {
+                                        WebPermissionStore.ALLOW -> 1
+                                        WebPermissionStore.DENY -> 2
+                                        else -> 0
+                                    },
+                                    onSelected = { index ->
+                                        WebPermissionStore.setSiteMode(
+                                            context,
+                                            host,
+                                            kind,
+                                            when (index) {
+                                                1 -> WebPermissionStore.ALLOW
+                                                2 -> WebPermissionStore.DENY
+                                                else -> WebPermissionStore.ASK
+                                            },
+                                        )
+                                    },
+                                )
                             }
                         },
                     )
@@ -3090,38 +3089,35 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
                         .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
                         .padding(bottom = M3_SEGMENT_GROUP_GAP),
                 ) {
-                    var menuFor by remember { mutableStateOf<String?>(null) }
                     MoteSegmentedColumn(
                         color = M3MaterialTheme.colorScheme.surface,
                         content = items.map { (kind, name) ->
                             {
                                 @Suppress("UNUSED_EXPRESSION")
                                 version
-                                Box {
-                                    M3SegmentArrowItem(
-                                        title = "$name：${WebPermissionStore.label(WebPermissionStore.mode(context, kind))}",
-                                        onClick = { menuFor = kind },
-                                    )
-                                    M3DropdownMenu(
-                                        expanded = menuFor == kind,
-                                        onDismissRequest = { menuFor = null },
-                                    ) {
-                                        listOf(
-                                            "询问" to WebPermissionStore.ASK,
-                                            "允许" to WebPermissionStore.ALLOW,
-                                            "拒绝" to WebPermissionStore.DENY,
-                                        ).forEach { (label, mode) ->
-                                            M3DropdownMenuItem(
-                                                text = { M3Text(label) },
-                                                onClick = {
-                                                    WebPermissionStore.setMode(context, kind, mode)
-                                                    menuFor = null
-                                                    version++
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
+                                val mode = WebPermissionStore.mode(context, kind)
+                                M3SegmentDropdownItem(
+                                    title = name,
+                                    summary = null,
+                                    options = listOf("询问", "允许", "拒绝"),
+                                    selectedIndex = when (mode) {
+                                        WebPermissionStore.ALLOW -> 1
+                                        WebPermissionStore.DENY -> 2
+                                        else -> 0
+                                    },
+                                    onSelected = { index ->
+                                        WebPermissionStore.setMode(
+                                            context,
+                                            kind,
+                                            when (index) {
+                                                1 -> WebPermissionStore.ALLOW
+                                                2 -> WebPermissionStore.DENY
+                                                else -> WebPermissionStore.ASK
+                                            },
+                                        )
+                                        version++
+                                    },
+                                )
                             }
                         },
                     )

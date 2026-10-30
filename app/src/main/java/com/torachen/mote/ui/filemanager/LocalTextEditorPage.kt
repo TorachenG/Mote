@@ -554,6 +554,8 @@ private fun EditorActions(
                 )
                 if (isMaterial) {
                     DropdownMenu(
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                     ) {

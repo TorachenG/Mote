@@ -79,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
@@ -495,7 +496,11 @@ private fun UaSettingsPageMaterial(onBack: () -> Unit) {
     var desktopIndex by remember { mutableStateOf(UaStore.desktopIndex(context)) }
     var input by remember { mutableStateOf("") }
     var desktopMenu by remember { mutableStateOf(false) }
-    val bg = M3MaterialTheme.colorScheme.surface
+    val bg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     M3Scaffold(
         containerColor = bg,
@@ -589,32 +594,29 @@ private fun UaSettingsPageMaterial(onBack: () -> Unit) {
                 Text("其它", modifier = Modifier.padding(start = 26.dp, top = 8.dp, bottom = 6.dp), fontSize = 13.sp, color = M3MaterialTheme.colorScheme.primary)
             }
             item(key = "other_card") {
-                Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-                    androidx.compose.material3.Surface(shape = RoundedCornerShape(16.dp), color = bg) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 56.dp)
-                                .clickable { desktopMenu = true }
-                                .padding(horizontal = 16.dp, vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            M3Text("电脑模式下的浏览器标识", modifier = Modifier.weight(1f))
-                            M3Text(UaStore.desktopOptions[desktopIndex], color = M3MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    M3DropdownMenu(expanded = desktopMenu, onDismissRequest = { desktopMenu = false }) {
-                        UaStore.desktopOptions.forEachIndexed { index, label ->
-                            M3DropdownMenuItem(
-                                text = { M3Text(label) },
-                                onClick = {
-                                    desktopIndex = index
-                                    UaStore.setDesktopIndex(context, index)
-                                    desktopMenu = false
-                                },
-                            )
-                        }
-                    }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                        .padding(bottom = M3_SEGMENT_GROUP_GAP),
+                ) {
+                    MoteSegmentedColumn(
+                        color = M3MaterialTheme.colorScheme.surface,
+                        content = listOf(
+                            {
+                                M3SegmentDropdownItem(
+                                    title = "电脑模式下的浏览器标识",
+                                    summary = null,
+                                    options = UaStore.desktopOptions,
+                                    selectedIndex = desktopIndex,
+                                    onSelected = { index ->
+                                        desktopIndex = index
+                                        UaStore.setDesktopIndex(context, index)
+                                    },
+                                )
+                            },
+                        ),
+                    )
                 }
             }
         }

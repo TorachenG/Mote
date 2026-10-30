@@ -994,7 +994,11 @@ private fun SettingsAboutMaterial(
     val navOwner = rememberNavigationEventDispatcherOwner()
 
     // ★ 页面背景：直接跟 M3 主题 surface（跟新标签页保持一致）
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -1065,6 +1069,7 @@ private fun SettingsAboutMaterial(
                     ) {
                         // ★ 用 MoteSegmentedColumn 包裹 —— 圆角才会被注入
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentItem(
@@ -1101,6 +1106,7 @@ private fun SettingsAboutMaterial(
                         )
 
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentItem(

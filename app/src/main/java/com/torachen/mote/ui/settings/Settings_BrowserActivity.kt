@@ -825,7 +825,11 @@ private fun SettingsWebMaterial(
         contract = ActivityResultContracts.StartActivityForResult(),
     ) { /* 结果可以忽略，返回页面时 ON_RESUME 会自动重新检测默认浏览器状态 */ }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
     ) {
@@ -867,6 +871,7 @@ private fun SettingsWebMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentDropdownItem(
@@ -960,6 +965,7 @@ private fun SettingsWebMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentArrowItem(
@@ -1034,6 +1040,7 @@ private fun SettingsWebMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentSwitchItem(

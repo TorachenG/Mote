@@ -1176,6 +1176,7 @@ private fun NewTabPageMiuix(
     onClearSearchHistory: () -> Unit,
     onDeleteSearchHistoryItem: (String) -> Unit,
     onNavigate: (String) -> Unit,
+    onSearchSuggestion: (String) -> Unit,
     onOpenScanner: () -> Unit,
     windowCount: Int = 1,
     onSwipeWindow: (Int) -> Unit = {},
@@ -1820,6 +1821,19 @@ private fun NewTabPageMiuix(
             bannerContent == BANNER_WEATHER_INDEX)
 
     val hasHistoryPopup = historyModuleEnabled && searchHistorySnapshot.isNotEmpty()
+    val clipSuggestionContext = androidx.compose.ui.platform.LocalContext.current
+    var searchModulesVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(searchFocused, hasHistoryPopup, query) {
+        if (!searchFocused) {
+            searchModulesVisible = false
+            return@LaunchedEffect
+        }
+        // 与模块卡片出现的时序一致：卡片展开时搜索栏才上移
+        delay(HISTORY_DELAY_MS)
+        searchModulesVisible = hasHistoryPopup || query.isNotBlank() ||
+            runCatching { readClipboardUrl(clipSuggestionContext, prefs) }.getOrNull() != null
+    }
+    val hasAnyPopup = searchModulesVisible
 
     val imeBottomPadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val navBarBottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -2050,7 +2064,7 @@ private fun NewTabPageMiuix(
 
                     val searchTargetY = when {
                         searchingOut -> SEARCH_MORPH_TOP_Y
-                        searchFocused && hasHistoryPopup -> SEARCH_FOCUS_TOP_Y
+                        searchFocused && hasAnyPopup -> SEARCH_FOCUS_TOP_Y
                         else -> screenH * 0.45f
                     }
                     val searchTopY by animateDpAsState(
@@ -2075,7 +2089,7 @@ private fun NewTabPageMiuix(
                     }
 
                     AnimatedVisibility(
-                        visible = showBanner && !searchingOut && !(searchFocused && hasHistoryPopup),
+                        visible = showBanner && !searchingOut && !(searchFocused && hasAnyPopup),
                         enter = fadeIn(tween(220)) + scaleIn(
                             animationSpec = tween(240, easing = SmoothEase),
                             initialScale = 0.92f,
@@ -2169,8 +2183,9 @@ private fun NewTabPageMiuix(
                             suggestions = if (searchFocused) suggestions else emptyList(),
                             onSuggestionClick = { item ->
                                 query = item
-                                performSearch(item)
-                            }
+                                onSearchSuggestion(item)
+                            },
+                            onClipboardLinkClick = onNavigate,
                         )
                     }
 
@@ -4606,6 +4621,7 @@ private fun SearchField(
     onClearHistoryClick: () -> Unit,
     suggestions: List<String>,
     onSuggestionClick: (String) -> Unit,
+    onClipboardLinkClick: (String) -> Unit,
 ) {
     var queryField by remember { androidx.compose.runtime.mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(query)) }
     LaunchedEffect(query) {
@@ -4619,6 +4635,18 @@ private fun SearchField(
     }
 
     var isFocused by remember { mutableStateOf(false) }
+    val clipContext = androidx.compose.ui.platform.LocalContext.current
+    val clipPrefs = remember {
+        clipContext.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var clipUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(isFocused) {
+        clipUrl = if (isFocused) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                readClipboardUrl(clipContext, clipPrefs)
+            }
+        } else null
+    }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth(),
@@ -4852,6 +4880,76 @@ private fun SearchField(
                     }
                 },
             )
+
+            AnimatedVisibility(
+                visible = isFocused && clipUrl != null,
+                enter = fadeIn(tween(200)) + expandVertically(
+                    animationSpec = tween(240, easing = SmoothEase),
+                    expandFrom = Alignment.Top,
+                ),
+                exit = fadeOut(tween(140)) + shrinkVertically(
+                    animationSpec = tween(180, easing = SmoothEase),
+                    shrinkTowards = Alignment.Top,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Spacer(Modifier.height(HISTORY_GAP))
+                    val clipShape = RoundedCornerShape(28.dp)
+                    Box(
+                        modifier = Modifier
+                            .width(animatedWidth)
+                            .clip(clipShape)
+                            .then(
+                                buildMaterialBlurModifier(
+                                    materialStyle = materialStyle,
+                                    shape = clipShape,
+                                    backdrop = backdrop,
+                                    useBlur = useBlur,
+                                    backgroundColor = backgroundColor,
+                                    blurTintColor = blurTintColor,
+                                )
+                            ),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) { clipUrl?.let { onClipboardLinkClick(it) } }
+                                .padding(start = 18.dp, end = 20.dp, top = 12.dp, bottom = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Search,
+                                contentDescription = null,
+                                tint = onWallpaperSecondaryForHistory,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "复制的链接",
+                                    fontSize = 15.sp,
+                                    color = onWallpaperForHistory,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = clipUrl.orEmpty(),
+                                    fontSize = 12.sp,
+                                    color = onWallpaperSecondaryForHistory,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             val showSuggestionPanel = isFocused && query.isNotBlank() && suggestions.isNotEmpty()
             AnimatedVisibility(
@@ -5510,6 +5608,7 @@ internal fun NewTabPage(
     onClearSearchHistory: () -> Unit,
     onDeleteSearchHistoryItem: (String) -> Unit,
     onNavigate: (String) -> Unit,
+    onSearchSuggestion: (String) -> Unit = onNavigate,
     onOpenScanner: () -> Unit,
     windowCount: Int = 1,
     onSwipeWindow: (Int) -> Unit = {},
@@ -5532,6 +5631,7 @@ internal fun NewTabPage(
             onClearSearchHistory = onClearSearchHistory,
             onDeleteSearchHistoryItem = onDeleteSearchHistoryItem,
             onNavigate = onNavigate,
+            onSearchSuggestion = onSearchSuggestion,
             onOpenScanner = onOpenScanner,
             windowCount = windowCount,
             onSwipeWindow = onSwipeWindow,
@@ -5553,6 +5653,7 @@ internal fun NewTabPage(
             onClearSearchHistory = onClearSearchHistory,
             onDeleteSearchHistoryItem = onDeleteSearchHistoryItem,
             onNavigate = onNavigate,
+            onSearchSuggestion = onSearchSuggestion,
             onOpenScanner = onOpenScanner,
             onOpenNewTabCustomization = onOpenNewTabCustomization,
         )
@@ -5575,6 +5676,7 @@ private fun NewTabPageMaterial(
     onClearSearchHistory: () -> Unit,
     onDeleteSearchHistoryItem: (String) -> Unit,
     onNavigate: (String) -> Unit,
+    onSearchSuggestion: (String) -> Unit,
     onOpenScanner: () -> Unit,
     onOpenNewTabCustomization: () -> Unit = {},
 ) {
@@ -6001,11 +6103,28 @@ private fun NewTabPageMaterial(
             val screenH = maxHeight
 
             val hasHistoryPopup = historyModuleEnabled && searchHistory.isNotEmpty()
+            val clipSuggestionContext = androidx.compose.ui.platform.LocalContext.current
+            var searchModulesVisible by remember { mutableStateOf(false) }
+            LaunchedEffect(searchFocused, hasHistoryPopup, query) {
+                if (!searchFocused) {
+                    searchModulesVisible = false
+                    return@LaunchedEffect
+                }
+                delay(HISTORY_DELAY_MS)
+                searchModulesVisible = hasHistoryPopup || query.isNotBlank() ||
+                    runCatching { readClipboardUrl(clipSuggestionContext, prefs) }.getOrNull() != null
+            }
+            val hasAnyPopup = searchModulesVisible
 
-            val bannerTopY = screenH * 0.08f
+            // 非时间横幅与 Miuix 版内容位置对齐；时间横幅保留原有位置
+            val bannerTopY = if (bannerContent == BANNER_TIME_INDEX) {
+                screenH * 0.08f
+            } else {
+                screenH * 0.22f
+            }
             val quickUrlsTopY = screenH * 0.45f - 26.dp + 52.dp + 44.dp
             val searchTargetY = when {
-                searchFocused && hasHistoryPopup -> SEARCH_FOCUS_TOP_Y
+                searchFocused && hasAnyPopup -> SEARCH_FOCUS_TOP_Y
                 else -> screenH * 0.45f
             }
             val searchTopY by animateDpAsState(
@@ -6015,7 +6134,7 @@ private fun NewTabPageMaterial(
             )
 
             AnimatedVisibility(
-                visible = bannerContent != 0 && !(searchFocused && hasHistoryPopup),
+                visible = bannerContent != 0 && !(searchFocused && hasAnyPopup),
                 enter = fadeIn(tween(220)) + scaleIn(
                     tween(240, easing = SmoothEase),
                     initialScale = 0.92f,
@@ -6106,8 +6225,9 @@ private fun NewTabPageMaterial(
                     suggestions = if (searchFocused) suggestions else emptyList(),
                     onSuggestionClick = { item ->
                         query = item
-                        performSearch(item)
-                    }
+                        onSearchSuggestion(item)
+                    },
+                    onClipboardLinkClick = onNavigate,
                 )
             }
 
@@ -6310,6 +6430,8 @@ private fun NewTabPageMaterial(
                 .size(1.dp)
         ) {
             M3DropdownMenu(
+                shape = RoundedCornerShape(16.dp),
+                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
                 expanded = showBgMenu,
                 onDismissRequest = { showBgMenu = false }
             ) {
@@ -6352,9 +6474,22 @@ private fun M3NewTabSearchBar(
     onClearHistoryClick: () -> Unit,
     suggestions: List<String>,
     onSuggestionClick: (String) -> Unit,
+    onClipboardLinkClick: (String) -> Unit,
 ) {
     var engineMenuExpanded by remember { mutableStateOf(false) }
     var isFocused by remember { mutableStateOf(false) }
+    val clipContext = androidx.compose.ui.platform.LocalContext.current
+    val clipPrefs = remember {
+        clipContext.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    var clipUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(isFocused) {
+        clipUrl = if (isFocused) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                readClipboardUrl(clipContext, clipPrefs)
+            }
+        } else null
+    }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxWidth(),
@@ -6455,6 +6590,8 @@ private fun M3NewTabSearchBar(
                                 )
                             }
                             M3DropdownMenu(
+                                shape = RoundedCornerShape(16.dp),
+                                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
                                 expanded = engineMenuExpanded,
                                 onDismissRequest = { engineMenuExpanded = false },
                                 modifier = Modifier
@@ -6652,6 +6789,41 @@ private fun M3NewTabSearchBar(
             }
 
             AnimatedVisibility(
+                visible = isFocused && clipUrl != null,
+                enter = fadeIn(tween(180)) + expandVertically(
+                    animationSpec = tween(220, easing = SmoothEase),
+                    expandFrom = Alignment.Top,
+                ),
+                exit = fadeOut(tween(140)) + shrinkVertically(
+                    animationSpec = tween(180, easing = SmoothEase),
+                    shrinkTowards = Alignment.Top,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Spacer(Modifier.height(10.dp))
+                    M3Surface(
+                        modifier = Modifier.width(animatedWidth),
+                        shape = RoundedCornerShape(20.dp),
+                        color = searchBarColor,
+                        contentColor = searchBarContentColor,
+                    ) {
+                        M3HistoryRow(
+                            text = "复制的链接",
+                            subtitle = clipUrl.orEmpty(),
+                            textColor = searchBarContentColor,
+                            iconTint = searchBarHintColor,
+                            icon = MiuixIcons.Search,
+                            onClick = { clipUrl?.let { onClipboardLinkClick(it) } },
+                            onDelete = null,
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
                 visible = historyVisible && query.isBlank(),
                 enter = fadeIn(tween(180)) + expandVertically(
                     animationSpec = tween(220, easing = SmoothEase),
@@ -6743,6 +6915,7 @@ private fun M3HistoryRow(
     icon: ImageVector,
     onClick: () -> Unit,
     onDelete: (() -> Unit)?,
+    subtitle: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -6758,14 +6931,24 @@ private fun M3HistoryRow(
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(12.dp))
-        M3Text(
-            text = text,
-            style = M3MaterialTheme.typography.bodyMedium,
-            color = textColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            M3Text(
+                text = text,
+                style = M3MaterialTheme.typography.bodyMedium,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                M3Text(
+                    text = subtitle,
+                    style = M3MaterialTheme.typography.labelSmall,
+                    color = iconTint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         Spacer(Modifier.width(4.dp))
         if (onDelete != null) {
             M3IconButton(
@@ -7467,18 +7650,12 @@ private fun M3WeatherDetailDialog(
                         )
                     }
 
-                    if (showMoreMenu) {
-                        Popup(
-                            alignment = Alignment.TopEnd,
-                            offset = IntOffset(0, with(density) { 38.dp.roundToPx() }),
-                            onDismissRequest = { showMoreMenu = false },
-                            properties = PopupProperties(focusable = true),
-                        ) {
-                            M3Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = M3MaterialTheme.colorScheme.surfaceContainerHigh,
-                                shadowElevation = 8.dp,
-                            ) {
+                    M3DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = M3MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
                                 Row(
                                     modifier = Modifier
                                         .width(196.dp)
@@ -7514,8 +7691,6 @@ private fun M3WeatherDetailDialog(
                                 }
                             }
                         }
-                    }
-                }
             }
         },
         text = {

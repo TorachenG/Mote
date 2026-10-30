@@ -81,7 +81,13 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
+import com.torachen.mote.ui.MoteSegmentedColumn
+import com.torachen.mote.ui.M3SegmentItem
+import com.torachen.mote.ui.M3_SEGMENT_LIST_HORIZONTAL_PADDING
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
@@ -108,6 +114,7 @@ private const val KEY_TOAST_INCOGNITO = "toast_incognito_enabled"
 private const val KEY_TOAST_TRANSLATE = "toast_translate_enabled"
 private const val KEY_TOAST_FULLSCREEN = "toast_fullscreen_enabled"
 private const val KEY_NOTIFICATION_ENABLED = "notification_bar_enabled"
+internal const val KEY_CLIPBOARD_READ = "clipboard_read_enabled"
 
 // ============================================================
 // 状态
@@ -129,6 +136,7 @@ private data class PermissionsActions(
     val onToastFullscreenChange: (Boolean) -> Unit,
     val onOpenNotificationSettings: () -> Unit,
     val onOpenPermissionSettings: () -> Unit,
+    val onOpenClipboardSetting: () -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -139,6 +147,7 @@ private data class PermissionsActions(
 @Composable
 fun SettingsAppPermissionsPage(
     onBack: () -> Unit,
+    onOpenClipboardSetting: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val prefs = remember {
@@ -184,6 +193,7 @@ fun SettingsAppPermissionsPage(
         },
         onOpenNotificationSettings = { openNotificationSettings(context) },
         onOpenPermissionSettings = { openAppPermissionSettings(context) },
+        onOpenClipboardSetting = onOpenClipboardSetting,
         onBack = onBack,
     )
 
@@ -475,21 +485,14 @@ private fun SettingsPermissionsMiuix(
                                     )
                                 }
                                 SearchableItem(
-                                    title = "读取或写入剪切板",
+                                    title = "读取剪贴板",
                                     pageRoute = "settings_app_permissions",
                                     pageTitle = "通知与权限",
                                     itemKey = "settings_app_permissions_clipboard",
                                 ) {
                                     ArrowPreference(
-                                        title = "读取或写入剪切板",
-                                        endActions = {
-                                            Text(
-                                                text = "去设置",
-                                                fontSize = MiuixTheme.textStyles.body2.fontSize,
-                                                color = MiuixTheme.colorScheme.onSurfaceVariantActions,
-                                            )
-                                        },
-                                        onClick = actions.onOpenPermissionSettings,
+                                        title = "读取剪贴板",
+                                        onClick = actions.onOpenClipboardSetting,
                                     )
                                 }
                             }
@@ -604,7 +607,11 @@ private fun SettingsPermissionsMaterial(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -647,6 +654,7 @@ private fun SettingsPermissionsMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentSwitchItem(
@@ -675,6 +683,7 @@ private fun SettingsPermissionsMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentSwitchItem(
@@ -717,6 +726,7 @@ private fun SettingsPermissionsMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentArrowItem(
@@ -748,9 +758,8 @@ private fun SettingsPermissionsMaterial(
                                 },
                                 {
                                     M3SegmentArrowItem(
-                                        title = "读取或写入剪切板",
-                                        endText = "去设置",
-                                        onClick = actions.onOpenPermissionSettings,
+                                        title = "读取剪贴板",
+                                        onClick = actions.onOpenClipboardSetting,
                                     )
                                 },
                             )
@@ -874,5 +883,138 @@ private fun openNotificationSettings(context: Context) {
         }
         context.startActivity(settingsIntent)
     } catch (_: Exception) {
+    }
+}
+
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun ClipboardAccessPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var enabled by remember {
+        mutableStateOf(prefs.getBoolean(KEY_CLIPBOARD_READ, true))
+    }
+
+    fun setEnabled(value: Boolean) {
+        enabled = value
+        prefs.edit().putBoolean(KEY_CLIPBOARD_READ, value).apply()
+    }
+
+    if (LocalUiMode.current == UiMode.Material) {
+        val pageBg = lerp(
+            M3MaterialTheme.colorScheme.surfaceContainerLow,
+            M3MaterialTheme.colorScheme.secondaryContainer,
+            0.10f,
+        )
+        M3Scaffold(
+            containerColor = pageBg,
+            contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.captionBar),
+            topBar = {
+                M3TopAppBar(
+                    title = { M3Text("读取剪贴板") },
+                    navigationIcon = {
+                        M3IconButton(onClick = onBack) {
+                            M3Icon(
+                                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = "返回",
+                            )
+                        }
+                    },
+                    colors = M3TopAppBarDefaults.topAppBarColors(containerColor = pageBg),
+                )
+            },
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+            ) {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING),
+                    ) {
+                        MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
+                            content = listOf(
+                                {
+                                    M3SegmentItem(
+                                        headline = { M3Text("开启") },
+                                        supporting = {
+                                            M3Text("开启后允许 Mote 通过读取剪贴板提供快捷跳转等功能服务")
+                                        },
+                                        trailing = {
+                                            androidx.compose.material3.RadioButton(
+                                                selected = enabled,
+                                                onClick = null,
+                                            )
+                                        },
+                                        onClick = { setEnabled(true) },
+                                    )
+                                },
+                                {
+                                    M3SegmentItem(
+                                        headline = { M3Text("关闭") },
+                                        trailing = {
+                                            androidx.compose.material3.RadioButton(
+                                                selected = !enabled,
+                                                onClick = null,
+                                            )
+                                        },
+                                        onClick = { setEnabled(false) },
+                                    )
+                                },
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        Column(modifier = Modifier.fillMaxSize().background(MiuixTheme.colorScheme.surface)) {
+            TopAppBar(
+                title = "读取剪贴板",
+                largeTitle = "读取剪贴板",
+                color = Color.Transparent,
+                defaultWindowInsetsPadding = true,
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = "返回",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                        )
+                    }
+                },
+            )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().overScrollVertical(),
+                contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                overscrollEffect = null,
+            ) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp),
+                    ) {
+                        RadioButtonPreference(
+                            title = "开启",
+                            summary = "开启后允许 Mote 通过读取剪贴板提供快捷跳转等功能服务",
+                            selected = enabled,
+                            onClick = { setEnabled(true) },
+                        )
+                        RadioButtonPreference(
+                            title = "关闭",
+                            selected = !enabled,
+                            onClick = { setEnabled(false) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }

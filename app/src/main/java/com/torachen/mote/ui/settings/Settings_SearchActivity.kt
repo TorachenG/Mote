@@ -796,7 +796,11 @@ private fun SettingsSearchMaterial(
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -839,6 +843,7 @@ private fun SettingsSearchMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentItem(
@@ -900,6 +905,7 @@ private fun SettingsSearchMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentSwitchItem(
@@ -1549,7 +1555,11 @@ private fun CustomSearchEnginesPageMaterial(onBack: () -> Unit) {
         exitMultiSelect()
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     val navBarBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -1641,7 +1651,8 @@ private fun CustomSearchEnginesPageMaterial(onBack: () -> Unit) {
                                         )
                                     }
                                 }
-                                MoteSegmentedColumn(content = presetItems)
+                                MoteSegmentedColumn(
+                                    color = M3MaterialTheme.colorScheme.surface,content = presetItems)
                             }
                         }
                     }
@@ -1725,7 +1736,8 @@ private fun CustomSearchEnginesPageMaterial(onBack: () -> Unit) {
                                             )
                                         }
                                     }
-                                    MoteSegmentedColumn(content = items)
+                                    MoteSegmentedColumn(
+                                        color = M3MaterialTheme.colorScheme.surface,content = items)
                                 }
                             }
                         }

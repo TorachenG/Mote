@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.state.ToggleableState
@@ -328,7 +329,11 @@ private fun CookieManagerPageMaterial(onBack: () -> Unit, onOpenOrigin: (String,
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selecting by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
-    val bg = M3MaterialTheme.colorScheme.surface
+    val bg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     LaunchedEffect(Unit) { loadCookieGroups { groups = it } }
 
@@ -604,7 +609,11 @@ private fun CookieDetailPageMaterial(onBack: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var cookies by remember { mutableStateOf(loadCookies(origin)) }
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
-    val bg = M3MaterialTheme.colorScheme.surface
+    val bg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     LaunchedEffect(origin) {
         cookies.forEach { CookieMetaStore.ensure(context, origin, it.name, it.value, host) }

@@ -2055,7 +2055,9 @@ private fun DownloadManagerScreenMaterial(
                                 M3IconButton(onClick = { showMoreMenu = true }) {
                                     M3Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "更多")
                                 }
-                                M3DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                                M3DropdownMenu(
+                                    shape = RoundedCornerShape(16.dp),
+                                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
                                     M3DropdownMenuItem(
                                         text = { M3Text("下载设置") },
                                         onClick = {

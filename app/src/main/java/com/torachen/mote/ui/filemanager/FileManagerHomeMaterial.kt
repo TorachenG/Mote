@@ -87,6 +87,8 @@ internal fun FileManagerHomeMaterial(
                         Icon(MiuixIcons.More, contentDescription = "更多")
                     }
                     DropdownMenu(
+                        shape = RoundedCornerShape(16.dp),
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
                         expanded = showMoreMenu,
                         onDismissRequest = { showMoreMenu = false },
                     ) {

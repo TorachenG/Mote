@@ -1492,7 +1492,11 @@ private fun SettingsMainPageMaterial(
         }
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     val iconContainerColor = M3MaterialTheme.colorScheme.primary
     val iconContentColor = M3MaterialTheme.colorScheme.onPrimary
 
@@ -1637,7 +1641,10 @@ private fun SettingsMainPageMaterial(
                                         }
                                     }
                                 }
-                                MoteSegmentedColumn(content = items)
+                                MoteSegmentedColumn(
+                                    color = M3MaterialTheme.colorScheme.surface,
+                                    content = items,
+                                )
                             }
                         }
                     }
@@ -1650,6 +1657,7 @@ private fun SettingsMainPageMaterial(
                                 .padding(top = 4.dp, bottom = M3_SEGMENT_GROUP_GAP)
                         ) {
                             MoteSegmentedColumn(
+                                color = M3MaterialTheme.colorScheme.surface,
                                 content = listOf(
                                     {
                                         M3SegmentArrowItem(
@@ -1710,7 +1718,10 @@ private fun SettingsMainPageMaterial(
                                         }
                                     }
                                 }
-                                MoteSegmentedColumn(content = items)
+                                MoteSegmentedColumn(
+                                    color = M3MaterialTheme.colorScheme.surface,
+                                    content = items,
+                                )
                             }
                         }
                     }

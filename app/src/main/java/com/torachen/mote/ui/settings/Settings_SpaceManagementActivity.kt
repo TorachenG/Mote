@@ -831,7 +831,11 @@ private fun SettingsSpaceManagementMaterial(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     var cacheSizes by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
     var privacySizes by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
@@ -1157,7 +1161,11 @@ private fun CacheSettingsMaterial(onBack: () -> Unit) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     var autoClearIndex by remember { mutableIntStateOf(prefs.getInt(AutoCacheCleaner.KEY_AUTO_CLEAR_CACHE, AutoCacheCleaner.DEFAULT_LIMIT_INDEX)) }
     val options = listOf("关闭", "160MB", "320MB（默认）", "640MB", "1280MB")
@@ -1181,6 +1189,7 @@ private fun CacheSettingsMaterial(onBack: () -> Unit) {
                 item(key = "content") {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = M3_SEGMENT_GROUP_GAP)) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentDropdownItem(

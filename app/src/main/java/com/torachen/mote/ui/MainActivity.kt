@@ -25,6 +25,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.media.MediaMetadataRetriever
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
@@ -117,6 +119,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.Row
@@ -135,6 +138,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -178,6 +182,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -199,6 +204,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.TextToolbar
@@ -1134,6 +1140,141 @@ private val JS_DETECT_ENGLISH_PAGE = """
   } catch(e) { return 'unknown'; }
 })();
 """.trimIndent()
+
+// 分别读取网页顶部 / 底部区域颜色：
+// 顶部优先 meta[name=theme-color]；顶部和底部都优先采样对应视口区域元素背景，
+// 最后回退 body/html 背景色。返回 "#rrggbb|#rrggbb"，无法识别的一侧为空。
+private val JS_DETECT_PAGE_THEME_COLOR = """
+(function(){
+  try {
+    function parseColor(css) {
+      if (!css) return null;
+      css = String(css).trim();
+      var m = css.match(/^rgba?\(([^)]+)\)\s*$/i);
+      if (m) {
+        var p = m[1].split(',').map(function(x){ return parseFloat(x); });
+        if (p.length >= 3 && !isNaN(p[0]) && !isNaN(p[1]) && !isNaN(p[2])) {
+          var a = p.length > 3 ? p[3] : 1;
+          if (isNaN(a) || a <= 0.03) return null;
+          return [p[0], p[1], p[2], a];
+        }
+      }
+      m = css.match(/^#([0-9a-f]{3,8})$/i);
+      if (m) {
+        var h = m[1];
+        if (h.length === 3 || h.length === 4) {
+          h = h.split('').map(function(c){ return c + c; }).join('');
+        }
+        if (h.length === 6 || h.length === 8) {
+          var a2 = h.length === 8 ? parseInt(h.substring(6, 8), 16) / 255 : 1;
+          if (a2 <= 0.03) return null;
+          return [parseInt(h.substring(0, 2), 16),
+                  parseInt(h.substring(2, 4), 16),
+                  parseInt(h.substring(4, 6), 16), a2];
+        }
+      }
+      return null;
+    }
+    function toHex(c) {
+      if (!c) return '';
+      var a = c[3];
+      var r = Math.round(c[0] * a + 255 * (1 - a));
+      var g = Math.round(c[1] * a + 255 * (1 - a));
+      var b = Math.round(c[2] * a + 255 * (1 - a));
+      return '#' + [r, g, b].map(function(v){
+        v = Math.max(0, Math.min(255, v));
+        return ('0' + v.toString(16)).slice(-2);
+      }).join('');
+    }
+    function effectiveBg(el) {
+      while (el && el !== document.body && el !== document.documentElement) {
+        var c = parseColor(getComputedStyle(el).backgroundColor);
+        if (c) return c;
+        el = el.parentElement;
+      }
+      return null;
+    }
+    function sampleAt(yRatio) {
+      try {
+        var node = document.elementFromPoint(
+          Math.floor(window.innerWidth * 0.5),
+          Math.floor(window.innerHeight * yRatio)
+        );
+        return effectiveBg(node);
+      } catch (e) { return null; }
+    }
+    var bodyColor = null;
+    try {
+      var bodyEl = document.body;
+      bodyColor = bodyEl ? parseColor(getComputedStyle(bodyEl).backgroundColor) : null;
+      if (!bodyColor) {
+        bodyEl = document.documentElement;
+        bodyColor = bodyEl ? parseColor(getComputedStyle(bodyEl).backgroundColor) : null;
+      }
+    } catch (e) {}
+
+    var topColor = null;
+    var metaFallback = null;
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    for (var i = 0; i < metas.length; i++) {
+      var content = metas[i].content;
+      if (!content) continue;
+      var metaColor = parseColor(content);
+      if (!metaColor) continue;
+      var media = metas[i].getAttribute('media');
+      if (media) {
+        try {
+          if (!window.matchMedia(media).matches) {
+            if (!metaFallback) metaFallback = metaColor;
+            continue;
+          }
+        } catch (e) {}
+      }
+      topColor = metaColor;
+      break;
+    }
+    if (!topColor) topColor = metaFallback;
+    if (!topColor) {
+      var topPoints = [0.02, 0.12, 0.25];
+      for (var t = 0; t < topPoints.length; t++) {
+        var tc = sampleAt(topPoints[t]);
+        if (tc) { topColor = tc; break; }
+      }
+    }
+    if (!topColor) topColor = bodyColor;
+
+    var bottomColor = null;
+    var bottomPoints = [0.98, 0.88, 0.75];
+    for (var b = 0; b < bottomPoints.length; b++) {
+      var bc = sampleAt(bottomPoints[b]);
+      if (bc) { bottomColor = bc; break; }
+    }
+    if (!bottomColor) bottomColor = bodyColor;
+    if (!bottomColor) bottomColor = topColor;
+
+    return toHex(topColor) + '|' + toHex(bottomColor);
+  } catch (e) { return ''; }
+})();
+""".trimIndent()
+
+private fun parsePageThemeColors(raw: String?): Pair<Int?, Int?> {
+    if (raw.isNullOrBlank()) return null to null
+    val value = raw.trim().trim('"').trim()
+    if (value.isEmpty()) return null to null
+
+    fun parseHex(part: String?): Int? {
+        val hex = part?.trim().orEmpty()
+        if (hex.length != 7 || !hex.startsWith("#")) return null
+        return try {
+            (0xFF000000L or hex.substring(1).toLong(16)).toInt()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    val parts = value.split("|", limit = 2)
+    return parseHex(parts.getOrNull(0)) to parseHex(parts.getOrNull(1))
+}
 
 
 private val JS_CONTEXTMENU_TRACKER = """
@@ -2573,6 +2714,9 @@ data class BrowserWindow(
     var translated: Boolean = false,
     var isProgrammatic: Boolean = false,
     var isDirectOpen: Boolean = false,
+    // 网页顶部/底部区域主题色（沉浸式页面使用），ARGB；null 表示尚未探测到
+    var themeColor: Int? = null,
+    var bottomThemeColor: Int? = null,
 )
 
 data class HistoryEntry(
@@ -2609,27 +2753,7 @@ data class SniffedResource(
 
 private class ToolSheetState(initial: List<ToolDef>) {
     var tools by mutableStateOf(initial)
-    var isEditMode by mutableStateOf(false)
-    var draggingId by mutableStateOf<String?>(null)
     val activeTools = mutableStateListOf<String>()
-
-    private var snapshot: List<ToolDef>? = null
-
-    fun enterEditMode() {
-        if (!isEditMode) snapshot = tools
-        isEditMode = true
-    }
-
-    fun commitEdit() {
-        snapshot = null
-        isEditMode = false
-    }
-
-    fun cancelEdit() {
-        snapshot?.let { tools = it }
-        snapshot = null
-        isEditMode = false
-    }
 
     fun toggleActive(toolId: String): Boolean {
         return if (toolId in activeTools) {
@@ -2684,7 +2808,7 @@ fun rememberScreenCornerRadius(fallback: Dp = 28.dp): Dp {
     }
 }
 
-private fun defaultTools(): List<ToolDef> = listOf(
+internal fun defaultTools(): List<ToolDef> = listOf(
     ToolDef("bookmarks", "书签列表", MiuixIcons.FavoritesFill),
     ToolDef("history", "历史记录", MiuixIcons.Recent),
     ToolDef("downloads", "下载/文件", MiuixIcons.Download),
@@ -3817,8 +3941,10 @@ private fun RenderPageContent(
                 onNavigateToSearchSettings = {
                     SettingsLayoutNavArgs.flashSearchHistoryOnEnter = true
                     onPush("settings_search")
-                }
+                },
+                onOpenToolMenu = { onPush("settings_tool_menu") },
             )
+            "settings_tool_menu" -> ToolMenuCustomizePage(onBack = { onPop() })
             "crop" -> CropScreenPage(onPop = { onPop() })
             "settings_web_security" -> SettingsWebSecurityPage(
                 onBack = { onPop() },
@@ -3871,7 +3997,11 @@ private fun RenderPageContent(
                 },
             )
             "settings_cookie_origin" -> CookieDetailPage(onBack = { onPop() })
-            "settings_app_permissions" -> SettingsAppPermissionsPage(onBack = { onPop() })
+            "settings_app_permissions" -> SettingsAppPermissionsPage(
+                onBack = { onPop() },
+                onOpenClipboardSetting = { onPush("settings_clipboard_access") },
+            )
+            "settings_clipboard_access" -> ClipboardAccessPage(onBack = { onPop() })
             "settings_personal_info" -> SettingsPersonalInfoPage(
                 onBack = { onPop() },
                 onOpenPasswordManager = { onPush("settings_password_manager") },
@@ -3976,6 +4106,7 @@ private fun RenderPageContent(
                 }
             }
             "file_browser" -> BrowserScreen(                onOpenSettings = { onPush("settings_main") },
+                onOpenToolCustomize = { onPush("settings_tool_menu") },
                 onOpenScanner = { onPush("scanner") },
                 onOpenDownloads = { onPush("downloads") },
                 onOpenScripts = { onPush("scripts") },
@@ -4089,6 +4220,395 @@ fun PageSurface(
 }
 
 // ============================================================
+// 标题栏（顶部 / 底部）
+// ============================================================
+
+/**
+ * 浏览器标题栏/工具栏的配色组（沉浸式页面使用）。
+ */
+private data class ChromePalette(
+    val active: Boolean,
+    val backgroundColor: Color,
+    val isDark: Boolean,
+    val contentColor: Color,
+    val secondaryContentColor: Color,
+    val chipColor: Color,
+    val accentColor: Color,
+    val selectedChipColor: Color,
+    val selectedChipTextColor: Color,
+)
+
+private fun buildChromePalette(
+    active: Boolean,
+    backgroundColor: Color,
+    surfaceContentColor: Color,
+    surfaceSecondaryContentColor: Color,
+    surfacePrimaryColor: Color,
+    surfaceChipColor: Color,
+): ChromePalette {
+    val isDark = backgroundColor.luminance() < 0.5f
+    val contentColor = if (active) {
+        if (isDark) Color.White else Color.Black
+    } else {
+        surfaceContentColor
+    }
+    return ChromePalette(
+        active = active,
+        backgroundColor = backgroundColor,
+        isDark = isDark,
+        contentColor = contentColor,
+        secondaryContentColor = if (active) {
+            contentColor.copy(alpha = 0.62f)
+        } else {
+            surfaceSecondaryContentColor
+        },
+        chipColor = if (active) {
+            if (isDark) {
+                Color.White.copy(alpha = 0.16f).compositeOver(backgroundColor)
+            } else {
+                Color.Black.copy(alpha = 0.07f).compositeOver(backgroundColor)
+            }
+        } else {
+            surfaceChipColor
+        },
+        accentColor = if (active) contentColor else surfacePrimaryColor,
+        // 选中态始终使用主题色（如 MIUIX 蓝），不随沉浸式取色改变
+        selectedChipColor = surfacePrimaryColor,
+        selectedChipTextColor = Color.White,
+    )
+}
+
+/**
+ * 浏览器标题栏容器。
+ *
+ * [atBottom] 为 true 时，整个标题栏上下排序取反：
+ * 输入框在最下方，搜索建议/历史、搜索引擎切换栏依次位于其上方。
+ */
+@Composable
+private fun BrowserHeader(
+    atBottom: Boolean,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    inputField: @Composable () -> Unit,
+    outsideEndAction: @Composable () -> Unit,
+    engineSwitcher: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+    trailing: @Composable () -> Unit = {},
+    modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
+    containerColor: Color = Color.Transparent,
+) {
+    if (atBottom) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(containerColor)
+                .padding(bottom = bottomInset),
+        ) {
+            Spacer(Modifier.height(4.dp))
+            engineSwitcher()
+            BottomSearchBar(
+                inputField = inputField,
+                outsideEndAction = outsideEndAction,
+                expanded = expanded,
+                onExpandedChange = onExpandedChange,
+                content = content,
+            )
+            trailing()
+        }
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(containerColor)
+                .statusBarsPadding(),
+        ) {
+            SearchBar(
+                inputField = inputField,
+                onExpandedChange = onExpandedChange,
+                expanded = expanded,
+                outsideEndAction = outsideEndAction,
+                content = content,
+            )
+            engineSwitcher()
+            Spacer(Modifier.height(4.dp))
+        }
+    }
+}
+
+/**
+ * [SearchBar] 的上下翻转版本：展开内容位于输入框上方，且自下而上展开。
+ */
+@Composable
+private fun BottomSearchBar(
+    inputField: @Composable () -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    expanded: Boolean,
+    outsideEndAction: @Composable (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val currentOnExpandedChange by rememberUpdatedState(onExpandedChange)
+    val navigationEventState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+
+    Column {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+        ) {
+            Column {
+                content()
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 0.dp, horizontal = 12.dp),
+            ) {
+                inputField()
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandHorizontally() + slideInHorizontally(initialOffsetX = { it }),
+                exit = shrinkHorizontally() + slideOutHorizontally(targetOffsetX = { it }),
+            ) {
+                outsideEndAction?.invoke()
+            }
+        }
+    }
+
+    NavigationBackHandler(
+        state = navigationEventState,
+        isBackEnabled = expanded,
+        onBackCompleted = {
+            currentOnExpandedChange(false)
+        },
+    )
+}
+
+/**
+ * 快捷输入栏（网址前缀按钮），供标题栏底部模式内嵌使用。
+ */
+@Composable
+private fun QuickInputBarRow(
+    backgroundColor: Color,
+    buttonBackground: Color,
+    textColor: Color,
+    onInsert: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf("https://", "www.", "/", ".com", ".cn", ".net", ".org").forEach { text ->
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(buttonBackground)
+                    .clickable { onInsert(text) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(text, color = textColor)
+            }
+        }
+    }
+}
+
+/**
+ * 沉浸式页面：让系统状态栏/导航栏图标明暗跟随顶部/底部控件配色。
+ */
+@Composable
+private fun ImmersiveSystemBarsEffect(
+    topActive: Boolean,
+    topIsDark: Boolean,
+    bottomActive: Boolean,
+    bottomIsDark: Boolean,
+    showNewTabPage: Boolean,
+    isTop: Boolean,
+    isFullscreen: Boolean,
+    themeIsDark: Boolean,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    fun applySystemBarIcons() {
+        if (isFullscreen || showNewTabPage) return
+        val activity = context as? Activity ?: return
+        val controller = WindowCompat.getInsetsController(
+            activity.window,
+            activity.window.decorView,
+        )
+        if (!isTop) {
+            // 浏览器不在最上层（如进入设置页）时恢复主题色系统栏图标
+            controller.isAppearanceLightStatusBars = !themeIsDark
+            controller.isAppearanceLightNavigationBars = !themeIsDark
+            return
+        }
+        controller.isAppearanceLightStatusBars =
+            if (topActive) !topIsDark else !themeIsDark
+        controller.isAppearanceLightNavigationBars =
+            if (bottomActive) !bottomIsDark else !themeIsDark
+    }
+
+    LaunchedEffect(
+        topActive,
+        topIsDark,
+        bottomActive,
+        bottomIsDark,
+        showNewTabPage,
+        isTop,
+        isFullscreen,
+        themeIsDark,
+    ) {
+        if (isFullscreen || showNewTabPage) return@LaunchedEffect
+        // 延迟一点，避开新标签页/上一个页面退出时对系统栏图标的还原
+        if (isTop) delay(260L)
+        applySystemBarIcons()
+    }
+
+    DisposableEffect(
+        lifecycleOwner,
+        topActive,
+        topIsDark,
+        bottomActive,
+        bottomIsDark,
+        showNewTabPage,
+        isTop,
+        isFullscreen,
+        themeIsDark,
+    ) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                applySystemBarIcons()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+}
+
+/**
+ * 网页安全弹窗。顶部标题栏时挂在标题栏下方并向下展开；
+ * 底部标题栏时挂在标题栏上方并向上展开。
+ */
+@Composable
+private fun BrowserSecuritySheetPopup(
+    visible: Boolean,
+    page: Int,
+    info: SecurityInfo,
+    atBottom: Boolean,
+    modifier: Modifier = Modifier,
+    onBoundsChanged: (Rect) -> Unit,
+    onPageChange: (Int) -> Unit,
+    onOpenSiteSettings: (String) -> Unit,
+    onToggleBlockAds: (Boolean) -> Unit,
+    onToggleTrackingProtection: (Boolean) -> Unit,
+    onOpenCookieSettings: () -> Unit,
+) {
+    val menuEase = remember { CubicBezierEasing(0.32f, 0.72f, 0f, 1f) }
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(
+            animationSpec = tween(240, easing = menuEase),
+            expandFrom = if (atBottom) Alignment.Bottom else Alignment.Top,
+        ) + fadeIn(tween(240, easing = menuEase)),
+        exit = shrinkVertically(
+            animationSpec = tween(240, easing = menuEase),
+            shrinkTowards = if (atBottom) Alignment.Bottom else Alignment.Top,
+        ) + fadeOut(tween(240, easing = menuEase)),
+        modifier = modifier,
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coords ->
+                    onBoundsChanged(coords.boundsInWindow())
+                }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Final)
+                            event.changes.forEach { it.consume() }
+                        }
+                    }
+                },
+            shape = if (atBottom) {
+                RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 0.dp,
+                    bottomEnd = 0.dp,
+                )
+            } else {
+                RoundedCornerShape(
+                    topStart = 0.dp,
+                    topEnd = 0.dp,
+                    bottomStart = 16.dp,
+                    bottomEnd = 16.dp,
+                )
+            },
+            color = MiuixTheme.colorScheme.surface,
+        ) {
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        slideInHorizontally(
+                            animationSpec = tween(300, easing = menuEase),
+                            initialOffsetX = { it },
+                        ) togetherWith slideOutHorizontally(
+                            animationSpec = tween(300, easing = menuEase),
+                            targetOffsetX = { -it },
+                        )
+                    } else {
+                        slideInHorizontally(
+                            animationSpec = tween(300, easing = menuEase),
+                            initialOffsetX = { -it },
+                        ) togetherWith slideOutHorizontally(
+                            animationSpec = tween(300, easing = menuEase),
+                            targetOffsetX = { it },
+                        )
+                    }
+                },
+                label = "securitySheetPage",
+            ) { currentPage ->
+                when (currentPage) {
+                    0 -> SecurityMenuContent(
+                        info = info,
+                        onOpenCertDetail = { onPageChange(1) },
+                        onOpenCookies = { onPageChange(2) },
+                        onToggleBlockAds = onToggleBlockAds,
+                        onToggleTrackingProtection = onToggleTrackingProtection,
+                        onOpenSiteSettings = onOpenSiteSettings,
+                    )
+                    1 -> CertDetailContent(
+                        info = info,
+                        onBack = { onPageChange(0) },
+                    )
+                    2 -> CookieDetailContent(
+                        info = info,
+                        onBack = { onPageChange(0) },
+                        onOpenSettings = onOpenCookieSettings,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
 // 底部工具栏
 // ============================================================
 
@@ -4178,6 +4698,7 @@ private fun BrowserBottomBar(
 @Composable
 fun BrowserScreen(
     onOpenSettings: () -> Unit,
+    onOpenToolCustomize: () -> Unit = {},
     onOpenScanner: () -> Unit,
     onOpenDownloads: () -> Unit,
     onOpenScripts: () -> Unit = {},
@@ -4298,6 +4819,7 @@ fun BrowserScreen(
     var securityPage by remember { mutableIntStateOf(0) }
     var securitySheetBounds by remember { mutableStateOf<Rect?>(null) }
     var searchBarBounds by remember { mutableStateOf<Rect?>(null) }
+    var bottomHeaderContentHeightPx by remember { mutableIntStateOf(0) }
     val secInfo = SecurityStateHolder.info
 
     LaunchedEffect(showSecuritySheet) {
@@ -4575,6 +5097,15 @@ fun BrowserScreen(
     var quickInputBarEnabled by remember {
         mutableStateOf(prefs.getBoolean("quick_input_bar_enabled", true))
     }
+    var headerAtBottom by remember {
+        mutableStateOf(prefs.getInt("browser_header_position", 0) == 1)
+    }
+    var headerTextMode by remember {
+        mutableStateOf(prefs.getInt("browser_header_text_mode", 1))
+    }
+    var immersivePageEnabled by remember {
+        mutableStateOf(prefs.getBoolean("web_immersive_page", true))
+    }
     var engineSwitcherBarEnabled by remember {
         mutableStateOf(prefs.getBoolean("engine_switcher_bar_enabled", true))
     }
@@ -4686,6 +5217,12 @@ fun BrowserScreen(
             when (key) {
                 "quick_input_bar_enabled" ->
                     quickInputBarEnabled = prefs.getBoolean(key, true)
+                "browser_header_position" ->
+                    headerAtBottom = prefs.getInt(key, 0) == 1
+                "browser_header_text_mode" ->
+                    headerTextMode = prefs.getInt(key, 1)
+                "web_immersive_page" ->
+                    immersivePageEnabled = prefs.getBoolean(key, true)
                 "engine_switcher_bar_enabled" ->
                     engineSwitcherBarEnabled = prefs.getBoolean(key, true)
                 "scan_module_enabled" ->
@@ -5591,6 +6128,8 @@ fun BrowserScreen(
             val newWinUrl = newWin?.url.orEmpty()
             urlInput = if (isHomeUrl(newWinUrl) || newWinUrl.isBlank()) {
                 TextFieldValue("")
+            } else if (headerTextMode == 1 && newWin?.title?.isNotBlank() == true) {
+                TextFieldValue(newWin.title)
             } else {
                 TextFieldValue(newWinUrl)
             }
@@ -5606,6 +6145,8 @@ fun BrowserScreen(
         val winUrl = win?.url.orEmpty()
         urlInput = if (isHomeUrl(winUrl) || winUrl.isBlank()) {
             TextFieldValue("")
+        } else if (headerTextMode == 1 && win?.title?.isNotBlank() == true) {
+            TextFieldValue(win.title)
         } else {
             TextFieldValue(winUrl)
         }
@@ -5649,7 +6190,7 @@ fun BrowserScreen(
         if (wv.canGoForward()) wv.goForward()
     }
 
-    fun loadUrlInActive(input: String) {
+    fun loadUrlInActive(input: String, forceSearch: Boolean = false) {
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return
         val id = activeWindowId ?: return
@@ -5658,16 +6199,17 @@ fun BrowserScreen(
         val rawIndex = prefs.getInt("default_search_engine", 0)
         val engineIndex = rawIndex.coerceIn(0, searchEngines.lastIndex)
 
-        val isDirectUrl = trimmed.startsWith("http://", ignoreCase = true) ||
-                trimmed.startsWith("https://", ignoreCase = true) ||
-                trimmed.startsWith("ftp://", ignoreCase = true) ||
-                isWebsite(trimmed)
+        val isDirectUrl = !forceSearch && (
+                trimmed.startsWith("http://", ignoreCase = true) ||
+                        trimmed.startsWith("https://", ignoreCase = true) ||
+                        trimmed.startsWith("ftp://", ignoreCase = true) ||
+                        isWebsite(trimmed))
 
         val url = when {
-            trimmed.startsWith("http://", ignoreCase = true) ||
+            !forceSearch && (trimmed.startsWith("http://", ignoreCase = true) ||
                     trimmed.startsWith("https://", ignoreCase = true) ||
-                    trimmed.startsWith("ftp://", ignoreCase = true) -> trimmed
-            isWebsite(trimmed) -> "https://$trimmed"
+                    trimmed.startsWith("ftp://", ignoreCase = true)) -> trimmed
+            !forceSearch && isWebsite(trimmed) -> "https://$trimmed"
             else -> {
                 val engine = searchEngines.getOrElse(engineIndex) { searchEngines[0] }
                 MoteApplication.trackEventSafe(
@@ -5715,13 +6257,12 @@ fun BrowserScreen(
     fun insertText(text: String) {
         val value = urlInput
         val current = value.text
-        val start = value.selection.min.coerceIn(0, current.length)
-        val end = value.selection.max.coerceIn(start, current.length)
-        // 插入到光标位置（有选区时替换选区），光标停在插入内容之后
-        val newText = current.substring(0, start) + text + current.substring(end)
+        // 快捷输入栏：内容只添加在光标左侧，不替换选区
+        val pos = value.selection.min.coerceIn(0, current.length)
+        val newText = current.substring(0, pos) + text + current.substring(pos)
         urlInput = TextFieldValue(
             text = newText,
-            selection = androidx.compose.ui.text.TextRange(start + text.length),
+            selection = androidx.compose.ui.text.TextRange(pos + text.length),
         )
     }
 
@@ -6131,6 +6672,7 @@ fun BrowserScreen(
                 urlInput = when {
                     query.isNotBlank() && isSearchResultPage -> TextFieldValue(query)
                     isHomeUrl(win.url) || win.url.isBlank() -> TextFieldValue("")
+                    headerTextMode == 1 && win.title.isNotBlank() -> TextFieldValue(win.title)
                     else -> TextFieldValue(win.url)
                 }
             }
@@ -6196,7 +6738,7 @@ fun BrowserScreen(
             try {
                 currentSuggestions = withContext(Dispatchers.IO) {
                     fetchSearchSuggestions(text, engineIndex)
-                }
+                }.filter { !it.equals(text, ignoreCase = true) }
             } catch (_: Exception) {
                 currentSuggestions = emptyList()
             }
@@ -6409,10 +6951,47 @@ fun BrowserScreen(
     }
 
     val themeIsDarkForToolbar = surfaceColor.luminance() < 0.5f
+
+    // ---------------- 沉浸式页面（顶部取网页顶部色，底部取网页底部色） ----------------
+    val pageTopThemeColor = activeWindow?.themeColor?.let { Color(it) }
+    val pageBottomThemeColor = activeWindow?.bottomThemeColor?.let { Color(it) }
+    val immersivePageActive = immersivePageEnabled && !showNewTabPage
+    val topImmersiveActive = immersivePageActive && pageTopThemeColor != null
+    val bottomImmersiveActive =
+        immersivePageActive && (pageBottomThemeColor != null || pageTopThemeColor != null)
+
+    val topChromeColor = if (topImmersiveActive) {
+        pageTopThemeColor ?: surfaceColor
+    } else {
+        surfaceColor
+    }
+    val bottomChromeColor = if (bottomImmersiveActive) {
+        pageBottomThemeColor ?: pageTopThemeColor ?: surfaceColor
+    } else {
+        surfaceColor
+    }
+    val topChrome = buildChromePalette(
+        active = topImmersiveActive,
+        backgroundColor = topChromeColor,
+        surfaceContentColor = MiuixTheme.colorScheme.onSurface,
+        surfaceSecondaryContentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        surfacePrimaryColor = MiuixTheme.colorScheme.primary,
+        surfaceChipColor = buttonBg,
+    )
+    val bottomChrome = buildChromePalette(
+        active = bottomImmersiveActive,
+        backgroundColor = bottomChromeColor,
+        surfaceContentColor = MiuixTheme.colorScheme.onSurface,
+        surfaceSecondaryContentColor = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        surfacePrimaryColor = MiuixTheme.colorScheme.primary,
+        surfaceChipColor = buttonBg,
+    )
+    val titleChrome = if (headerAtBottom) bottomChrome else topChrome
+
     val toolbarColor = if (showNewTabPage) {
         Color.Transparent
     } else {
-        surfaceColor
+        bottomChrome.backgroundColor
     }
 
     val bottomBarIconTint: Color = if (showNewTabPage) {
@@ -6423,12 +7002,20 @@ fun BrowserScreen(
                 MiuixTheme.colorScheme.onSurface
             }
     } else {
-        if (LocalUiMode.current == UiMode.Material) {
-            M3MaterialTheme.colorScheme.onSurface
-        } else {
-            MiuixTheme.colorScheme.onSurface
-        }
+        bottomChrome.contentColor
     }
+
+    // 沉浸式页面：同步系统状态栏/导航栏图标明暗
+    ImmersiveSystemBarsEffect(
+        topActive = topImmersiveActive,
+        topIsDark = topChrome.isDark,
+        bottomActive = bottomImmersiveActive,
+        bottomIsDark = bottomChrome.isDark,
+        showNewTabPage = showNewTabPage,
+        isTop = isTop,
+        isFullscreen = isFullscreen,
+        themeIsDark = isUiDarkMode,
+    )
 
     val videoResourceCount = (networkSniffedResources + sniffedResources)
         .distinctBy { it.url }
@@ -6545,6 +7132,34 @@ fun BrowserScreen(
     val swipeTriggerPx = with(LocalDensity.current) { 72.dp.toPx() }
     val swipePanelWidthPx = with(LocalDensity.current) { 80.dp.toPx() }
 
+    val headerDensity = LocalDensity.current
+    val statusBarTopPadding = WindowInsets.statusBars
+        .asPaddingValues()
+        .calculateTopPadding()
+    val headerNavBarBottomPadding = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+        .takeIf { it > 0.dp }
+        ?: with(headerDensity) { InitialInsetsFallback.navBarBottomPx.toDp() }
+    val headerImeBottomPadding = WindowInsets.ime
+        .asPaddingValues()
+        .calculateBottomPadding()
+    val headerBottomBarHeight =
+        if (isFullscreen || htmlFullscreenView != null) 0.dp else BOTTOM_BAR_HEIGHT
+    // 底部标题栏需要避让的高度：输入法 > 底部工具栏
+    val headerBottomInset = maxOf(
+        headerImeBottomPadding,
+        headerNavBarBottomPadding + headerBottomBarHeight,
+    )
+    val headerVisible = !isFullscreen && htmlFullscreenView == null && !showNewTabPage
+    val contentAnimAnchor: Alignment.Vertical =
+        if (headerAtBottom) Alignment.Bottom else Alignment.Top
+    val bottomHeaderContentHeight = with(headerDensity) {
+        bottomHeaderContentHeightPx.toDp()
+    }
+    val bottomHeaderLift =
+        if (headerAtBottom && headerVisible) bottomHeaderContentHeight else 0.dp
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -6569,40 +7184,12 @@ fun BrowserScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
 
-            AnimatedVisibility(
-                visible = !isFullscreen && htmlFullscreenView == null && !showNewTabPage,
-                enter = expandVertically(
-                    animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
-                    expandFrom = Alignment.Top,
-                ) + fadeIn(tween(FULLSCREEN_ANIM_MS)) + scaleIn(
-                    animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
-                    initialScale = 0.92f,
-                    transformOrigin = TransformOrigin(0.5f, 0f),
-                ),
-                exit = shrinkVertically(
-                    animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(tween(FULLSCREEN_ANIM_MS)) + scaleOut(
-                    animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
-                    targetScale = 0.92f,
-                    transformOrigin = TransformOrigin(0.5f, 0f),
-                ),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .onGloballyPositioned { coords ->
-                            searchBarBounds = coords.boundsInWindow()
-                        }
+            val browserHeaderInput: @Composable () -> Unit = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SearchBar(
-                        inputField = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                val faviconWindowState = rememberUpdatedState(activeWindow)
+                    val faviconWindowState = rememberUpdatedState(activeWindow)
                                 Box(
                                     modifier = Modifier
                                         .size(28.dp)
@@ -6623,6 +7210,7 @@ fun BrowserScreen(
                                     FaviconOrFallback(
                                         favicon = activeWindow?.favicon,
                                         size = 22.dp,
+                                        fallbackTint = titleChrome.contentColor,
                                     )
                                 }
                                 Spacer(Modifier.width(8.dp))
@@ -6657,7 +7245,23 @@ fun BrowserScreen(
                                                     if (urlInput.text.isBlank() &&
                                                         !isHomeUrl(win.url)
                                                     ) {
-                                                        urlInput = TextFieldValue(win.url)
+                                                        urlInput = if (
+                                                            headerTextMode == 1 &&
+                                                            win.title.isNotBlank() &&
+                                                            win.title != "无标题"
+                                                        ) {
+                                                            TextFieldValue(win.title)
+                                                        } else {
+                                                            TextFieldValue(win.url)
+                                                        }
+                                                    } else if (
+                                                        headerTextMode == 1 &&
+                                                        urlInput.text == win.url &&
+                                                        win.title.isNotBlank() &&
+                                                        win.title != "无标题"
+                                                    ) {
+                                                        // 聚焦时把标题换成了地址，未编辑就失焦则还原标题
+                                                        urlInput = TextFieldValue(win.title)
                                                     }
                                                 }
                                             }
@@ -6690,18 +7294,16 @@ fun BrowserScreen(
                                             Icon(
                                                 imageVector = MiuixIcons.Scan,
                                                 contentDescription = "扫一扫",
-                                                tint = MiuixTheme.colorScheme.onSurface,
+                                                tint = titleChrome.contentColor,
                                                 modifier = Modifier.size(25.dp),
                                             )
                                         }
                                     }
                                 }
                             }
-                        },
-                        onExpandedChange = { searchBarExpanded = it },
-                        expanded = searchBarExpanded,
-                        outsideEndAction = {
-                            Text(
+                        }
+            val browserHeaderCancel: @Composable () -> Unit = {
+                Text(
                                 text = "取消",
                                 modifier = Modifier
                                     .padding(end = 12.dp)
@@ -6721,7 +7323,14 @@ fun BrowserScreen(
                                                 isHomeUrl(win.url) ->
                                                     TextFieldValue("")
 
-                                                else -> TextFieldValue(win.url)
+                                                else -> if (
+                                                    headerTextMode == 1 &&
+                                                    win.title.isNotBlank()
+                                                ) {
+                                                    TextFieldValue(win.title)
+                                                } else {
+                                                    TextFieldValue(win.url)
+                                                }
                                             }
                                         }
                                         scope.launch {
@@ -6731,19 +7340,83 @@ fun BrowserScreen(
                                         }
                                     },
                                 style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.Bold),
-                                color = MiuixTheme.colorScheme.primary,
+                                color = titleChrome.accentColor,
                             )
+            }
+            val browserHeaderExpanded: @Composable ColumnScope.() -> Unit = {
+                        var clipboardUrl by remember { mutableStateOf<String?>(null) }
+                        LaunchedEffect(isSearchFocused) {
+                            clipboardUrl = if (isSearchFocused) {
+                                withContext(Dispatchers.IO) { readClipboardUrl(context, prefs) }
+                            } else null
                         }
-                    ) {
+                        val clipUrl = clipboardUrl
+                        val clipboardJumpSuggestion: @Composable () -> Unit = {
+                        AnimatedVisibility(
+                            visible = isSearchFocused && urlInput.text.isBlank() && clipUrl != null,
+                            enter = expandVertically(
+                                animationSpec = tween(220),
+                                expandFrom = contentAnimAnchor,
+                            ) + fadeIn(tween(160)),
+                            exit = shrinkVertically(
+                                animationSpec = tween(200),
+                                shrinkTowards = contentAnimAnchor,
+                            ) + fadeOut(tween(120)),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                                        .clickable {
+                                            clipUrl?.let {
+                                                urlInput = TextFieldValue(it)
+                                                loadUrlInActive(it)
+                                                clearSearchFocus()
+                                            }
+                                        }
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Link,
+                                        contentDescription = null,
+                                        tint = titleChrome.secondaryContentColor,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "复制的链接",
+                                            fontSize = 14.sp,
+                                            color = titleChrome.contentColor,
+                                        )
+                                        Text(
+                                            text = clipUrl.orEmpty(),
+                                            fontSize = 12.sp,
+                                            color = titleChrome.secondaryContentColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        }
+                        // 顶部标题栏：跳转建议在上，搜索历史在下避让
+                        // 底部标题栏：跳转建议贴近输入框（最后渲染）
+                        if (!headerAtBottom) clipboardJumpSuggestion()
                         AnimatedVisibility(
                             visible = isSearchFocused && urlInput.text.isNotBlank() && currentSuggestions.isNotEmpty(),
                             enter = expandVertically(
                                 animationSpec = tween(220),
-                                expandFrom = Alignment.Top,
+                                expandFrom = contentAnimAnchor,
                             ) + fadeIn(tween(160)),
                             exit = shrinkVertically(
                                 animationSpec = tween(200),
-                                shrinkTowards = Alignment.Top,
+                                shrinkTowards = contentAnimAnchor,
                             ) + fadeOut(tween(120)),
                         ) {
                             LazyColumn(
@@ -6763,7 +7436,7 @@ fun BrowserScreen(
                                             .animateItem(fadeOutSpec = null)
                                             .clickable {
                                                 urlInput = TextFieldValue(item)
-                                                loadUrlInActive(item)
+                                                loadUrlInActive(item, forceSearch = true)
                                                 clearSearchFocus()
                                             }
                                             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -6772,14 +7445,14 @@ fun BrowserScreen(
                                         Icon(
                                             imageVector = MiuixIcons.Search,
                                             contentDescription = null,
-                                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            tint = titleChrome.secondaryContentColor,
                                             modifier = Modifier.size(18.dp),
                                         )
                                         Spacer(Modifier.width(12.dp))
                                         Text(
                                             text = item,
                                             fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurface,
+                                            color = titleChrome.contentColor,
                                             maxLines = 1,
                                             modifier = Modifier.weight(1f),
                                         )
@@ -6796,11 +7469,11 @@ fun BrowserScreen(
                                     activeWindow?.incognito != true,
                             enter = expandVertically(
                                 animationSpec = tween(220),
-                                expandFrom = Alignment.Top,
+                                expandFrom = contentAnimAnchor,
                             ) + fadeIn(tween(160)),
                             exit = shrinkVertically(
                                 animationSpec = tween(200),
-                                shrinkTowards = Alignment.Top,
+                                shrinkTowards = contentAnimAnchor,
                             ) + fadeOut(tween(120)),
                         ) {
                             LazyColumn(
@@ -6819,13 +7492,13 @@ fun BrowserScreen(
                                         Text(
                                             text = "搜索历史",
                                             fontSize = 12.sp,
-                                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            color = titleChrome.secondaryContentColor,
                                             modifier = Modifier.weight(1f),
                                         )
                                         Text(
                                             text = "清空",
                                             fontSize = 12.sp,
-                                            color = MiuixTheme.colorScheme.primary,
+                                            color = titleChrome.accentColor,
                                             modifier = Modifier.clickable(
                                                 interactionSource = null,
                                                 indication = null,
@@ -6853,7 +7526,7 @@ fun BrowserScreen(
                                             )
                                             .clickable {
                                                 urlInput = TextFieldValue(item)
-                                                loadUrlInActive(item)
+                                                loadUrlInActive(item, forceSearch = true)
                                                 clearSearchFocus()
                                             }
                                             .padding(horizontal = 16.dp, vertical = 10.dp),
@@ -6862,14 +7535,14 @@ fun BrowserScreen(
                                         Icon(
                                             imageVector = MiuixIcons.Recent,
                                             contentDescription = null,
-                                            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                            tint = titleChrome.secondaryContentColor,
                                             modifier = Modifier.size(18.dp),
                                         )
                                         Spacer(Modifier.width(12.dp))
                                         Text(
                                             text = item,
                                             fontSize = 14.sp,
-                                            color = MiuixTheme.colorScheme.onSurface,
+                                            color = titleChrome.contentColor,
                                             maxLines = 1,
                                             modifier = Modifier.weight(1f),
                                         )
@@ -6891,7 +7564,7 @@ fun BrowserScreen(
                                             Icon(
                                                 imageVector = MiuixIcons.Close,
                                                 contentDescription = "删除",
-                                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                tint = titleChrome.secondaryContentColor,
                                                 modifier = Modifier.size(14.dp),
                                             )
                                         }
@@ -6899,26 +7572,32 @@ fun BrowserScreen(
                                 }
                             }
                         }
-                    }
-
-                    val currentEngineIndex = prefs.getInt("default_search_engine", 0)
-                        .coerceIn(0, searchEngines.lastIndex)
-                    AnimatedVisibility(
-                        visible = isSearchResultPage && engineSwitcherBarEnabled,
-                        enter = expandVertically(
-                            animationSpec = tween(200),
-                            expandFrom = Alignment.Top,
-                        ) + fadeIn(tween(160)),
-                        exit = shrinkVertically(
-                            animationSpec = tween(180),
-                            shrinkTowards = Alignment.Top,
-                        ) + fadeOut(tween(120)),
-                    ) {
+                        if (headerAtBottom) clipboardJumpSuggestion()
+            }
+            val browserHeaderEngine: @Composable () -> Unit = {
+                val currentEngineIndex = prefs.getInt("default_search_engine", 0)
+                    .coerceIn(0, searchEngines.lastIndex)
+                AnimatedVisibility(
+                    visible = isSearchResultPage && engineSwitcherBarEnabled,
+                    enter = expandVertically(
+                        animationSpec = tween(200),
+                        expandFrom = contentAnimAnchor,
+                    ) + fadeIn(tween(160)),
+                    exit = shrinkVertically(
+                        animationSpec = tween(180),
+                        shrinkTowards = contentAnimAnchor,
+                    ) + fadeOut(tween(120)),
+                ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(MiuixTheme.colorScheme.surface)
-                                .padding(start = 6.dp, end = 6.dp, top = 4.dp, bottom = 0.dp)
+                                .background(titleChrome.backgroundColor)
+                                .padding(
+                                    start = 6.dp,
+                                    end = 6.dp,
+                                    top = if (headerAtBottom) 0.dp else 4.dp,
+                                    bottom = if (headerAtBottom) 4.dp else 0.dp,
+                                )
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -6929,8 +7608,8 @@ fun BrowserScreen(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(
-                                            if (selected) MiuixTheme.colorScheme.primary
-                                            else buttonBg
+                                            if (selected) titleChrome.selectedChipColor
+                                            else titleChrome.chipColor
                                         )
                                         .clickable {
                                             if (!selected) {
@@ -6942,15 +7621,93 @@ fun BrowserScreen(
                                     Text(
                                         text = name,
                                         fontSize = 13.sp,
-                                        color = if (selected) Color.White
-                                        else MiuixTheme.colorScheme.onSurface,
+                                        color = if (selected) titleChrome.selectedChipTextColor
+                                        else titleChrome.contentColor,
                                     )
                                 }
                             }
                         }
-                    }
+            }
+            }
+            val browserHeaderTrailing: @Composable () -> Unit = {
+                AnimatedVisibility(
+                    visible = isSearchFocused &&
+                            quickInputBarEnabled &&
+                            !isFullscreen &&
+                            htmlFullscreenView == null,
+                    enter = expandVertically(
+                        animationSpec = tween(200),
+                        expandFrom = Alignment.Bottom,
+                    ) + fadeIn(tween(160)),
+                    exit = shrinkVertically(
+                        animationSpec = tween(180),
+                        shrinkTowards = Alignment.Bottom,
+                    ) + fadeOut(tween(120)),
+                ) {
+                    QuickInputBarRow(
+                        backgroundColor = titleChrome.backgroundColor,
+                        buttonBackground = titleChrome.chipColor,
+                        textColor = titleChrome.contentColor,
+                        onInsert = { insertText(it) },
+                    )
+                }
+            }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+            if (!headerAtBottom) {
+                AnimatedVisibility(
+                    visible = headerVisible,
+                    enter = expandVertically(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(tween(FULLSCREEN_ANIM_MS)) + scaleIn(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        initialScale = 0.92f,
+                        transformOrigin = TransformOrigin(0.5f, 0f),
+                    ),
+                    exit = shrinkVertically(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(tween(FULLSCREEN_ANIM_MS)) + scaleOut(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        targetScale = 0.92f,
+                        transformOrigin = TransformOrigin(0.5f, 0f),
+                    ),
+                ) {
+                    BrowserHeader(
+                        atBottom = false,
+                        expanded = searchBarExpanded,
+                        onExpandedChange = { searchBarExpanded = it },
+                        inputField = browserHeaderInput,
+                        outsideEndAction = browserHeaderCancel,
+                        engineSwitcher = browserHeaderEngine,
+                        content = browserHeaderExpanded,
+                        containerColor = topChrome.backgroundColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                searchBarBounds = coords.boundsInWindow()
+                            },
+                    )
+                }
+            } else {
+                AnimatedVisibility(
+                    visible = headerVisible,
+                    enter = expandVertically(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(tween(FULLSCREEN_ANIM_MS)),
+                    exit = shrinkVertically(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(tween(FULLSCREEN_ANIM_MS)),
+                ) {
+                    // 底部标题栏模式下，顶部只为系统状态栏留空（沉浸式取网页顶部色）
+                    Spacer(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(statusBarTopPadding)
+                            .background(topChrome.backgroundColor)
+                    )
                 }
             }
 
@@ -7149,6 +7906,7 @@ fun BrowserScreen(
 
                 val webViewBottomPadding by animateDpAsState(
                     targetValue = when {
+                        headerAtBottom -> 0.dp
                         isFullscreen || htmlFullscreenView != null -> 0.dp
                         showNewTabPage -> 0.dp
                         else -> webViewNavBarPad + BOTTOM_BAR_HEIGHT
@@ -7282,36 +8040,67 @@ fun BrowserScreen(
                     }
                 }
             }
+
+            if (headerAtBottom) {
+                AnimatedVisibility(
+                    visible = headerVisible,
+                    enter = expandVertically(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        expandFrom = Alignment.Bottom,
+                    ) + fadeIn(tween(FULLSCREEN_ANIM_MS)) + scaleIn(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        initialScale = 0.92f,
+                        transformOrigin = TransformOrigin(0.5f, 1f),
+                    ),
+                    exit = shrinkVertically(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        shrinkTowards = Alignment.Bottom,
+                    ) + fadeOut(tween(FULLSCREEN_ANIM_MS)) + scaleOut(
+                        animationSpec = tween(FULLSCREEN_ANIM_MS, easing = FULLSCREEN_EASING),
+                        targetScale = 0.92f,
+                        transformOrigin = TransformOrigin(0.5f, 1f),
+                    ),
+                ) {
+                    BrowserHeader(
+                        atBottom = true,
+                        bottomInset = headerBottomInset,
+                        expanded = searchBarExpanded,
+                        onExpandedChange = { searchBarExpanded = it },
+                        inputField = browserHeaderInput,
+                        outsideEndAction = browserHeaderCancel,
+                        engineSwitcher = browserHeaderEngine,
+                        content = browserHeaderExpanded,
+                        trailing = browserHeaderTrailing,
+                        containerColor = bottomChrome.backgroundColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                searchBarBounds = coords.boundsInWindow()
+                                val insetPx = with(headerDensity) {
+                                    headerBottomInset.roundToPx()
+                                }
+                                bottomHeaderContentHeightPx =
+                                    (coords.size.height - insetPx).coerceAtLeast(0)
+                            },
+                    )
+                }
+            }
         }
 
-        val floatDensity = LocalDensity.current
-        val navBarBottomPaddingReal = WindowInsets.navigationBars
-            .asPaddingValues()
-            .calculateBottomPadding()
-        val navBarBottomPaddingFallback = with(floatDensity) {
-            InitialInsetsFallback.navBarBottomPx.toDp()
-        }
-        val navBarBottomPadding = if (navBarBottomPaddingReal > 0.dp) {
-            navBarBottomPaddingReal
-        } else {
-            navBarBottomPaddingFallback
-        }
-        val bottomBarHeight = if (isFullscreen || htmlFullscreenView != null) 0.dp
-        else BOTTOM_BAR_HEIGHT
-        val imeBottomPadding = WindowInsets.ime
-            .asPaddingValues()
-            .calculateBottomPadding()
-        val floatingBottomInset = maxOf(
-            imeBottomPadding,
-            navBarBottomPadding + bottomBarHeight,
-        )
+        val navBarBottomPadding = headerNavBarBottomPadding
+        val bottomBarHeight = headerBottomBarHeight
+        val floatingBottomInset = headerBottomInset
+        // 底部标题栏模式下，悬浮栏需要让开标题栏本身
+        val bottomBarOverlayOffset = floatingBottomInset + bottomHeaderLift
 
         SnackbarHost(
             state = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .zIndex(999f)
-                .padding(bottom = navBarBottomPadding + bottomBarHeight)
+                .padding(
+                    bottom = navBarBottomPadding + bottomBarHeight + bottomHeaderLift
+                )
                 .imePadding(),
         )
 
@@ -7319,7 +8108,7 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = floatingBottomInset),
+                .padding(bottom = bottomBarOverlayOffset),
         ) {
             FindInPageBar(
                 show = showFindBar && !isFullscreen && htmlFullscreenView == null,
@@ -7356,14 +8145,16 @@ fun BrowserScreen(
                         webViewMap[id]?.findAllAsync("")
                     }
                 },
-            )
+                            containerColor = bottomChrome.backgroundColor,
+                contentColor = bottomChrome.contentColor,
+)
         }
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = floatingBottomInset),
+                .padding(bottom = bottomBarOverlayOffset),
         ) {
             TtsBar(
                 show = showTtsBar,
@@ -7401,7 +8192,7 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = floatingBottomInset),
+                .padding(bottom = bottomBarOverlayOffset),
         ) {
             ZoomBar(
                 show = showZoomBar && !isFullscreen && htmlFullscreenView == null,
@@ -7422,7 +8213,9 @@ fun BrowserScreen(
                     applyZoomToActiveWebView(1.0f, record = true)
                 },
                 onClose = { showZoomBar = false },
-            )
+                            containerColor = bottomChrome.backgroundColor,
+                contentColor = bottomChrome.contentColor,
+)
         }
 
         val dialogInfo = pendingDialogInfo
@@ -7472,10 +8265,14 @@ fun BrowserScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(bottom = floatingBottomInset),
+                .padding(bottom = bottomBarOverlayOffset),
         ) {
             AnimatedVisibility(
-                visible = isSearchFocused && !isFullscreen && htmlFullscreenView == null && quickInputBarEnabled,
+                visible = isSearchFocused &&
+                        !isFullscreen &&
+                        htmlFullscreenView == null &&
+                        quickInputBarEnabled &&
+                        !headerAtBottom,
                 enter = expandVertically(
                     animationSpec = tween(200),
                     expandFrom = Alignment.Bottom,
@@ -7485,27 +8282,12 @@ fun BrowserScreen(
                     shrinkTowards = Alignment.Bottom,
                 ) + fadeOut(tween(120)),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MiuixTheme.colorScheme.surface)
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    listOf("https://", "www.", "/", ".com", ".cn", ".net", ".org").forEach { text ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(buttonBg)
-                                .clickable { insertText(text) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(text)
-                        }
-                    }
-                }
+                QuickInputBarRow(
+                    backgroundColor = bottomChrome.backgroundColor,
+                    buttonBackground = bottomChrome.chipColor,
+                    textColor = bottomChrome.contentColor,
+                    onInsert = { insertText(it) },
+                )
             }
         }
 
@@ -7540,6 +8322,7 @@ fun BrowserScreen(
                     saveSearchHistory()
                 },
                 onNavigate = { input -> loadUrlInActive(input) },
+        onSearchSuggestion = { input -> loadUrlInActive(input, forceSearch = true) },
                 onOpenScanner = onOpenScanner,
                 windowCount = windows.size,
                 onSwipeWindow = { direction ->
@@ -7786,105 +8569,71 @@ fun BrowserScreen(
         }
 
         val sb = searchBarBounds
-        if (sb != null) {
+        if (!headerAtBottom && sb != null) {
             val dd = LocalDensity.current
             val menuTopDp = with(dd) { sb.bottom.toDp() }
-            val menuEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
-            AnimatedVisibility(
+            BrowserSecuritySheetPopup(
                 visible = showSecuritySheet,
-                enter = expandVertically(
-                    animationSpec = tween(240, easing = menuEase),
-                    expandFrom = Alignment.Top,
-                ) + fadeIn(tween(240, easing = menuEase)),
-                exit = shrinkVertically(
-                    animationSpec = tween(240, easing = menuEase),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(tween(240, easing = menuEase)),
+                page = securityPage,
+                info = secInfo,
+                atBottom = false,
                 modifier = Modifier
                     .fillMaxWidth()
                     .zIndex(201f)
                     .offset(y = menuTopDp),
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onGloballyPositioned { coords ->
-                            securitySheetBounds = coords.boundsInWindow()
-                        }
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Final)
-                                    event.changes.forEach { it.consume() }
-                                }
-                            }
-                        },
-                    shape = RoundedCornerShape(
-                        topStart = 0.dp,
-                        topEnd = 0.dp,
-                        bottomStart = 16.dp,
-                        bottomEnd = 16.dp,
-                    ),
-                    color = MiuixTheme.colorScheme.surface,
-                ) {
-                    AnimatedContent(
-                        targetState = securityPage,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                slideInHorizontally(
-                                    animationSpec = tween(300, easing = menuEase),
-                                    initialOffsetX = { it },
-                                ) togetherWith slideOutHorizontally(
-                                    animationSpec = tween(300, easing = menuEase),
-                                    targetOffsetX = { -it },
-                                )
-                            } else {
-                                slideInHorizontally(
-                                    animationSpec = tween(300, easing = menuEase),
-                                    initialOffsetX = { -it },
-                                ) togetherWith slideOutHorizontally(
-                                    animationSpec = tween(300, easing = menuEase),
-                                    targetOffsetX = { it },
-                                )
-                            }
-                        },
-                        label = "securitySheetPage",
-                    ) { page ->
-                        when (page) {
-                            0 -> SecurityMenuContent(
-                                info = secInfo,
-                                onOpenCertDetail = { securityPage = 1 },
-                                onOpenCookies = { securityPage = 2 },
-                                onToggleBlockAds = { enabled ->
-                                    val host = secInfo.host
-                                    if (host.isNotBlank()) {
-                                        SecurityStateHolder.setSiteBlockAds(host, enabled)
-                                    }
-                                },
-                                onToggleTrackingProtection = { enabled ->
-                                    val host = secInfo.host
-                                    if (host.isNotBlank()) {
-                                        SecurityStateHolder.setSiteTrackingProtection(host, enabled)
-                                    }
-                                },
-                                onOpenSiteSettings = onOpenSiteSettings,
-                            )
-                            1 -> CertDetailContent(
-                                info = secInfo,
-                                onBack = { securityPage = 0 },
-                            )
-                            2 -> CookieDetailContent(
-                                info = secInfo,
-                                onBack = { securityPage = 0 },
-                                onOpenSettings = {
-                                    showSecuritySheet = false
-                                    onOpenSettings()
-                                },
-                            )
-                        }
+                onBoundsChanged = { securitySheetBounds = it },
+                onPageChange = { securityPage = it },
+                onOpenSiteSettings = onOpenSiteSettings,
+                onToggleBlockAds = { enabled ->
+                    val host = secInfo.host
+                    if (host.isNotBlank()) {
+                        SecurityStateHolder.setSiteBlockAds(host, enabled)
                     }
-                }
-            }
+                },
+                onToggleTrackingProtection = { enabled ->
+                    val host = secInfo.host
+                    if (host.isNotBlank()) {
+                        SecurityStateHolder.setSiteTrackingProtection(host, enabled)
+                    }
+                },
+                onOpenCookieSettings = {
+                    showSecuritySheet = false
+                    onOpenSettings()
+                },
+            )
+        }
+
+        if (headerAtBottom) {
+            BrowserSecuritySheetPopup(
+                visible = showSecuritySheet && headerVisible,
+                page = securityPage,
+                info = secInfo,
+                atBottom = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = bottomBarOverlayOffset)
+                    .zIndex(201f),
+                onBoundsChanged = { securitySheetBounds = it },
+                onPageChange = { securityPage = it },
+                onOpenSiteSettings = onOpenSiteSettings,
+                onToggleBlockAds = { enabled ->
+                    val host = secInfo.host
+                    if (host.isNotBlank()) {
+                        SecurityStateHolder.setSiteBlockAds(host, enabled)
+                    }
+                },
+                onToggleTrackingProtection = { enabled ->
+                    val host = secInfo.host
+                    if (host.isNotBlank()) {
+                        SecurityStateHolder.setSiteTrackingProtection(host, enabled)
+                    }
+                },
+                onOpenCookieSettings = {
+                    showSecuritySheet = false
+                    onOpenSettings()
+                },
+            )
         }
 
         LaunchedEffect(longPressMenuVisible) {
@@ -7902,9 +8651,10 @@ fun BrowserScreen(
 
         val lpInfo = longPressInfo
         if (lpInfo != null) {
-            val currentEngineIndex = prefs.getInt("default_search_engine", 0)
+            val longPressMenuContent: @Composable () -> Unit = {
+                val currentEngineIndex = prefs.getInt("default_search_engine", 0)
 
-            key("lp_${longPressCounter}") {
+                key("lp_${longPressCounter}") {
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(lpInfo.xPx, lpInfo.yPx) }
@@ -8213,6 +8963,8 @@ fun BrowserScreen(
                     )
                 }
             }
+            }
+            longPressMenuContent()
         }
     }
 
@@ -8272,6 +9024,10 @@ fun BrowserScreen(
         onOpenSettings = {
             showToolSheet = false
             onOpenSettings()
+        },
+        onOpenToolCustomize = {
+            showToolSheet = false
+            onOpenToolCustomize()
         },
         onDismiss = { showToolSheet = false },
         onToolAction = { toolId, isActive ->
@@ -10229,6 +10985,26 @@ private fun WebViewLayer(
                                     it.canGoBack = back
                                     it.canGoForward = fwd
                                 }
+
+                                // 沉浸式页面：探测网页主题色（页面加载完成 / SPA 路由变化时刷新）
+                                try {
+                                    webViewMap[id]?.evaluateJavascript(
+                                        JS_DETECT_PAGE_THEME_COLOR
+                                    ) { raw ->
+                                        val currentUrl = windows
+                                            .firstOrNull { it.id == id }
+                                            ?.url
+                                        if (currentUrl == url) {
+                                            val (topColor, bottomColor) =
+                                                parsePageThemeColors(raw)
+                                            onUpdateWindow(id) {
+                                                it.themeColor = topColor
+                                                it.bottomThemeColor = bottomColor
+                                            }
+                                        }
+                                    }
+                                } catch (_: Exception) {}
+
                                 if (hostChanged) {
                                     val targetZoom = onZoomForHost(newHost)
                                     if (activeWindowId == id) {
@@ -10287,6 +11063,9 @@ private fun WebViewLayer(
                                         when {
                                             showQueryInBar -> TextFieldValue(query)
                                             isHomeUrl(url) || url.isBlank() -> TextFieldValue("")
+                                            prefs.getInt("browser_header_text_mode", 1) == 1 &&
+                                                title.isNotBlank() && title != "无标题" ->
+                                                TextFieldValue(title)
                                             else -> TextFieldValue(url)
                                         }
                                     )
@@ -12415,6 +13194,8 @@ private fun FindInPageBar(
     onNext: () -> Unit,
     onPrev: () -> Unit,
     onClose: () -> Unit,
+    containerColor: Color,
+    contentColor: Color,
 ) {
     AnimatedVisibility(
         visible = show,
@@ -12428,7 +13209,7 @@ private fun FindInPageBar(
         ) + fadeOut(tween(120)),
     ) {
         Surface(
-            color = MiuixTheme.colorScheme.surface,
+            color = containerColor,
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         ) {
             Row(
@@ -12443,16 +13224,16 @@ private fun FindInPageBar(
                     singleLine = true,
                     textStyle = TextStyle(
                         fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
+                        color = contentColor,
                     ),
-                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
+                    cursorBrush = SolidColor(contentColor),
                     decorationBox = { inner ->
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(34.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(MiuixTheme.colorScheme.secondaryContainer)
+                                .background(contentColor.copy(alpha = 0.12f))
                                 .padding(horizontal = 10.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
@@ -12460,7 +13241,7 @@ private fun FindInPageBar(
                                 Text(
                                     text = "页面内查找",
                                     fontSize = 13.sp,
-                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                    color = contentColor.copy(alpha = 0.6f),
                                 )
                             }
                             inner()
@@ -12473,7 +13254,7 @@ private fun FindInPageBar(
                 Text(
                     text = if (resultTotal == 0) "0/0" else "$resultCurrent/$resultTotal",
                     fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = contentColor.copy(alpha = 0.6f),
                     modifier = Modifier.animateContentSize(
                         animationSpec = tween(durationMillis = 180)
                     ),
@@ -12484,7 +13265,7 @@ private fun FindInPageBar(
                     Icon(
                         imageVector = MiuixIcons.ChevronBackward,
                         contentDescription = "上一个",
-                        tint = MiuixTheme.colorScheme.onSurface,
+                        tint = contentColor,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -12493,7 +13274,7 @@ private fun FindInPageBar(
                     Icon(
                         imageVector = MiuixIcons.ChevronForward,
                         contentDescription = "下一个",
-                        tint = MiuixTheme.colorScheme.onSurface,
+                        tint = contentColor,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -12502,7 +13283,7 @@ private fun FindInPageBar(
                     Icon(
                         imageVector = MiuixIcons.Close,
                         contentDescription = "关闭",
-                        tint = MiuixTheme.colorScheme.onSurface,
+                        tint = contentColor,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -12519,6 +13300,8 @@ private fun ZoomBar(
     onZoomOut: () -> Unit,
     onReset: () -> Unit,
     onClose: () -> Unit,
+    containerColor: Color,
+    contentColor: Color,
 ) {
     AnimatedVisibility(
         visible = show,
@@ -12532,7 +13315,7 @@ private fun ZoomBar(
         ) + fadeOut(tween(120)),
     ) {
         Surface(
-            color = MiuixTheme.colorScheme.surface,
+            color = containerColor,
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
         ) {
             Row(
@@ -12546,7 +13329,7 @@ private fun ZoomBar(
                         text = "−",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MiuixTheme.colorScheme.onSurface,
+                        color = contentColor,
                     )
                 }
 
@@ -12556,7 +13339,7 @@ private fun ZoomBar(
                     text = "${(percent * 100).roundToInt()}%",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MiuixTheme.colorScheme.onSurface,
+                    color = contentColor,
                     modifier = Modifier
                         .width(60.dp)
                         .animateContentSize(animationSpec = tween(150)),
@@ -12569,7 +13352,7 @@ private fun ZoomBar(
                     Icon(
                         imageVector = MiuixIcons.Add,
                         contentDescription = "放大",
-                        tint = MiuixTheme.colorScheme.onSurface,
+                        tint = contentColor,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -12579,14 +13362,14 @@ private fun ZoomBar(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(MiuixTheme.colorScheme.secondaryContainer)
+                        .background(contentColor.copy(alpha = 0.12f))
                         .clickable { onReset() }
                         .padding(horizontal = 14.dp, vertical = 6.dp),
                 ) {
                     Text(
                         text = "重置",
                         fontSize = 13.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
+                        color = contentColor,
                     )
                 }
 
@@ -12596,7 +13379,7 @@ private fun ZoomBar(
                     Icon(
                         imageVector = MiuixIcons.Close,
                         contentDescription = "关闭",
-                        tint = MiuixTheme.colorScheme.onSurface,
+                        tint = contentColor,
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -12606,7 +13389,11 @@ private fun ZoomBar(
 }
 
 @Composable
-private fun FaviconOrFallback(favicon: Bitmap?, size: Dp) {
+private fun FaviconOrFallback(
+    favicon: Bitmap?,
+    size: Dp,
+    fallbackTint: Color = MiuixTheme.colorScheme.onSurface,
+) {
     if (favicon != null) {
         Icon(
             bitmap = favicon.asImageBitmap(),
@@ -12620,7 +13407,7 @@ private fun FaviconOrFallback(favicon: Bitmap?, size: Dp) {
         Icon(
             imageVector = Icons.Filled.Public,
             contentDescription = "默认图标",
-            tint = MiuixTheme.colorScheme.onSurface,
+            tint = fallbackTint,
             modifier = Modifier.size(size),
         )
     }
@@ -13950,6 +14737,7 @@ private fun BrowserToolSheet(
     isNewTabPage: Boolean,
     isBookmarked: Boolean,
     onOpenSettings: () -> Unit,
+    onOpenToolCustomize: () -> Unit,
     onAddBookmark: () -> Unit,
     onRemoveBookmark: () -> Unit,
     onDismiss: () -> Unit,
@@ -13962,19 +14750,12 @@ private fun BrowserToolSheet(
     val allTools = remember {
         defaultTools().filter { it.id != "play_in_player" }
     }
+    val disabledIdSet = remember { toolMenuDisabledIds(prefs).toSet() }
     val state = remember {
         ToolSheetState(
-            run {
-                val saved = prefs.getString("tool_order", null)
-                if (saved.isNullOrEmpty()) {
-                    allTools
-                } else {
-                    val ids = saved.split(",")
-                    val ordered = ids.mapNotNull { id -> allTools.find { it.id == id } }
-                    val missing = allTools.filter { it.id !in ids }
-                    ordered + missing
-                }
-            }
+            allToolMenuIds(prefs)
+                .filter { it !in disabledIdSet }
+                .mapNotNull { id -> allTools.find { it.id == id } }
         )
     }
 
@@ -13992,15 +14773,11 @@ private fun BrowserToolSheet(
     }
 
     val scrollState = rememberScrollState()
-    val isDragging = state.draggingId != null
 
     WindowBottomSheet(
         show = show,
         onDismissRequest = {
             onDismiss()
-        },
-        onDismissFinished = {
-            state.cancelEdit()
         },
         backgroundColor = MiuixTheme.colorScheme.surface,
         allowDismiss = true,
@@ -14008,70 +14785,9 @@ private fun BrowserToolSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(scrollState, enabled = !isDragging)
+                .verticalScroll(scrollState)
                 .animateContentSize(animationSpec = tween(durationMillis = 260)),
         ) {
-            AnimatedVisibility(
-                visible = state.isEditMode,
-                enter = expandVertically(
-                    animationSpec = tween(durationMillis = 260),
-                    expandFrom = Alignment.Top,
-                ) + fadeIn(animationSpec = tween(durationMillis = 200)),
-                exit = shrinkVertically(
-                    animationSpec = tween(durationMillis = 260),
-                    shrinkTowards = Alignment.Top,
-                ) + fadeOut(animationSpec = tween(durationMillis = 140)),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 0.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(MiuixTheme.colorScheme.secondaryContainer)
-                            .clickable { state.tools = allTools }
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            text = "重置",
-                            fontSize = 14.sp,
-                            color = MiuixTheme.colorScheme.onSurface,
-                        )
-                    }
-
-                    Spacer(Modifier.weight(1f))
-
-                    Text(
-                        text = "编辑模式",
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    )
-
-                    Spacer(Modifier.weight(1f))
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(MiuixTheme.colorScheme.primary)
-                            .clickable {
-                                val order = state.tools.map { it.id }.joinToString(",")
-                                prefs.edit().putString("tool_order", order).apply()
-                                state.commitEdit()
-                            }
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                    ) {
-                        Text(
-                            text = "确定",
-                            fontSize = 14.sp,
-                            color = Color.White,
-                        )
-                    }
-                }
-            }
-
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -14178,6 +14894,23 @@ private fun BrowserToolSheet(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
+                            .clickable { onOpenToolCustomize() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Edit,
+                            contentDescription = "工具弹窗自定义",
+                            tint = MiuixTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
                             .clickable { onOpenSettings() },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -14259,144 +14992,43 @@ private fun ToolGrid(
     isNewTabPage: Boolean = false,
     onToolClick: (String) -> Unit,
 ) {
-    val density = LocalDensity.current
-    val disabledTools = remember { setOf("translate", "zoom", "find_in_page", "tts", "sniff", "save_page", "print", "share", "play_in_player", "view_source") }
+    val disabledTools = remember {
+        setOf(
+            "translate", "zoom", "find_in_page", "tts", "sniff",
+            "save_page", "print", "share", "play_in_player", "view_source",
+        )
+    }
 
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        val cellWidth = maxWidth / 5
-        val cellHeight = TOOL_SHEET_CELL_HEIGHT
-        val cellWidthPx = with(density) { cellWidth.toPx() }
-        val cellHeightPx = with(density) { cellHeight.toPx() }
-
-        val rows = (state.tools.size + 4) / 5
-        val gridHeight = cellHeight * rows
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(gridHeight),
-        ) {
-            state.tools.forEachIndexed { index, tool ->
-                key(tool.id) {
-                    val isDragging = state.draggingId == tool.id
-
-                    val col = index % 5
-                    val row = index / 5
-                    val targetX = cellWidthPx * col
-                    val targetY = cellHeightPx * row
-
-                    var dragOffset by remember(tool.id) {
-                        mutableStateOf(Offset.Zero)
-                    }
-
-                    val displayX by animateFloatAsState(
-                        targetValue = if (isDragging) dragOffset.x else targetX,
-                        animationSpec = tween(
-                            durationMillis = if (isDragging) 0 else 260,
-                            easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                        ),
-                        label = "displayX_${tool.id}",
-                    )
-                    val displayY by animateFloatAsState(
-                        targetValue = if (isDragging) dragOffset.y else targetY,
-                        animationSpec = tween(
-                            durationMillis = if (isDragging) 0 else 260,
-                            easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                        ),
-                        label = "displayY_${tool.id}",
-                    )
-
-                    val displayScale by animateFloatAsState(
-                        targetValue = if (isDragging) 1.15f else 1f,
-                        animationSpec = tween(
-                            durationMillis = if (isDragging) 180 else 220,
-                            easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                        ),
-                        label = "scale_${tool.id}",
-                    )
-
-                    val displayAlpha by animateFloatAsState(
-                        targetValue = if (isDragging) 0.92f else 1f,
-                        animationSpec = tween(
-                            durationMillis = if (isDragging) 180 else 220,
-                            easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
-                        ),
-                        label = "alpha_${tool.id}",
-                    )
-
+    Column(modifier = Modifier.fillMaxWidth()) {
+        state.tools.chunked(5).forEach { rowTools ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(TOOL_SHEET_CELL_HEIGHT),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                rowTools.forEach { tool ->
                     Box(
                         modifier = Modifier
-                            .offset { IntOffset(displayX.roundToInt(), displayY.roundToInt()) }
-                            .size(cellWidth, cellHeight)
-                            .zIndex(if (isDragging) 10f else 0f)
-                            .graphicsLayer {
-                                scaleX = displayScale
-                                scaleY = displayScale
-                                alpha = displayAlpha
-                            }
-                            .pointerInput(tool.id) {
-                                detectTapGestures(
-                                    onTap = {
-                                        if (!state.isEditMode) {
-                                            if (isNewTabPage && tool.id in disabledTools) return@detectTapGestures
-                                            onToolClick(tool.id)
-                                        }
-                                    },
-                                )
-                            }
-                            .pointerInput(tool.id) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        val idxNow = state.tools.indexOfFirst { it.id == tool.id }
-                                        val c = idxNow % 5
-                                        val r = idxNow / 5
-                                        dragOffset = Offset(
-                                            cellWidthPx * c,
-                                            cellHeightPx * r,
-                                        )
-                                        state.draggingId = tool.id
-                                        state.enterEditMode()
-                                    },
-                                    onDrag = { change, delta ->
-                                        change.consume()
-                                        val draggingId = state.draggingId
-                                            ?: return@detectDragGesturesAfterLongPress
-
-                                        dragOffset += Offset(delta.x, delta.y)
-
-                                        val centerX = dragOffset.x + cellWidthPx / 2f
-                                        val centerY = dragOffset.y + cellHeightPx / 2f
-                                        val targetCol = (centerX / cellWidthPx)
-                                            .toInt().coerceIn(0, 4)
-                                        val targetRow = (centerY / cellHeightPx)
-                                            .toInt().coerceAtLeast(0)
-                                        val targetIndex = (targetRow * 5 + targetCol)
-                                            .coerceIn(0, state.tools.lastIndex)
-
-                                        val currentIndex = state.tools
-                                            .indexOfFirst { it.id == draggingId }
-
-                                        if (currentIndex >= 0 && targetIndex != currentIndex) {
-                                            val newList = state.tools.toMutableList()
-                                            val item = newList.removeAt(currentIndex)
-                                            newList.add(targetIndex, item)
-                                            state.tools = newList
-                                        }
-                                    },
-                                    onDragEnd = { state.draggingId = null },
-                                    onDragCancel = { state.draggingId = null },
-                                )
-                            },
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .combinedClickable(
+                                onClick = {
+                                    if (isNewTabPage && tool.id in disabledTools) return@combinedClickable
+                                    onToolClick(tool.id)
+                                },
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         ToolGridItem(
                             tool = tool,
                             isActive = tool.id in state.activeTools,
-                            isEnabled = !(isNewTabPage && tool.id in disabledTools)
+                            isEnabled = !(isNewTabPage && tool.id in disabledTools),
                         )
                     }
+                }
+                repeat(5 - rowTools.size) {
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
@@ -14404,7 +15036,7 @@ private fun ToolGrid(
 }
 
 @Composable
-private fun ToolGridItem(tool: ToolDef, isActive: Boolean, isEnabled: Boolean = true) {
+internal fun ToolGridItem(tool: ToolDef, isActive: Boolean, isEnabled: Boolean = true) {
     if (tool.customItem != null) {
         tool.customItem(isActive)
         return

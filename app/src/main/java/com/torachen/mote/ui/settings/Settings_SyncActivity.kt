@@ -67,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -1305,7 +1306,11 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE) }
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     var useWebDav by remember { mutableStateOf(prefs.getString("sync_provider", "cloudbase") == "webdav") }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -1560,7 +1565,9 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
                             M3IconButton(onClick = { showMoreMenu = true }) {
                                 M3Icon(imageVector = Icons.Filled.MoreVert, contentDescription = "更多")
                             }
-                            androidx.compose.material3.DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                            androidx.compose.material3.DropdownMenu(
+                                shape = RoundedCornerShape(16.dp),
+                                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { M3Text("WebDAV") },
                                     leadingIcon = { if (useWebDav) M3Icon(imageVector = Icons.Filled.Check, contentDescription = null) },
@@ -1605,6 +1612,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
                             M3Text("设置", color = M3MaterialTheme.colorScheme.primary, style = M3MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp))
                             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = M3_SEGMENT_GROUP_GAP)) {
                                 MoteSegmentedColumn(
+                                    color = M3MaterialTheme.colorScheme.surface,
                                     content = buildList {
                                         if (!useWebDav) {
                                             add {
@@ -1680,6 +1688,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
                             M3Text("同步项", color = M3MaterialTheme.colorScheme.primary, style = M3MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 32.dp, end = 16.dp, top = 8.dp, bottom = 8.dp))
                             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING).padding(bottom = M3_SEGMENT_GROUP_GAP)) {
                                 MoteSegmentedColumn(
+                                    color = M3MaterialTheme.colorScheme.surface,
                                     content = listOf(
                                         {
                                             M3SegmentItem(
@@ -2152,7 +2161,11 @@ private fun SettingsSyncBrowsersMaterial(
     onOpenUrl: (String) -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -2219,6 +2232,7 @@ private fun SettingsSyncBrowsersMaterial(
                         Spacer(Modifier.height(M3_SEGMENT_GROUP_GAP))
 
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentArrowItem(

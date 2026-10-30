@@ -56,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -602,7 +603,11 @@ private fun SettingsPersonalInfoMaterial(
         mutableStateOf(prefs.getBoolean(KEY_UX_IMPROVEMENT, true))
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     CompositionLocalProvider(
         LocalNavigationEventDispatcherOwner provides navOwner
@@ -652,6 +657,7 @@ private fun SettingsPersonalInfoMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentArrowItem(
@@ -683,6 +689,7 @@ private fun SettingsPersonalInfoMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentSwitchItem(
@@ -1537,7 +1544,11 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
         }
     }
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
     val navBarBottom = WindowInsets.navigationBars
         .asPaddingValues()
         .calculateBottomPadding()
@@ -1624,6 +1635,7 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
                                 .padding(bottom = M3_SEGMENT_GROUP_GAP),
                         ) {
                             MoteSegmentedColumn(
+                                color = M3MaterialTheme.colorScheme.surface,
                                 content = listOf(
                                     {
                                         M3SegmentItem(
@@ -1796,7 +1808,8 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
                                             )
                                         }
                                     }
-                                MoteSegmentedColumn(content = items)
+                                MoteSegmentedColumn(
+                                    color = M3MaterialTheme.colorScheme.surface,content = items)
                             }
                         }
                     }

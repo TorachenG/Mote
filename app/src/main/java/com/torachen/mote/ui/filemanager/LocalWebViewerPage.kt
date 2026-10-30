@@ -7,6 +7,7 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -20,6 +21,30 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -48,7 +73,7 @@ internal fun LocalWebViewerPage(
     val surface = MiuixTheme.colorScheme.surface
     var showMore by remember { mutableStateOf(false) }
 
-    val webView = remember(request.path, request.isImage) {
+    val webView = if (request.isImage) null else remember(request.path) {
         WebView(context).apply {
             setBackgroundColor(AndroidColor.rgb(232, 232, 232))
             settings.javaScriptEnabled = true
@@ -94,9 +119,9 @@ internal fun LocalWebViewerPage(
     }
     DisposableEffect(webView) {
         onDispose {
-            webView.stopLoading()
-            webView.loadUrl("about:blank")
-            webView.destroy()
+            webView?.stopLoading()
+            webView?.loadUrl("about:blank")
+            webView?.destroy()
         }
     }
 
@@ -111,6 +136,8 @@ internal fun LocalWebViewerPage(
                             M3Icon(Icons.Filled.MoreVert, contentDescription = "更多")
                         }
                         DropdownMenu(
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
                             expanded = showMore,
                             onDismissRequest = { showMore = false },
                         ) {
@@ -170,6 +197,112 @@ internal fun LocalWebViewerPage(
                 },
             )
         }
-        AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
+        if (request.isImage) {
+            LocalImageViewerContent(request.path)
+        } else {
+            AndroidView(factory = { webView!! }, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
+
+@Composable
+private fun LocalImageViewerContent(path: String) {
+    var loadFailed by remember(path) { mutableStateOf(false) }
+    val bitmap by produceState<Bitmap?>(initialValue = null, path) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(path, bounds)
+                var sample = 1
+                val maxDim = maxOf(bounds.outWidth, bounds.outHeight)
+                while (maxDim / sample > 3000) sample *= 2
+                BitmapFactory.decodeFile(
+                    path,
+                    BitmapFactory.Options().apply { inSampleSize = sample },
+                )
+            }.getOrNull()
+        }
+        if (value == null) loadFailed = true
+    }
+
+    val scaleAnim = remember { Animatable(1f) }
+    val offsetAnim = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    val scope = rememberCoroutineScope()
+    val pageBg = if (LocalUiMode.current == UiMode.Material) {
+        androidx.compose.material3.MaterialTheme.colorScheme.surface
+    } else {
+        MiuixTheme.colorScheme.surface
+    }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(pageBg)) {
+        val viewW = constraints.maxWidth.toFloat()
+        val viewH = constraints.maxHeight.toFloat()
+
+        fun clampOffset(raw: Offset, s: Float): Offset {
+            val maxX = (viewW * (s - 1f)) / 2f
+            val maxY = (viewH * (s - 1f)) / 2f
+            return Offset(raw.x.coerceIn(-maxX, maxX), raw.y.coerceIn(-maxY, maxY))
+        }
+
+        val bmp = bitmap
+        if (bmp == null) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (loadFailed) {
+                    androidx.compose.material3.Text(
+                        text = "无法打开该图片",
+                        color = Color.White.copy(alpha = 0.8f),
+                    )
+                } else {
+                    androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+                }
+            }
+        } else {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scaleAnim.value
+                        scaleY = scaleAnim.value
+                        translationX = offsetAnim.value.x
+                        translationY = offsetAnim.value.y
+                    }
+                    .pointerInput(path) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            scope.launch {
+                                val newScale = (scaleAnim.value * zoom).coerceIn(1f, 6f)
+                                scaleAnim.snapTo(newScale)
+                                offsetAnim.snapTo(
+                                    if (newScale <= 1.01f) Offset.Zero
+                                    else clampOffset(offsetAnim.value + pan, newScale)
+                                )
+                            }
+                        }
+                    }
+                    .pointerInput(path) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                val zoomIn = scaleAnim.value <= 1.2f
+                                scope.launch {
+                                    val ease = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+                                    if (zoomIn) {
+                                        scaleAnim.animateTo(2.5f, tween(300, easing = ease))
+                                        offsetAnim.animateTo(
+                                            clampOffset(offsetAnim.value, 2.5f),
+                                            tween(300, easing = ease),
+                                        )
+                                    } else {
+                                        offsetAnim.animateTo(Offset.Zero, tween(300, easing = ease))
+                                        scaleAnim.animateTo(1f, tween(300, easing = ease))
+                                    }
+                                }
+                            },
+                        )
+                    },
+            )
+        }
     }
 }

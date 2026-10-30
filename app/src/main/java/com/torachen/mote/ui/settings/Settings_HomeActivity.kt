@@ -624,7 +624,11 @@ private fun SettingsHomeMaterial(
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
 
-    val pageBg = M3MaterialTheme.colorScheme.surface
+    val pageBg = lerp(
+        M3MaterialTheme.colorScheme.surfaceContainerLow,
+        M3MaterialTheme.colorScheme.secondaryContainer,
+        0.10f,
+    )
 
     val isLastSessionSelected = state.startupOptionIndex == STARTUP_OPTION_LAST_SESSION
 
@@ -693,7 +697,8 @@ private fun SettingsHomeMaterial(
                                 }
                             }
                         }
-                        MoteSegmentedColumn(content = startupItems)
+                        MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,content = startupItems)
                     }
                 }
 
@@ -705,6 +710,7 @@ private fun SettingsHomeMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentSwitchItem(
@@ -755,7 +761,8 @@ private fun SettingsHomeMaterial(
                                 }
                             }
                         }
-                        MoteSegmentedColumn(content = newtabItems)
+                        MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,content = newtabItems)
                     }
                 }
 
@@ -771,6 +778,7 @@ private fun SettingsHomeMaterial(
                             .padding(bottom = M3_SEGMENT_GROUP_GAP),
                     ) {
                         MoteSegmentedColumn(
+                            color = M3MaterialTheme.colorScheme.surface,
                             content = listOf(
                                 {
                                     M3SegmentItem(
