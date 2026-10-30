@@ -1406,8 +1406,6 @@ internal fun buildBackCardMaterialModifier(
                                 .asComposeRenderEffect()
                         },
                     )
-                    // 背景色蒙版：压住下方模糊内容的明暗起伏，避免高光描边看起来在抖
-                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.625f), shape = shape)
                     .background(color = tint, shape = shape)
             } else {
                 Modifier.background(
@@ -1462,7 +1460,6 @@ internal fun buildBackCardMaterialModifier(
                         },
                         highlight = { highlight },
                     )
-                    .background(color = MiuixTheme.colorScheme.surface.copy(alpha = 0.625f), shape = shape)
                     .background(color = blendColor, shape = shape)
             } else {
                 Modifier.background(
