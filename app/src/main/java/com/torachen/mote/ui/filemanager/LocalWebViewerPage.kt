@@ -2,6 +2,7 @@ package com.torachen.mote.ui.filemanager
 
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -75,7 +77,8 @@ internal fun LocalWebViewerPage(
 
     val webView = if (request.isImage) null else remember(request.path) {
         WebView(context).apply {
-            setBackgroundColor(AndroidColor.rgb(232, 232, 232))
+            // 背景跟随主题，不再固定浅灰：固定色会把透明底网页染色
+            setBackgroundColor(surface.toArgb())
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
@@ -89,6 +92,14 @@ internal fun LocalWebViewerPage(
             settings.setSupportZoom(true)
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
+            // 关闭 WebView 的算法暗化：系统深色模式下它会自行把网页反色，
+            // 导致预览出来的颜色和原文件不一致
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                settings.isAlgorithmicDarkeningAllowed = false
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                @Suppress("DEPRECATION")
+                settings.forceDark = android.webkit.WebSettings.FORCE_DARK_OFF
+            }
             webViewClient = WebViewClient()
 
             val file = File(request.path)

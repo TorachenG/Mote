@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -38,9 +39,17 @@ internal fun LocalFileBrowserPage(onBack: () -> Unit) {
     val title = LocalFileBrowserRequest.title ?: "预览"
     val webView = remember {
         WebView(context).apply {
+            setBackgroundColor(androidx.compose.ui.graphics.Color.White.toArgb())
             settings.javaScriptEnabled = true
             settings.allowFileAccess = true
             settings.allowContentAccess = true
+            // 关闭 WebView 算法暗化，避免系统深色模式把网页颜色改掉
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                settings.isAlgorithmicDarkeningAllowed = false
+            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                @Suppress("DEPRECATION")
+                settings.forceDark = android.webkit.WebSettings.FORCE_DARK_OFF
+            }
             webViewClient = WebViewClient()
             loadUrl(url)
         }
