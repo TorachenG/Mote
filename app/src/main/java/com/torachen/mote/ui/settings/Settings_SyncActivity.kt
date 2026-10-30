@@ -1030,7 +1030,9 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
                     .then(
                         if (blurSupported && backdrop != null && materialStyle != 0) {
                             if (progressiveTitleBlur) {
-                                Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, gradient = ProgressiveBlur.Top, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries))
+                                Modifier.progressiveTextureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = 10f, gradient = ProgressiveBlur.Top.copy(curve = 2.2f), colors = BlurDefaults.blurColors(
+            blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+        ))
                             } else {
                                 Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries))
                             }
@@ -2108,9 +2110,11 @@ private fun SettingsSyncBrowsersMiuix(
                                 Modifier.progressiveTextureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = TOP_BAR_BLUR_RADIUS,
-                                    gradient = ProgressiveBlur.Top,
-                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                    blurRadius = 10f,
+                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                    colors = BlurDefaults.blurColors(
+                                        blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
                                 )
                             } else {
                                 Modifier.textureBlur(

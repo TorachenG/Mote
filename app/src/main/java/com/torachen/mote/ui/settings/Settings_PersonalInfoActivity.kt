@@ -541,9 +541,11 @@ private fun SettingsPersonalInfoMiuix(
                                 Modifier.progressiveTextureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = TOP_BAR_BLUR_RADIUS,
-                                    gradient = ProgressiveBlur.Top,
-                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                    blurRadius = 10f,
+                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                    colors = BlurDefaults.blurColors(
+                                        blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
                                 )
                             } else {
                                 Modifier.textureBlur(
@@ -1091,9 +1093,11 @@ private fun PasswordManagerPageMiuix(onBack: () -> Unit) {
                                 Modifier.progressiveTextureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = TOP_BAR_BLUR_RADIUS,
-                                    gradient = ProgressiveBlur.Top,
-                                    colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                    blurRadius = 10f,
+                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                    colors = BlurDefaults.blurColors(
+                                        blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
                                 )
                             } else {
                                 Modifier.textureBlur(

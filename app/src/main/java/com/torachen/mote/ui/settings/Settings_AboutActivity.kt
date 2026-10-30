@@ -923,12 +923,12 @@ private fun SettingsAboutMiuix(
                                 Modifier.progressiveTextureBlur(
                                     backdrop = barBlurBackdrop,
                                     shape = RectangleShape,
-                                    blurRadius = TOP_BAR_BLUR_RADIUS,
-                                    gradient = ProgressiveBlur.Top,
+                                    blurRadius = 10f,
+                                    gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(
                                             BlendColorEntry(
-                                                color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA)
+                                                color = surfaceColor.copy(alpha = 0.3f)
                                             ),
                                         ),
                                     ),

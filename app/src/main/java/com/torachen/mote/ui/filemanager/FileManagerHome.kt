@@ -391,10 +391,10 @@ internal fun FileManagerHomePage(
                         Modifier.progressiveTextureBlur(
                             backdrop = backdrop,
                             shape = RectangleShape,
-                            blurRadius = 25f,
-                            gradient = ProgressiveBlur.Top,
+                            blurRadius = 10f,
+                            gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
                             colors = BlurDefaults.blurColors(
-                                blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.8f))),
+                                blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
                             ),
                         )
                     } else {

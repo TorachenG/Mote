@@ -207,9 +207,11 @@ internal fun FileManagerSettingsPage(
                             Modifier.progressiveTextureBlur(
                                 backdrop = backdrop,
                                 shape = RectangleShape,
-                                blurRadius = 25f,
-                                gradient = ProgressiveBlur.Top,
-                                colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                blurRadius = 10f,
+                                gradient = ProgressiveBlur.Top.copy(curve = 2.2f),
+                                colors = BlurDefaults.blurColors(
+                                    blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
+                                ),
                             )
                         } else {
                             Modifier.background(surface)

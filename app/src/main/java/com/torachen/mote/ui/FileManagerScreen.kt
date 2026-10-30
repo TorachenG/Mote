@@ -1948,13 +1948,15 @@ private fun FileManagerMiuix(
                             Modifier.progressiveTextureBlur(
                                 backdrop = backdrop,
                                 shape = RectangleShape,
-                                blurRadius = FM_BLUR_RADIUS,
+                                blurRadius = 10f,
                                 gradient = ProgressiveBlur(
                                     angle = 90f,
                                     startFraction = headerFraction,
-                                    endFraction = 1f,
+                                    endFraction = 1f, curve = 2.2f,
                                 ),
-                                colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
+                                colors = BlurDefaults.blurColors(
+                                    blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
+                                ),
                             )
                         } else {
                             Modifier.textureBlur(
