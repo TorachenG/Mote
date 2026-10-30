@@ -142,7 +142,7 @@ import java.net.URL
 // 常量
 // ============================================================
 
-private const val TOP_BAR_BLUR_RADIUS = 25f
+private const val TOP_BAR_BLUR_RADIUS = 16f
 private const val TOP_BAR_BLEND_ALPHA = 0.87f
 
 

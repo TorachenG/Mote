@@ -156,7 +156,7 @@ import androidx.compose.ui.zIndex
 // 常量
 // ============================================================
 
-private const val TOP_BAR_BLUR_RADIUS = 25f
+private const val TOP_BAR_BLUR_RADIUS = 16f
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
 private val SmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)

@@ -1235,7 +1235,7 @@ private fun ScriptEditorPageMiuix(
                                 Modifier.progressiveTextureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = 25f,
+                                    blurRadius = 16f,
                                     gradient = ProgressiveBlur.Top,
                                     colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                                 )
@@ -1243,7 +1243,7 @@ private fun ScriptEditorPageMiuix(
                                 Modifier.textureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = 25f,
+                                    blurRadius = 16f,
                                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                                     colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                                 )

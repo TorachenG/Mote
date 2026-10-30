@@ -218,7 +218,7 @@ import androidx.compose.material.icons.rounded.MusicNote
 // 常量与全局状态
 // ============================================================
 
-private const val TOP_BAR_BLUR_RADIUS = 25f
+private const val TOP_BAR_BLUR_RADIUS = 16f
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
 private val DELETE_RED = Color(0xFFFF3B30)

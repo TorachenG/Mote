@@ -271,7 +271,7 @@ private fun buildScannerButtonModifier(
                 .textureBlur(
                     backdrop = backdrop,
                     shape = shape,
-                    blurRadius = 25f,
+                    blurRadius = 16f,
                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                     colors = blurColors,
                     highlight = highlight,

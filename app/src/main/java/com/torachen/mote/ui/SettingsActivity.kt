@@ -196,7 +196,7 @@ private val DEFAULT_ICON_INNER_SIZE = 23.dp
 private val SMALL_ICON_INNER_SIZE = 20.5.dp
 private val MEDIUM_ICON_INNER_SIZE = 21.75.dp
 
-private const val TOP_BAR_BLUR_RADIUS = 25f
+private const val TOP_BAR_BLUR_RADIUS = 16f
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
@@ -1380,7 +1380,7 @@ internal fun buildBackCardMaterialModifier(
                 Modifier.textureBlur(
                     backdrop = backdrop,
                     shape = shape, // ★ 替换
-                    blurRadius = 25f,
+                    blurRadius = 16f,
                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                     colors = BlurDefaults.blurColors(
                         blendColors = listOf(
@@ -1433,7 +1433,7 @@ internal fun buildBackCardMaterialModifier(
                     .textureBlur(
                         backdrop = backdrop,
                         shape = shape, // ★ 替换
-                        blurRadius = 25f,
+                        blurRadius = 16f,
                         noiseCoefficient = BlurDefaults.NoiseCoefficient,
                         colors = blurColors,
                         highlight = highlight,

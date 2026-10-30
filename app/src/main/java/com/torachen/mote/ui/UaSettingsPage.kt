@@ -114,7 +114,7 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 private const val TOP_BAR_BLEND_ALPHA = 0.8f
 private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
-private val TOP_BAR_BLUR_RADIUS = 24.dp
+private val TOP_BAR_BLUR_RADIUS = 16.dp
 private val SmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 private const val KEY_UA_PROGRESSIVE_TITLE_BLUR = "progressive_title_blur"
 
@@ -398,7 +398,7 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                                 Modifier.progressiveTextureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = 24f,
+                                    blurRadius = 16f,
                                     gradient = ProgressiveBlur.Top,
                                     colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                                 )
@@ -406,7 +406,7 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                                 Modifier.textureBlur(
                                     backdrop = backdrop,
                                     shape = RectangleShape,
-                                    blurRadius = 24f,
+                                    blurRadius = 16f,
                                     noiseCoefficient = BlurDefaults.NoiseCoefficient,
                                     colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries),
                                 )
