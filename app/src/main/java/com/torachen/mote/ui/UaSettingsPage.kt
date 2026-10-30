@@ -337,6 +337,8 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                     }
                 }
 
+            }
+
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -380,8 +382,6 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                         }
                     }
                 }
-            }
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
