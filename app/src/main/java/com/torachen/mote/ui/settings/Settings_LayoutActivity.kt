@@ -1786,32 +1786,25 @@ private fun SettingsLayoutMiuix(
                         }
                     )
 
-                    // 横栏卡片：背景与页面同色（surface），圆角包住 TabRowWithContour 的轮廓边距；
-                    // 支持模糊时用 textureBlur，否则退回纯色背景，两种模式下都是同一块卡片。
+                    // Tab 栏材质：与返回按钮共用同一套材质（跟随「渐进模糊/材质样式」设置），
+                    // 只是形状换成包住 TabRowWithContour 轮廓边距的圆角矩形。
                     val tabRowShape = RoundedCornerShape(TAB_ROW_CORNER + 5.dp)
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)
                             .padding(bottom = 8.dp)
-                            .clip(tabRowShape)
                             .then(
-                                if (blurSupported && backdrop != null && materialStyle != 0) {
-                                    Modifier.textureBlur(
+                                if (generalState.progressiveTitleBlur) {
+                                    buildBackCardMaterialModifier(
+                                        materialStyle = materialStyle,
+                                        blurSupported = blurSupported,
                                         backdrop = backdrop,
+                                        themeIsDark = themeIsDark,
                                         shape = tabRowShape,
-                                        blurRadius = TAB_BLUR_RADIUS,
-                                        noiseCoefficient = BlurDefaults.NoiseCoefficient,
-                                        colors = BlurDefaults.blurColors(
-                                            blendColors = listOf(
-                                                BlendColorEntry(
-                                                    color = surfaceColor.copy(alpha = TOP_BAR_BLEND_ALPHA),
-                                                ),
-                                            ),
-                                        ),
                                     )
                                 } else {
-                                    Modifier.background(surfaceColor)
+                                    Modifier
                                 }
                             )
                     ) {
