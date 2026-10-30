@@ -166,13 +166,22 @@
     });
   }
 
+  function sortNewestFirst(list) {
+    return list.slice().sort(function (a, b) {
+      var ta = a.publishedAt ? Date.parse(a.publishedAt) : 0;
+      var tb = b.publishedAt ? Date.parse(b.publishedAt) : 0;
+      return tb - ta;
+    });
+  }
+
   function fetchGiteeReleases(count) {
+    // 注意：Gitee releases 接口按创建时间升序返回（最旧在前），必须自己按时间倒序
     return fetchJson(
-      GITEE_API + '/releases?per_page=' + (count || 30) + '&page=1',
-      4500
+      GITEE_API + '/releases?per_page=100&page=1',
+      5000
     ).then(function (items) {
       if (!Array.isArray(items)) return [];
-      return items.map(normalizeGiteeRelease);
+      return sortNewestFirst(items.map(normalizeGiteeRelease)).slice(0, count || 30);
     });
   }
 
@@ -183,7 +192,7 @@
           .then(normalizeGithubRelease);
       },
       gitee: function () {
-        return fetchGiteeReleases(20).then(function (list) {
+        return fetchGiteeReleases(100).then(function (list) {
           if (!list.length) return null;
           var stable = list.filter(function (r) { return !r.prerelease; });
           return stable[0] || list[0];
