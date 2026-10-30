@@ -116,6 +116,7 @@ import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
+import top.yukonga.miuix.kmp.blur.highlight.Highlight
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.ProgressiveBlur
@@ -1802,6 +1803,15 @@ private fun SettingsLayoutMiuix(
                                         backdrop = backdrop,
                                         themeIsDark = themeIsDark,
                                         shape = tabRowShape,
+                                        // 横条面积大，混合色压低一点、模糊半径加大，
+                                        // 让后面的内容真的透出来，而不是糊成一片同色
+                                        blendAlpha = 0.55f,
+                                        blurRadius = 32f,
+                                        highlight = if (themeIsDark) {
+                                            Highlight.GlassStrokeMiddleDark
+                                        } else {
+                                            Highlight.GlassStrokeMiddleLight
+                                        },
                                     )
                                 } else {
                                     Modifier
