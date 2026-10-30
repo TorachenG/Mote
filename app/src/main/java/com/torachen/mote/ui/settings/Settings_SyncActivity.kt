@@ -66,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.RectangleShape
@@ -1034,7 +1035,11 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
      curve = 2.2f,
  ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
-        ))
+        )).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
+                                    ),
+                                )
                             } else {
                                 Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries))
                             }
@@ -2118,6 +2123,10 @@ private fun SettingsSyncBrowsersMiuix(
                                     ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
                                     ),
                                 )
                             } else {

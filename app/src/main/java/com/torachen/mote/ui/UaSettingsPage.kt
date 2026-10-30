@@ -80,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
@@ -404,6 +405,10 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                                     ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
                                     ),
                                 )
                             } else {

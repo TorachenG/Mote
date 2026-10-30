@@ -83,6 +83,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
@@ -1244,6 +1245,10 @@ private fun DownloadManagerScreenMiuix(
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
                                     ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
+                                    ),
                                 )
                             } else {
                                 Modifier.textureBlur(
@@ -1671,6 +1676,10 @@ private fun TaskDetailScreenMiuix(
                                     ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
                                     ),
                                 )
                             } else {
@@ -3063,6 +3072,10 @@ private fun DownloadSettingsMiuix(onBack: () -> Unit) {
                                     ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
                                     ),
                                 )
                             } else {

@@ -68,6 +68,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -565,6 +566,10 @@ fun ToolMenuCustomizePage(onBack: () -> Unit) {
                                     ),
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
+                                    ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
                                     ),
                                 )
                             } else {

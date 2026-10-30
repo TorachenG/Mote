@@ -119,6 +119,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -1955,6 +1956,10 @@ private fun FileManagerMiuix(
                                 ),
                                 colors = BlurDefaults.blurColors(
                                     blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
+                                ),
+                            ).background(
+                                Brush.verticalGradient(
+                                    listOf(surface, Color.Transparent),
                                 ),
                             )
                         } else {

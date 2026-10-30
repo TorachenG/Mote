@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.lerp
@@ -737,7 +738,11 @@ private fun SettingsSpaceManagementMiuix(
      curve = 2.2f,
  ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
-        )) else Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries)) } else Modifier.background(surfaceColor)).statusBarsPadding().onGloballyPositioned { coords -> val bottomPx = coords.boundsInWindow().bottom.toInt(); if (bottomPx != topBarBottomPx) { topBarBottomPx = bottomPx } }) {
+        )).background(
+                                                                                                                                                                                Brush.verticalGradient(
+                                                                                                                                                                                    listOf(surfaceColor, Color.Transparent),
+                                                                                                                                                                                ),
+                                                                                                                                                                            ) else Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries)) } else Modifier.background(surfaceColor)).statusBarsPadding().onGloballyPositioned { coords -> val bottomPx = coords.boundsInWindow().bottom.toInt(); if (bottomPx != topBarBottomPx) { topBarBottomPx = bottomPx } }) {
                 TopAppBar(
                     title = "空间管理", largeTitle = "空间管理", scrollBehavior = scrollBehavior, color = Color.Transparent, defaultWindowInsetsPadding = false,
                     navigationIcon = { SettingsBackButton(onBack = onBack, progressiveTitleBlur = progressiveTitleBlur, backCardAlpha = backCardAlpha, backCardMaterialModifier = backCardMaterialModifier, iconTint = MiuixTheme.colorScheme.onSurface) },
@@ -1149,7 +1154,11 @@ private fun CacheSettingsMiuix(onBack: () -> Unit) {
      curve = 2.2f,
  ), colors = BlurDefaults.blurColors(
             blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
-        )) else Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries)) } else Modifier.background(surfaceColor)).statusBarsPadding().onGloballyPositioned { coords -> val bottomPx = coords.boundsInWindow().bottom.toInt(); if (bottomPx != topBarBottomPx) { topBarBottomPx = bottomPx } }) {
+        )).background(
+                                                                                                                                                                                Brush.verticalGradient(
+                                                                                                                                                                                    listOf(surfaceColor, Color.Transparent),
+                                                                                                                                                                                ),
+                                                                                                                                                                            ) else Modifier.textureBlur(backdrop = backdrop, shape = RectangleShape, blurRadius = TOP_BAR_BLUR_RADIUS, noiseCoefficient = BlurDefaults.NoiseCoefficient, colors = BlurDefaults.blurColors(blendColors = titleBarBlendColorEntries)) } else Modifier.background(surfaceColor)).statusBarsPadding().onGloballyPositioned { coords -> val bottomPx = coords.boundsInWindow().bottom.toInt(); if (bottomPx != topBarBottomPx) { topBarBottomPx = bottomPx } }) {
                 TopAppBar(
                     title = "清理设置", largeTitle = "清理设置", scrollBehavior = scrollBehavior, color = Color.Transparent, defaultWindowInsetsPadding = false,
                     navigationIcon = { SettingsBackButton(onBack = onBack, progressiveTitleBlur = progressiveTitleBlur, backCardAlpha = backCardAlpha, backCardMaterialModifier = backCardMaterialModifier, iconTint = MiuixTheme.colorScheme.onSurface) }

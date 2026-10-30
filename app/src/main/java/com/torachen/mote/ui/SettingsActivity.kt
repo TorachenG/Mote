@@ -65,6 +65,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -1238,6 +1239,10 @@ private fun SettingsMainPageMiuix(
                                                 color = surfaceColor.copy(alpha = 0.3f),
                                             ),
                                         ),
+                                    ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
                                     ),
                                 )
                             } else {

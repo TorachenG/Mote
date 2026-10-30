@@ -770,6 +770,10 @@ private fun SettingsWebSecurityMiuix(
                                     colors = BlurDefaults.blurColors(
                                         blendColors = listOf(BlendColorEntry(color = surfaceColor.copy(alpha = 0.3f))),
                                     ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
+                                    ),
                                 )
                             } else {
                                 Modifier.textureBlur(

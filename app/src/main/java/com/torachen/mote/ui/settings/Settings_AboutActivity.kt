@@ -934,6 +934,10 @@ private fun SettingsAboutMiuix(
                                             ),
                                         ),
                                     ),
+                                ).background(
+                                    Brush.verticalGradient(
+                                        listOf(surfaceColor, Color.Transparent),
+                                    ),
                                 )
                             } else {
                                 // ★ 关闭时保持原来的普通模糊

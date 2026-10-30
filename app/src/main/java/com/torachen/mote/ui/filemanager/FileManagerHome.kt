@@ -73,6 +73,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -397,6 +398,10 @@ internal fun FileManagerHomePage(
                             ),
                             colors = BlurDefaults.blurColors(
                                 blendColors = listOf(BlendColorEntry(color = surface.copy(alpha = 0.3f))),
+                            ),
+                        ).background(
+                            Brush.verticalGradient(
+                                listOf(surface, Color.Transparent),
                             ),
                         )
                     } else {
