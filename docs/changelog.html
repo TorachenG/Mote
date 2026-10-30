@@ -10,7 +10,18 @@
 <link rel="stylesheet" href="assets/site.css">
 <style>
   .release + .release{margin-top:var(--gap)}
-  .release-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .release-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .dl-mini{
+    margin-left:auto;
+    display:inline-flex;align-items:center;
+    padding:4px 12px;border-radius:8px;
+    background:#3482ff;color:#fff;
+    font-size:12.5px;font-weight:500;letter-spacing:.2px;
+    line-height:1.45;text-decoration:none;white-space:nowrap;
+    transition:background .16s ease;
+  }
+  .dl-mini:hover{background:#2a70e4}
+  .dl-mini:active{background:#2360cc}
   .release-tag{font-size:17px;font-weight:600;color:var(--text);letter-spacing:.4px}
   .release-date{color:var(--muted);font-size:13px}
   .release-badge{
@@ -87,14 +98,70 @@
       const date = d ? d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) : '';
       const body = window.renderMarkdown(r.body || '') || '<p>该版本没有附加说明。</p>';
       const badge = r.prerelease ? '<span class="release-badge">预发布</span>' : '';
+      const apk = (r.assets || []).find(function (a) { return /\.apk$/i.test(a.name || ''); });
+      let dlButton = '';
+      if (apk && apk.url) {
+        const known = apk.size ? '（' + (apk.size / 1048576).toFixed(1) + 'MB）' : '';
+        dlButton = '<a class="dl-mini" href="' + apk.url + '"' +
+          ' data-apk="' + apk.url + '"' +
+          ' data-tag="' + tag + '"' +
+          (apk.size ? ' data-size="' + apk.size + '"' : '') +
+          '>下载' + known + '</a>';
+      } else if (r.pageUrl) {
+        dlButton = '<a class="dl-mini" href="' + r.pageUrl + '" target="_blank" rel="noopener">前往下载</a>';
+      }
       return '<div class="card release">' +
         '<div class="release-head">' +
           '<span class="release-tag">v' + tag + '</span>' +
           badge +
           '<span class="release-date">' + date + '</span>' +
+          dlButton +
         '</div>' +
         '<article class="doc">' + body + '</article>' +
       '</div>';
+    }
+
+
+    // 每个版本的下载按钮补齐安装包大小：GitHub 映射优先，缺失再 HEAD 读取
+    async function hydrateDownloadSizes() {
+      const buttons = Array.prototype.slice.call(
+        document.querySelectorAll('.dl-mini[data-apk]')
+      );
+      if (!buttons.length) return;
+
+      let sizeByTag = {};
+      try {
+        const res = await fetch(
+          'https://api.github.com/repos/TorachenG/Mote/releases?per_page=100',
+          { headers: { Accept: 'application/vnd.github+json' } }
+        );
+        if (res.ok) {
+          const list = await res.json();
+          (list || []).forEach(function (rel) {
+            const asset = (rel.assets || []).find(function (a) {
+              return /\.apk$/i.test(a.name || '');
+            });
+            if (asset && asset.size) {
+              sizeByTag[String(rel.tag_name || '').replace(/^v/i, '')] = asset.size;
+            }
+          });
+        }
+      } catch (e) {}
+
+      await Promise.all(buttons.map(async function (btn) {
+        let bytes = Number(btn.getAttribute('data-size')) || 0;
+        if (!bytes) bytes = sizeByTag[btn.getAttribute('data-tag')] || 0;
+        if (!bytes) {
+          try {
+            const head = await fetch(btn.getAttribute('data-apk'), { method: 'HEAD' });
+            const len = head.headers.get('content-length');
+            if (len) bytes = Number(len) || 0;
+          } catch (e) {}
+        }
+        if (bytes > 0) {
+          btn.textContent = '下载（' + (bytes / 1048576).toFixed(1) + 'MB）';
+        }
+      }));
     }
 
     MoteSource.releases(30)
@@ -104,6 +171,7 @@
           return;
         }
         list.innerHTML = items.map(card).join('');
+        hydrateDownloadSizes();
       })
       .catch(function () {
         MoteSource.releasesPageUrl().then(function (url) {
