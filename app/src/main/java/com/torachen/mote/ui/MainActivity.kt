@@ -7777,6 +7777,7 @@ fun BrowserScreen(
 
             val density = LocalDensity.current
             val pullTriggerPx = with(density) { 74.dp.toPx() }
+            val currentZoomFactor by rememberUpdatedState(zoomFactor)
 
             Box(
                 modifier = Modifier
@@ -7797,9 +7798,9 @@ fun BrowserScreen(
                                 if (w <= 0f) continue
 
                                 // 页面被放大后，横向拖动是在平移网页内容，
-                                // 不能当成侧滑切页，否则缩放状态下没法自由查看
-                                val pageZoomed = runCatching { wv?.scale ?: 1f }.getOrDefault(1f) > 1.01f
-                                if (pageZoomed) continue
+                                // 不能当成侧滑切页。这里只看应用内的缩放倍率：
+                                // WebView.scale 在宽视口适配时本来就可能 >1，用它会把普通页面也禁掉
+                                if (currentZoomFactor > 1.01f) continue
 
                                 val canBack = canNavigateBack()
                                 val canForward = canNavigateForward()
@@ -7871,9 +7872,7 @@ fun BrowserScreen(
                                 val downCh = downEv.changes.firstOrNull { it.changedToDown() }
                                     ?: continue
                                 // 页面放大后纵向拖动是平移网页，不能触发下拉刷新
-                                val zoomedForPull =
-                                    runCatching { wv?.scale ?: 1f }.getOrDefault(1f) > 1.01f
-                                if (zoomedForPull) continue
+                                if (currentZoomFactor > 1.01f) continue
                                 val startX = downCh.position.x
                                 val startY = downCh.position.y
                                 var pulled = false
