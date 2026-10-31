@@ -7314,6 +7314,9 @@ fun BrowserScreen(
                                             }
                                         },
                                     label = "请输入关键词或网址",
+                                    // 沉浸式页面下标题栏可能是黑底，搜索框内的文字与图标
+                                    // 必须跟随标题栏内容色，否则仍是主题的深色
+                                    contentColor = titleChrome.contentColor,
                                     // 搜索图标与标题栏其它图标同色，再压到 20% 不透明度
                                     leadingIconTint = titleChrome.contentColor.copy(alpha = 0.2f),
                                     // 点击瞬间就把显示内容换成当前网址：聚焦回调里改文本会被
@@ -16484,6 +16487,8 @@ private fun MoteUrlInputField(
     onBeforeFocus: (() -> Unit)? = null,
     /** 前置搜索图标的颜色；不传则用容器默认色 */
     leadingIconTint: Color? = null,
+    /** 文字 / 图标颜色；不传则跟随 LocalContentColor 与容器默认色 */
+    contentColor: Color? = null,
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSearch by rememberUpdatedState(onSearch)
@@ -16493,7 +16498,7 @@ private fun MoteUrlInputField(
     val focused = interactionSource.collectIsFocusedAsState().value
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
-    val textColor = LocalContentColor.current
+    val textColor = contentColor ?: LocalContentColor.current
 
     val inputTextStyle = MiuixTheme.textStyles.main
         .copy(fontWeight = FontWeight.Medium)
@@ -16567,7 +16572,8 @@ private fun MoteUrlInputField(
                                 fontSize = SearchBarDefaults.InputFieldFontSize,
                                 fontWeight = FontWeight.Medium,
                             ),
-                            color = MiuixTheme.colorScheme.onSurfaceContainerHigh,
+                            color = contentColor?.copy(alpha = 0.62f)
+                                ?: MiuixTheme.colorScheme.onSurfaceContainerHigh,
                         )
                         Box(modifier = Modifier.graphicsLayer { }) {
                             innerTextField()
@@ -16588,7 +16594,8 @@ private fun MoteUrlInputField(
                             Icon(
                                 imageVector = MiuixIcons.Basic.SearchCleanup,
                                 contentDescription = "清除",
-                                tint = MiuixTheme.colorScheme.onSurfaceContainerHighest,
+                                tint = contentColor
+                                    ?: MiuixTheme.colorScheme.onSurfaceContainerHighest,
                                 modifier = Modifier
                                     .clip(capsuleShape)
                                     .clickable { currentOnValueChange(TextFieldValue("")) },
