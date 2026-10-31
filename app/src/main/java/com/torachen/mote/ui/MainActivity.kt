@@ -4752,7 +4752,6 @@ fun BrowserScreen(
 ) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val textToolbar = LocalTextToolbar.current
     val scope = rememberCoroutineScope()
 
     val surfaceColor = MiuixTheme.colorScheme.surface
@@ -4862,7 +4861,6 @@ fun BrowserScreen(
     var securityPage by remember { mutableIntStateOf(0) }
     var securitySheetBounds by remember { mutableStateOf<Rect?>(null) }
     var searchBarBounds by remember { mutableStateOf<Rect?>(null) }
-    var inputBounds by remember { mutableStateOf(Rect.Zero) }
     var bottomHeaderContentHeightPx by remember { mutableIntStateOf(0) }
     val secInfo = SecurityStateHolder.info
 
@@ -7271,10 +7269,6 @@ fun BrowserScreen(
                                     onExpandedChange = { searchBarExpanded = it },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .onGloballyPositioned { coords ->
-                                            val b = coords.boundsInWindow()
-                                            inputBounds = Rect(b.left, b.top, b.right, b.bottom)
-                                        }
                                         .onFocusChanged { focusState: FocusState ->
                                             isSearchFocused = focusState.isFocused
                                             if (focusState.isFocused) {
@@ -7291,59 +7285,6 @@ fun BrowserScreen(
                                                             text = target,
                                                             selection = TextRange(0, target.length),
                                                         )
-                                                        scope.launch {
-                                                            delay(80)
-                                                            runCatching {
-                                                                textToolbar.showMenu(
-                                                                    rect = inputBounds,
-                                                                    onCopyRequested = {
-                                                                        val sel = urlInput.selection
-                                                                        val start = minOf(sel.start, sel.end)
-                                                                        val end = maxOf(sel.start, sel.end)
-                                                                        if (end > start) {
-                                                                            copyToClipboard(
-                                                                                context,
-                                                                                urlInput.text.substring(start, end),
-                                                                            )
-                                                                        }
-                                                                    },
-                                                                    onCutRequested = {
-                                                                        val sel = urlInput.selection
-                                                                        val start = minOf(sel.start, sel.end)
-                                                                        val end = maxOf(sel.start, sel.end)
-                                                                        if (end > start) {
-                                                                            copyToClipboard(
-                                                                                context,
-                                                                                urlInput.text.substring(start, end),
-                                                                            )
-                                                                            val next = urlInput.text.removeRange(start, end)
-                                                                            urlInput = TextFieldValue(
-                                                                                next,
-                                                                                TextRange(start.coerceAtMost(next.length)),
-                                                                            )
-                                                                        }
-                                                                    },
-                                                                    onPasteRequested = {
-                                                                        pastedText(context)?.let { text ->
-                                                                            val sel = urlInput.selection
-                                                                            val start = minOf(sel.start, sel.end)
-                                                                            val end = maxOf(sel.start, sel.end)
-                                                                            val next = urlInput.text.replaceRange(start, end, text)
-                                                                            urlInput = TextFieldValue(
-                                                                                next,
-                                                                                TextRange(start + text.length),
-                                                                            )
-                                                                        }
-                                                                    },
-                                                                    onSelectAllRequested = {
-                                                                        urlInput = TextFieldValue(
-                                                                            urlInput.text,
-                                                                            TextRange(0, urlInput.text.length),
-                                                                        )
-                                                                    },
-                                                                )
-                                                            }
-                                                        }
                                                     }
                                                 }
                                             } else {
