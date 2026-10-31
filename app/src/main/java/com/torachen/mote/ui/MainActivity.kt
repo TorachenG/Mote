@@ -7280,9 +7280,9 @@ fun BrowserScreen(
                                             if (focusState.isFocused) {
                                                 showSecuritySheet = false
                                                 activeWindow?.let { win ->
-                                                    val target =
-                                                        if (urlInput.text == win.title) win.url
-                                                        else urlInput.text
+                                                    // 点击聚焦时总是显示当前网址（无论之前输入框显示什么），
+                                                    // 再整体选中；没有网址时才退回原文本
+                                                    val target = win.url.ifBlank { urlInput.text }
                                                     if (target.isNotEmpty()) {
                                                         // 聚焦时整体选中，并唤起文本工具栏
                                                         urlInput = TextFieldValue(
