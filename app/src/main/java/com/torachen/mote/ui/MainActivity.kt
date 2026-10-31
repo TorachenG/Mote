@@ -7256,7 +7256,11 @@ fun BrowserScreen(
         .asPaddingValues()
         .calculateBottomPadding()
     val headerBottomBarHeight =
-        if (isFullscreen || htmlFullscreenView != null || fusedDualPane) 0.dp else BOTTOM_BAR_HEIGHT
+        if (isFullscreen || htmlFullscreenView != null || (fusedDualPane && !showNewTabPage)) {
+            0.dp
+        } else {
+            BOTTOM_BAR_HEIGHT
+        }
     // 底部标题栏需要避让的高度：输入法 > 底部工具栏
     val headerBottomInset = maxOf(
         headerImeBottomPadding,
@@ -7469,7 +7473,8 @@ fun BrowserScreen(
                                                 }
                                             }
                                         },
-                                    label = "请输入关键词或网址",
+                                    // 融合式双栏下不用占位提示，空内容时保持纯净
+                                    label = if (fusedDualPane) "" else "请输入关键词或网址",
                                     // 沉浸式页面下标题栏可能是黑底，搜索框内的文字与图标
                                     // 必须跟随标题栏内容色，否则仍是主题的深色
                                     contentColor = titleChrome.contentColor,
@@ -8134,7 +8139,7 @@ fun BrowserScreen(
                         isFullscreen || htmlFullscreenView != null -> 0.dp
                         showNewTabPage -> 0.dp
                         // 融合式双栏把工具栏并进标题栏，底部不再为它留高度
-                        else -> if (fusedDualPane) webViewNavBarPad
+                        else -> if (fusedDualPane && !showNewTabPage) webViewNavBarPad
                         else webViewNavBarPad + BOTTOM_BAR_HEIGHT
                     },
                     animationSpec = tween(
@@ -8781,7 +8786,9 @@ fun BrowserScreen(
         ) {
             BrowserBottomBar(
                 items = bottomBarItems,
-                barVisible = !isFullscreen && htmlFullscreenView == null && !fusedDualPane,
+                // 新标签页有自己的工具栏，不受融合式双栏影响
+                barVisible = !isFullscreen && htmlFullscreenView == null &&
+                    (!fusedDualPane || showNewTabPage),
                 onItemClick = { id ->
                     clearSearchFocus()
                     when (id) {
