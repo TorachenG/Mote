@@ -4364,10 +4364,35 @@ private fun BrowserHeader(
     engineSwitcher: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
     trailing: @Composable () -> Unit = {},
+    /** 融合式双栏：搜索栏左侧的按钮组 */
+    leading: @Composable () -> Unit = {},
+    /** 融合式双栏：搜索栏右侧的按钮组 */
+    inlineTrailing: @Composable () -> Unit = {},
+    fused: Boolean = false,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
     containerColor: Color = Color.Transparent,
 ) {
+    val fieldSlot: @Composable () -> Unit = {
+        if (fused) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                leading()
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
+                ) {
+                    inputField()
+                }
+                inlineTrailing()
+            }
+        } else {
+            inputField()
+        }
+    }
     if (atBottom) {
         Column(
             modifier = modifier
@@ -4378,7 +4403,7 @@ private fun BrowserHeader(
             Spacer(Modifier.height(4.dp))
             engineSwitcher()
             BottomSearchBar(
-                inputField = inputField,
+                inputField = fieldSlot,
                 outsideEndAction = outsideEndAction,
                 expanded = expanded,
                 onExpandedChange = onExpandedChange,
@@ -4394,7 +4419,7 @@ private fun BrowserHeader(
                 .statusBarsPadding(),
         ) {
             SearchBar(
-                inputField = inputField,
+                inputField = fieldSlot,
                 onExpandedChange = onExpandedChange,
                 expanded = expanded,
                 outsideEndAction = outsideEndAction,
@@ -4846,6 +4871,22 @@ fun BrowserScreen(
 
     var showToolSheet by remember { mutableStateOf(false) }
     var showWindowSheet by remember { mutableStateOf(false) }
+    // 融合式双栏：标题栏与工具栏合并为一行（后退 + 自定义功能 | 搜索栏 | 窗口 + 工具栏）
+    val fusedPrefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var fusedDualPane by remember {
+        mutableStateOf(fusedPrefs.getBoolean("web_fused_dual_pane", false))
+    }
+    DisposableEffect(Unit) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "web_fused_dual_pane") {
+                fusedDualPane = fusedPrefs.getBoolean(key, false)
+            }
+        }
+        fusedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { fusedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     var showHistorySheet by remember { mutableStateOf(false) }
     var showBookmarkSheet by remember { mutableStateOf(false) }
     var showClearHistoryDialog by remember { mutableStateOf(false) }
@@ -7254,6 +7295,90 @@ fun BrowserScreen(
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
 
+            val fusedDynamicTool = remember(effectiveDynamicTool) {
+                effectiveDynamicTool?.let { tid ->
+                    defaultTools().find { it.id == tid }
+                        ?: if (tid == "add_bookmark") {
+                            ToolDef("add_bookmark", "添加书签", MiuixIcons.Favorites)
+                        } else {
+                            null
+                        }
+                }
+            }
+
+            val fusedLeading: @Composable () -> Unit = {
+                if (fusedDualPane) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val tint = titleChrome.contentColor
+                        val backEnabled = canNavigateBack()
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable(enabled = backEnabled) { performNavigateBack() },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.ChevronBackward,
+                                contentDescription = "后退",
+                                tint = if (backEnabled) tint else tint.copy(alpha = 0.3f),
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                        fusedDynamicTool?.let { tool ->
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .clickable { runDynamicToolAction(tool.id) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = tool.icon,
+                                    contentDescription = tool.title,
+                                    tint = tint,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            val fusedTrailing: @Composable () -> Unit = {
+                if (fusedDualPane) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { showWindowSheet = true },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            WindowManagerIcon(
+                                count = windows.size,
+                                tint = titleChrome.contentColor,
+                                pulseTrigger = windowIconPulse,
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .clickable { showToolSheet = true },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.GridView,
+                                contentDescription = "工具栏",
+                                tint = titleChrome.contentColor,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+            }
+
             val browserHeaderInput: @Composable () -> Unit = {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -7773,6 +7898,9 @@ fun BrowserScreen(
                         outsideEndAction = browserHeaderCancel,
                         engineSwitcher = browserHeaderEngine,
                         content = browserHeaderExpanded,
+                        leading = fusedLeading,
+                        inlineTrailing = fusedTrailing,
+                        fused = fusedDualPane,
                         containerColor = topChrome.backgroundColor,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -8164,6 +8292,9 @@ fun BrowserScreen(
                         engineSwitcher = browserHeaderEngine,
                         content = browserHeaderExpanded,
                         trailing = browserHeaderTrailing,
+                        leading = fusedLeading,
+                        inlineTrailing = fusedTrailing,
+                        fused = fusedDualPane,
                         containerColor = bottomChrome.backgroundColor,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -8645,7 +8776,7 @@ fun BrowserScreen(
         ) {
             BrowserBottomBar(
                 items = bottomBarItems,
-                barVisible = !isFullscreen && htmlFullscreenView == null,
+                barVisible = !isFullscreen && htmlFullscreenView == null && !fusedDualPane,
                 onItemClick = { id ->
                     clearSearchFocus()
                     when (id) {
