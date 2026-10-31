@@ -7812,6 +7812,12 @@ fun BrowserScreen(
                                     false
                                 }
 
+                                // 只从屏幕左右两侧起手才接管：页面中部的横向拖动
+                                // （横向列表、滑块验证码等）不能被切页手势抢走
+                                val edgeZone = w * 0.2f
+                                val fromLeftEdge = startX <= edgeZone
+                                val fromRightEdge = startX >= w - edgeZone
+
                                 var direction = 0
                                 var consumed = false
                                 var guardChecked = false
@@ -7839,8 +7845,8 @@ fun BrowserScreen(
 
                                         if (kotlin.math.abs(dx) >= kotlin.math.abs(dy) * 1.5f) {
                                             direction = when {
-                                                dx > 0 && canBack && !canScrollLeft -> -1
-                                                dx < 0 && canForward && !canScrollRight -> 1
+                                                dx > 0 && canBack && !canScrollLeft && fromLeftEdge -> -1
+                                                dx < 0 && canForward && !canScrollRight && fromRightEdge -> 1
                                                 else -> 0
                                             }
                                             if (direction == 0) break
