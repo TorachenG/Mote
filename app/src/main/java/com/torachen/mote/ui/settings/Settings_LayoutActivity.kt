@@ -1496,8 +1496,8 @@ private fun SettingsLayoutMiuix(
                                                     collapseOnSelection = true,
                                                 )
                                                 SwitchPreference(
-                                                    title = "工具栏功能建议",
-                                                    summary = "开启后，会在合适的时候自动更换自定义功能位的功能",
+                                                    title = "功能建议",
+                                                    summary = "开启后，会在合适的时候替换自定义功能为建议的功能",
                                                     checked = layoutToolSuggest,
                                                     onCheckedChange = {
                                                         layoutToolSuggest = it
@@ -2282,8 +2282,8 @@ private fun SettingsLayoutMaterial(
                                             },
                                             {
                                                 M3SegmentSwitchItem(
-                                                    title = "工具栏功能建议",
-                                                    summary = "开启后，会在合适的时候自动更换自定义功能位的功能",
+                                                    title = "功能建议",
+                                                    summary = "开启后，会在合适的时候替换自定义功能为建议的功能",
                                                     checked = toolSuggest,
                                                     onCheckedChange = {
                                                         toolSuggest = it
