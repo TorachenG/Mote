@@ -7281,10 +7281,9 @@ fun BrowserScreen(
                                                         else win.url.ifBlank { urlInput.text }
                                                     if (target.isNotEmpty()) {
                                                         // 聚焦时整体选中，并唤起文本工具栏
-                                                        urlInput = TextFieldValue(
-                                                            text = target,
-                                                            selection = TextRange(0, target.length),
-                                                        )
+                                                        // 光标置于末尾：全选会被 TextField 的点击定位立刻取消，
+                                                        // 表现为选中态闪一下就没了
+                                                        urlInput = TextFieldValue(target)
                                                     }
                                                 }
                                             } else {
@@ -7323,10 +7322,7 @@ fun BrowserScreen(
                                                 if (urlInput.text.isBlank()) ""
                                                 else win.url.ifBlank { urlInput.text }
                                             if (target.isNotEmpty()) {
-                                                urlInput = TextFieldValue(
-                                                    text = target,
-                                                    selection = TextRange(0, target.length),
-                                                )
+                                                urlInput = TextFieldValue(target)
                                             }
                                         }
                                     },
