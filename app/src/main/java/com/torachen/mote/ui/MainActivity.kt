@@ -7777,7 +7777,6 @@ fun BrowserScreen(
 
             val density = LocalDensity.current
             val pullTriggerPx = with(density) { 74.dp.toPx() }
-            val currentZoomFactor by rememberUpdatedState(zoomFactor)
 
             Box(
                 modifier = Modifier
@@ -7797,13 +7796,21 @@ fun BrowserScreen(
                                 val w = size.width.toFloat()
                                 if (w <= 0f) continue
 
-                                // 页面被放大后，横向拖动是在平移网页内容，
-                                // 不能当成侧滑切页。这里只看应用内的缩放倍率：
-                                // WebView.scale 在宽视口适配时本来就可能 >1，用它会把普通页面也禁掉
-                                if (currentZoomFactor > 1.01f) continue
-
                                 val canBack = canNavigateBack()
                                 val canForward = canNavigateForward()
+
+                                // 网页还有横向可滚动余量时，横向拖动是平移网页（放大后尤其明显），
+                                // 不能当成侧滑切页：只有已经贴到左/右边界才接管手势
+                                val canScrollLeft = try {
+                                    wv?.canScrollHorizontally(-1) ?: false
+                                } catch (_: Exception) {
+                                    false
+                                }
+                                val canScrollRight = try {
+                                    wv?.canScrollHorizontally(1) ?: false
+                                } catch (_: Exception) {
+                                    false
+                                }
 
                                 var direction = 0
                                 var consumed = false
@@ -7832,8 +7839,8 @@ fun BrowserScreen(
 
                                         if (kotlin.math.abs(dx) >= kotlin.math.abs(dy) * 1.5f) {
                                             direction = when {
-                                                dx > 0 && canBack -> -1
-                                                dx < 0 && canForward -> 1
+                                                dx > 0 && canBack && !canScrollLeft -> -1
+                                                dx < 0 && canForward && !canScrollRight -> 1
                                                 else -> 0
                                             }
                                             if (direction == 0) break
@@ -7871,8 +7878,6 @@ fun BrowserScreen(
                                 val downEv = awaitPointerEvent(PointerEventPass.Initial)
                                 val downCh = downEv.changes.firstOrNull { it.changedToDown() }
                                     ?: continue
-                                // 页面放大后纵向拖动是平移网页，不能触发下拉刷新
-                                if (currentZoomFactor > 1.01f) continue
                                 val startX = downCh.position.x
                                 val startY = downCh.position.y
                                 var pulled = false
