@@ -7314,6 +7314,8 @@ fun BrowserScreen(
                                             }
                                         },
                                     label = "请输入关键词或网址",
+                                    // 搜索图标与标题栏其它图标同色，再压到 20% 不透明度
+                                    leadingIconTint = titleChrome.contentColor.copy(alpha = 0.2f),
                                     // 点击瞬间就把显示内容换成当前网址：聚焦回调里改文本会被
                                     // BasicTextField 的点击定位覆盖，导致“点了没反应”
                                     onBeforeFocus = {
@@ -16471,6 +16473,8 @@ private fun MoteUrlInputField(
     label: String = "",
     /** 点击（请求焦点之前）执行，用于把显示中的标题/搜索词换成当前网址 */
     onBeforeFocus: (() -> Unit)? = null,
+    /** 前置搜索图标的颜色；不传则用容器默认色 */
+    leadingIconTint: Color? = null,
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSearch by rememberUpdatedState(onSearch)
@@ -16536,7 +16540,7 @@ private fun MoteUrlInputField(
                     Icon(
                         imageVector = MiuixIcons.Basic.Search,
                         contentDescription = "搜索",
-                        tint = MiuixTheme.colorScheme.onSurfaceContainerHigh,
+                        tint = leadingIconTint ?: MiuixTheme.colorScheme.onSurfaceContainerHigh,
                         modifier = Modifier.padding(
                             start = SearchBarDefaults.LeadingIconStartPadding,
                             end = SearchBarDefaults.LeadingIconEndPadding,
