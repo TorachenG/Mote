@@ -3554,6 +3554,22 @@ fun AppRoot() {
 
     val isSettled by remember { derivedStateOf { progress >= 1f } }
 
+    /**
+     * 立即结算正在飞行的退场动画：把正在退场的页面从栈里摘掉、复位进度与锁。
+     * 用于连续返回——退场动画没播完时再按一次返回，不必等它结束。
+     */
+    fun settlePendingExit() {
+        val exiting = exitingPageId
+        animJob?.cancel()
+        animJob = null
+        if (exiting != null) {
+            pageStack.removeAll { it.id == exiting }
+        }
+        exitingPageId = null
+        backInFlight = false
+        progress = 1f
+    }
+
     fun pushPage(route: String) {
         // ★ 只有"当前页面且没有在退场"才拦截重复 push。
         //   退场动画期间，栈顶是正在消失的那一页，若用户点的正是它同名的入口
@@ -3590,8 +3606,11 @@ fun AppRoot() {
 
     fun popPage() {
         if (pageStack.size <= 1) return
-        // ★ backInFlight 和 exitingPageId 一起当守卫：手势 pop 进行中也算"在飞"
-        if (exitingPageId != null || backInFlight) return
+        // 上一次退场还没播完就再返回：先立即结算，再退下一层（连续返回不排队）
+        if (exitingPageId != null || backInFlight) {
+            settlePendingExit()
+            if (pageStack.size <= 1) return
+        }
 
         val target = pageStack.lastOrNull() ?: return
 
@@ -3630,10 +3649,13 @@ fun AppRoot() {
     // ★ 只要栈里还有页面就保持注册（不再随 exitingPageId 反注册），
     //   否则状态翻转的那一帧会有"回调空窗"，返回事件落到系统默认 → 直接 finish() 回桌面。
     PredictiveBackHandler(enabled = pageStack.size > 1 && !GlobalOverlayState.isOpen) { backEvents ->
-        // 已经有一次返回在飞：把手势吃掉，绝不再 pop 一次
+        // 已经有一次返回在飞：先立即结算，让新手势从干净的落定状态开始
         if (exitingPageId != null || backInFlight) {
-            backEvents.collect { }
-            return@PredictiveBackHandler
+            settlePendingExit()
+            if (pageStack.size <= 1) {
+                backEvents.collect { }
+                return@PredictiveBackHandler
+            }
         }
 
         animJob?.cancel()
@@ -3705,7 +3727,9 @@ fun AppRoot() {
         }
     }
 
+    // 退场动画期间系统返回：不再吞掉事件，而是立即结算当前退场并继续退下一层
     BackHandler(enabled = pageStack.size > 1 && exitingPageId != null) {
+        popPage()
     }
 
     /**
