@@ -3546,10 +3546,11 @@ fun AppRoot() {
     //   防止两者在 exitingPageId 置位前的那几毫秒同时删栈（会多掉一层 → 再返回直接回桌面）。
     var backInFlight by remember { mutableStateOf(false) }
 
-    val ease = remember { CubicBezierEasing(0.32f, 0.72f, 0f, 1f) }
-    val pushSpec = remember { tween<Float>(durationMillis = 400, easing = ease) }
-    val popSpec = remember { tween<Float>(durationMillis = 350, easing = ease) }
-    val cancelSpec = remember { tween<Float>(durationMillis = 250, easing = ease) }
+    // 与 miuix 官方导航对齐的时间曲线：欠阻尼弹簧阶跃（前段起速、尾段长而柔），
+    // 程序化进出场 500ms；手势松手后的续接用更短的一档，避免半程继续时拖沓。
+    val pushSpec = remember { tween<Float>(durationMillis = 500, easing = PageTransitionEasing) }
+    val popSpec = remember { tween<Float>(durationMillis = 500, easing = PageTransitionEasing) }
+    val cancelSpec = remember { tween<Float>(durationMillis = 320, easing = PageGestureSettleEasing) }
 
     val isSettled by remember { derivedStateOf { progress >= 1f } }
 
@@ -3667,10 +3668,14 @@ fun AppRoot() {
                     exitingPageId = target.id
                     withContext(NonCancellable) {
                         try {
+                            // 手势松手后的收尾：用更短的手势曲线，避免从半程继续时拖沓
                             animate(
                                 initialValue = progress,
                                 targetValue = 0f,
-                                animationSpec = popSpec,
+                                animationSpec = tween(
+                                    durationMillis = 350,
+                                    easing = PageGestureSettleEasing,
+                                ),
                             ) { value, _ -> progress = value }
                         } catch (_: Exception) { }
                         if (exitingPageId == target.id) {
