@@ -124,6 +124,9 @@ internal fun BrowserChromePreview() {
             prefs.getInt("web_dynamic_tool", 1).coerceIn(0, 9)
         )
     }
+    var fusedDualPane by remember {
+        mutableStateOf(prefs.getBoolean("web_fused_dual_pane", false))
+    }
 
     DisposableEffect(prefs) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -134,6 +137,8 @@ internal fun BrowserChromePreview() {
                     immersiveEnabled = prefs.getBoolean(key, true)
                 "web_dynamic_tool" ->
                     toolIndex = prefs.getInt(key, 1).coerceIn(0, 9)
+                "web_fused_dual_pane" ->
+                    fusedDualPane = prefs.getBoolean(key, false)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -196,6 +201,7 @@ internal fun BrowserChromePreview() {
                         contentColor = topContent,
                         pillColor = inputPill,
                         pillContentColor = inputPillContent,
+                        fused = fusedDualPane,
                     )
                 }
 
@@ -213,14 +219,18 @@ internal fun BrowserChromePreview() {
                         contentColor = bottomContent,
                         pillColor = inputPill,
                         pillContentColor = inputPillContent,
+                        fused = fusedDualPane,
                     )
                 }
 
-                PreviewBottomBar(
-                    barColor = bottomChrome,
-                    contentColor = bottomContent,
-                    toolIndex = toolIndex,
-                )
+                // 融合式双栏把工具栏并进了标题栏，预览里不再画独立工具栏
+                if (!fusedDualPane) {
+                    PreviewBottomBar(
+                        barColor = bottomChrome,
+                        contentColor = bottomContent,
+                        toolIndex = toolIndex,
+                    )
+                }
                 PreviewNavBar(
                     background = bottomChrome,
                     contentColor = bottomContent,
@@ -246,6 +256,7 @@ private fun PreviewTitleBar(
     contentColor: Color,
     pillColor: Color,
     pillContentColor: Color,
+    fused: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -255,21 +266,29 @@ private fun PreviewTitleBar(
             .padding(horizontal = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .clip(CircleShape)
-                .background(previewOverlayColor(barColor)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Public,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(9.dp),
-            )
+        if (fused) {
+            // 融合式双栏：左侧是后退 + 自定义功能，隐藏网页图标
+            PreviewActionDot(contentColor)
+            Spacer(Modifier.width(3.dp))
+            PreviewActionDot(contentColor)
+            Spacer(Modifier.width(4.dp))
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(previewOverlayColor(barColor)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Public,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(9.dp),
+                )
+            }
+            Spacer(Modifier.width(4.dp))
         }
-        Spacer(Modifier.width(4.dp))
 
         Row(
             modifier = Modifier
@@ -296,14 +315,33 @@ private fun PreviewTitleBar(
             )
         }
 
-        Spacer(Modifier.width(4.dp))
-        Icon(
-            imageVector = MiuixIcons.Scan,
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(14.dp),
-        )
+        if (fused) {
+            // 融合式双栏：右侧是窗口 + 工具栏，隐藏扫码
+            Spacer(Modifier.width(4.dp))
+            PreviewActionDot(contentColor)
+            Spacer(Modifier.width(3.dp))
+            PreviewActionDot(contentColor)
+        } else {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                imageVector = MiuixIcons.Scan,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(14.dp),
+            )
+        }
     }
+}
+
+/** 预览里的无文本动作图标占位 */
+@Composable
+private fun PreviewActionDot(contentColor: Color) {
+    Box(
+        modifier = Modifier
+            .size(12.dp)
+            .clip(CircleShape)
+            .background(contentColor.copy(alpha = 0.55f)),
+    )
 }
 
 @Composable
