@@ -7483,12 +7483,16 @@ fun BrowserScreen(
                                     // 点击瞬间就把显示内容换成当前网址：聚焦回调里改文本会被
                                     // BasicTextField 的点击定位覆盖，导致“点了没反应”
                                     onBeforeFocus = {
-                                        activeWindow?.let { win ->
-                                            val target =
-                                                if (urlInput.text.isBlank()) ""
-                                                else win.url.ifBlank { urlInput.text }
-                                            if (target.isNotEmpty()) {
-                                                urlInput = TextFieldValue(target)
+                                        // 只在首次聚焦时把标题/搜索词换成网址；
+                                        // 已聚焦状态下（例如点清空按钮）再替换会让内容闪一下网址
+                                        if (!isSearchFocused) {
+                                            activeWindow?.let { win ->
+                                                val target =
+                                                    if (urlInput.text.isBlank()) ""
+                                                    else win.url.ifBlank { urlInput.text }
+                                                if (target.isNotEmpty()) {
+                                                    urlInput = TextFieldValue(target)
+                                                }
                                             }
                                         }
                                     },
