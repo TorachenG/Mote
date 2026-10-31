@@ -7793,6 +7793,11 @@ fun BrowserScreen(
                                 val w = size.width.toFloat()
                                 if (w <= 0f) continue
 
+                                // 页面被放大后，横向拖动是在平移网页内容，
+                                // 不能当成侧滑切页，否则缩放状态下没法自由查看
+                                val pageZoomed = runCatching { wv?.scale ?: 1f }.getOrDefault(1f) > 1.01f
+                                if (pageZoomed) continue
+
                                 val canBack = canNavigateBack()
                                 val canForward = canNavigateForward()
 
@@ -7862,6 +7867,10 @@ fun BrowserScreen(
                                 val downEv = awaitPointerEvent(PointerEventPass.Initial)
                                 val downCh = downEv.changes.firstOrNull { it.changedToDown() }
                                     ?: continue
+                                // 页面放大后纵向拖动是平移网页，不能触发下拉刷新
+                                val zoomedForPull =
+                                    runCatching { wv?.scale ?: 1f }.getOrDefault(1f) > 1.01f
+                                if (zoomedForPull) continue
                                 val startX = downCh.position.x
                                 val startY = downCh.position.y
                                 var pulled = false
