@@ -4878,6 +4878,8 @@ fun BrowserScreen(
     var fusedDualPane by remember {
         mutableStateOf(fusedPrefs.getBoolean("web_fused_dual_pane", false))
     }
+    // 刚点过清空按钮：这段时间内的失焦不能把标题/网址回填，否则会闪一下网址
+    var justCleared by remember { mutableStateOf(false) }
     DisposableEffect(Unit) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "web_fused_dual_pane") {
@@ -7419,7 +7421,10 @@ fun BrowserScreen(
 
                                 MoteUrlInputField(
                                     value = urlInput,
-                                    onValueChange = { urlInput = it },
+                                    onValueChange = {
+                                        urlInput = it
+                                        if (it.text.isNotEmpty()) justCleared = false
+                                    },
                                     onSearch = {
                                         loadUrlInActive(urlInput.text)
                                         focusManager.clearFocus()
@@ -7432,6 +7437,7 @@ fun BrowserScreen(
                                         .onFocusChanged { focusState: FocusState ->
                                             isSearchFocused = focusState.isFocused
                                             if (focusState.isFocused) {
+                                                justCleared = false
                                                 showSecuritySheet = false
                                                 activeWindow?.let { win ->
                                                     // 空白保持空白；显示标题/搜索词等非空内容时，
@@ -7449,7 +7455,8 @@ fun BrowserScreen(
                                             } else {
                                                 searchBarExpanded = false
                                                 activeWindow?.let { win ->
-                                                    if (urlInput.text.isBlank() &&
+                                                    if (!justCleared &&
+                                                        urlInput.text.isBlank() &&
                                                         !isHomeUrl(win.url)
                                                     ) {
                                                         urlInput = if (
@@ -7482,6 +7489,10 @@ fun BrowserScreen(
                                     leadingIconTint = titleChrome.contentColor.copy(alpha = 0.2f),
                                     // 点击瞬间就把显示内容换成当前网址：聚焦回调里改文本会被
                                     // BasicTextField 的点击定位覆盖，导致“点了没反应”
+                                    onClear = {
+                                        justCleared = true
+                                        urlInput = TextFieldValue("")
+                                    },
                                     onBeforeFocus = {
                                         // 只在首次聚焦时把标题/搜索词换成网址；
                                         // 已聚焦状态下（例如点清空按钮）再替换会让内容闪一下网址
@@ -16658,6 +16669,8 @@ private fun MoteUrlInputField(
     leadingIconTint: Color? = null,
     /** 文字 / 图标颜色；不传则跟随 LocalContentColor 与容器默认色 */
     contentColor: Color? = null,
+    /** 点击清空按钮时的回调；不传则直接清空文本 */
+    onClear: (() -> Unit)? = null,
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSearch by rememberUpdatedState(onSearch)
@@ -16767,7 +16780,9 @@ private fun MoteUrlInputField(
                                     ?: MiuixTheme.colorScheme.onSurfaceContainerHighest,
                                 modifier = Modifier
                                     .clip(capsuleShape)
-                                    .clickable { currentOnValueChange(TextFieldValue("")) },
+                                    .clickable {
+                                    onClear?.invoke() ?: currentOnValueChange(TextFieldValue(""))
+                                },
                             )
                         }
                     }
