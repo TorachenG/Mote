@@ -77,8 +77,9 @@ internal fun LocalWebViewerPage(
 
     val webView = if (request.isImage) null else remember(request.path) {
         WebView(context).apply {
-            // 背景跟随主题，不再固定浅灰：固定色会把透明底网页染色
-            setBackgroundColor(surface.toArgb())
+            // HTML 预览用网页默认的白底：跟随主题会在深色模式下把
+            // 没有自带背景色的网页染成深色，预览结果就和原文件不一致了
+            setBackgroundColor(AndroidColor.WHITE)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.allowFileAccess = true
@@ -103,29 +104,7 @@ internal fun LocalWebViewerPage(
             webViewClient = WebViewClient()
 
             val file = File(request.path)
-            if (request.isImage) {
-                val imageUri = Uri.fromFile(file)
-                val baseUrl = Uri.fromFile(file.parentFile ?: File("/")).toString().trimEnd('/') + "/"
-                val html = """
-                    <!doctype html>
-                    <html><head>
-                    <meta name="viewport" content="width=device-width,initial-scale=1.0">
-                    <style>
-                    html,body{margin:0;padding:0;background:#e8e8e8;}
-                    img{display:block;max-width:100%;height:auto;margin:0 auto;}
-                    </style></head>
-                    <body><img src="$imageUri"></body></html>
-                """.trimIndent()
-                loadDataWithBaseURL(
-                    baseUrl,
-                    html,
-                    "text/html",
-                    "utf-8",
-                    null,
-                )
-            } else {
-                loadUrl(Uri.fromFile(file).toString())
-            }
+            loadUrl(Uri.fromFile(file).toString())
         }
     }
     DisposableEffect(webView) {
