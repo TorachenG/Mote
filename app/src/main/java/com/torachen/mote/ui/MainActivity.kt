@@ -7799,24 +7799,6 @@ fun BrowserScreen(
                                 val canBack = canNavigateBack()
                                 val canForward = canNavigateForward()
 
-                                // 网页还有横向可滚动余量时，横向拖动是平移网页（放大后尤其明显），
-                                // 不能当成侧滑切页：只有已经贴到左/右边界才接管手势
-                                val canScrollLeft = try {
-                                    wv?.canScrollHorizontally(-1) ?: false
-                                } catch (_: Exception) {
-                                    false
-                                }
-                                val canScrollRight = try {
-                                    wv?.canScrollHorizontally(1) ?: false
-                                } catch (_: Exception) {
-                                    false
-                                }
-
-                                // 只从屏幕左右两侧起手才接管：页面中部的横向拖动
-                                // （横向列表、滑块验证码等）不能被切页手势抢走
-                                val edgeZone = w * 0.2f
-                                val fromLeftEdge = startX <= edgeZone
-                                val fromRightEdge = startX >= w - edgeZone
 
                                 var direction = 0
                                 var consumed = false
@@ -7845,8 +7827,8 @@ fun BrowserScreen(
 
                                         if (kotlin.math.abs(dx) >= kotlin.math.abs(dy) * 1.5f) {
                                             direction = when {
-                                                dx > 0 && canBack && !canScrollLeft && fromLeftEdge -> -1
-                                                dx < 0 && canForward && !canScrollRight && fromRightEdge -> 1
+                                                dx > 0 && canBack -> -1
+                                                dx < 0 && canForward -> 1
                                                 else -> 0
                                             }
                                             if (direction == 0) break
