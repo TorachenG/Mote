@@ -7256,7 +7256,7 @@ fun BrowserScreen(
         .asPaddingValues()
         .calculateBottomPadding()
     val headerBottomBarHeight =
-        if (isFullscreen || htmlFullscreenView != null) 0.dp else BOTTOM_BAR_HEIGHT
+        if (isFullscreen || htmlFullscreenView != null || fusedDualPane) 0.dp else BOTTOM_BAR_HEIGHT
     // 底部标题栏需要避让的高度：输入法 > 底部工具栏
     val headerBottomInset = maxOf(
         headerImeBottomPadding,
@@ -7385,6 +7385,8 @@ fun BrowserScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val faviconWindowState = rememberUpdatedState(activeWindow)
+                    // 融合式双栏下不显示网页图标，给搜索栏腾宽度
+                    if (!fusedDualPane) {
                     Box(
                                     modifier = Modifier
                                         .size(28.dp)
@@ -7409,6 +7411,7 @@ fun BrowserScreen(
                                     )
                                 }
                                 Spacer(Modifier.width(8.dp))
+                    }
 
                                 MoteUrlInputField(
                                     value = urlInput,
@@ -7487,7 +7490,7 @@ fun BrowserScreen(
                                 )
 
                                 AnimatedVisibility(
-                                    visible = scanModuleEnabled && !isSearchFocused,
+                                    visible = scanModuleEnabled && !isSearchFocused && !fusedDualPane,
                                     enter = expandHorizontally(
                                         animationSpec = tween(durationMillis = 220),
                                         expandFrom = Alignment.Start,
@@ -8130,7 +8133,9 @@ fun BrowserScreen(
                         headerAtBottom -> 0.dp
                         isFullscreen || htmlFullscreenView != null -> 0.dp
                         showNewTabPage -> 0.dp
-                        else -> webViewNavBarPad + BOTTOM_BAR_HEIGHT
+                        // 融合式双栏把工具栏并进标题栏，底部不再为它留高度
+                        else -> if (fusedDualPane) webViewNavBarPad
+                        else webViewNavBarPad + BOTTOM_BAR_HEIGHT
                     },
                     animationSpec = tween(
                         durationMillis = FULLSCREEN_ANIM_MS,
