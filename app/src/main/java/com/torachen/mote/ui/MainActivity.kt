@@ -7280,9 +7280,11 @@ fun BrowserScreen(
                                             if (focusState.isFocused) {
                                                 showSecuritySheet = false
                                                 activeWindow?.let { win ->
-                                                    // 点击聚焦时总是显示当前网址（无论之前输入框显示什么），
-                                                    // 再整体选中；没有网址时才退回原文本
-                                                    val target = win.url.ifBlank { urlInput.text }
+                                                    // 空白保持空白；显示标题/搜索词等非空内容时，
+                                                    // 一律换成当前网址再全选（标题会异步刷新，不能靠字符串比较）
+                                                    val target =
+                                                        if (urlInput.text.isBlank()) ""
+                                                        else win.url.ifBlank { urlInput.text }
                                                     if (target.isNotEmpty()) {
                                                         // 聚焦时整体选中，并唤起文本工具栏
                                                         urlInput = TextFieldValue(
@@ -7342,8 +7344,6 @@ fun BrowserScreen(
                                                                 )
                                                             }
                                                         }
-                                                    } else if (urlInput.text == win.title) {
-                                                        urlInput = TextFieldValue(win.url)
                                                     }
                                                 }
                                             } else {
@@ -7373,7 +7373,22 @@ fun BrowserScreen(
                                                 }
                                             }
                                         },
-                                    label = "请输入关键词或网址"
+                                    label = "请输入关键词或网址",
+                                    // 点击瞬间就把显示内容换成当前网址：聚焦回调里改文本会被
+                                    // BasicTextField 的点击定位覆盖，导致“点了没反应”
+                                    onBeforeFocus = {
+                                        activeWindow?.let { win ->
+                                            val target =
+                                                if (urlInput.text.isBlank()) ""
+                                                else win.url.ifBlank { urlInput.text }
+                                            if (target.isNotEmpty()) {
+                                                urlInput = TextFieldValue(
+                                                    text = target,
+                                                    selection = TextRange(0, target.length),
+                                                )
+                                            }
+                                        }
+                                    },
                                 )
 
                                 AnimatedVisibility(
@@ -16517,6 +16532,8 @@ private fun MoteUrlInputField(
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     label: String = "",
+    /** 点击（请求焦点之前）执行，用于把显示中的标题/搜索词换成当前网址 */
+    onBeforeFocus: (() -> Unit)? = null,
 ) {
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSearch by rememberUpdatedState(onSearch)
@@ -16541,9 +16558,22 @@ private fun MoteUrlInputField(
         onValueChange = currentOnValueChange,
         modifier = modifier
             .focusRequester(focusRequester)
+            // 真实触摸不会触发 semantics 的 onClick，这里在 Initial pass 抢在
+            // BasicTextField 处理点击之前，把显示中的标题换成当前网址
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        if (event.changes.any { it.changedToDown() }) {
+                            onBeforeFocus?.invoke()
+                        }
+                    }
+                }
+            }
             .onFocusChanged { if (it.isFocused) currentOnExpandedChange(true) }
             .semantics {
                 onClick {
+                    onBeforeFocus?.invoke()
                     focusRequester.requestFocus()
                     true
                 }
