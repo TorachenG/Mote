@@ -295,6 +295,7 @@ private const val KEY_HEADER_TEXT = "browser_header_text_mode"
 private const val KEY_IMMERSIVE_PAGE = "web_immersive_page"
 private const val KEY_LAYOUT_TOOL = "web_dynamic_tool"
 private const val KEY_LAYOUT_TOOL_SUGGEST = "web_dynamic_tool_suggest"
+private const val KEY_FUSED_DUAL_PANE = "web_fused_dual_pane"
 private val LAYOUT_TOOL_OPTIONS = listOf(
     "关闭", "主页", "刷新", "全屏", "添加书签", "书签列表", "历史记录", "下载管理", "网页翻译", "资源嗅探"
 )
@@ -953,6 +954,7 @@ private fun SettingsLayoutMiuix(
     var headerPosition by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_POSITION, 0)) }
     var headerTextMode by remember { mutableIntStateOf(prefs.getInt(KEY_HEADER_TEXT, 1)) }
     var immersivePageEnabled by remember { mutableStateOf(prefs.getBoolean(KEY_IMMERSIVE_PAGE, true)) }
+    var fusedDualPaneEnabled by remember { mutableStateOf(prefs.getBoolean(KEY_FUSED_DUAL_PANE, false)) }
     var layoutToolIndex by remember {
         mutableIntStateOf(prefs.getInt(KEY_LAYOUT_TOOL, 1).coerceIn(0, LAYOUT_TOOL_OPTIONS.lastIndex))
     }
@@ -1396,6 +1398,17 @@ private fun SettingsLayoutMiuix(
                                                             .apply()
                                                     },
                                                 )
+                                                SwitchPreference(
+                                                    title = "融合式双栏",
+                                                    summary = "开启后，标题栏与工具栏将融合",
+                                                    checked = fusedDualPaneEnabled,
+                                                    onCheckedChange = {
+                                                        fusedDualPaneEnabled = it
+                                                        prefs.edit()
+                                                            .putBoolean(KEY_FUSED_DUAL_PANE, it)
+                                                            .apply()
+                                                    },
+                                                )
                                             }
 
                                             SmallTitle("标题栏")
@@ -1465,7 +1478,7 @@ private fun SettingsLayoutMiuix(
                                                     .padding(bottom = 12.dp),
                                             ) {
                                                 WindowDropdownPreference(
-                                                    title = "工具栏中间位",
+                                                    title = "自定义功能",
                                                     entries = listOf(
                                                         DropdownEntry(
                                                             items = LAYOUT_TOOL_OPTIONS.mapIndexed { index, label ->
@@ -1484,7 +1497,7 @@ private fun SettingsLayoutMiuix(
                                                 )
                                                 SwitchPreference(
                                                     title = "工具栏功能建议",
-                                                    summary = "开启后，会在合适的时候自动更换工具栏中间的功能",
+                                                    summary = "开启后，会在合适的时候自动更换自定义功能位的功能",
                                                     checked = layoutToolSuggest,
                                                     onCheckedChange = {
                                                         layoutToolSuggest = it
@@ -2154,6 +2167,9 @@ private fun SettingsLayoutMaterial(
                                     var immersiveEnabled by remember {
                                         mutableStateOf(prefsB.getBoolean(KEY_IMMERSIVE_PAGE, true))
                                     }
+                                    var fusedEnabled by remember {
+                                        mutableStateOf(prefsB.getBoolean(KEY_FUSED_DUAL_PANE, false))
+                                    }
                                     MoteSegmentedColumn(
                                         color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
@@ -2166,6 +2182,17 @@ private fun SettingsLayoutMaterial(
                                                         immersiveEnabled = it
                                                         prefsB.edit()
                                                             .putBoolean(KEY_IMMERSIVE_PAGE, it)
+                                                            .apply()
+                                                    },
+                                                )
+                                                M3SegmentSwitchItem(
+                                                    title = "融合式双栏",
+                                                    summary = "开启后，标题栏与工具栏将融合",
+                                                    checked = fusedEnabled,
+                                                    onCheckedChange = {
+                                                        fusedEnabled = it
+                                                        prefsB.edit()
+                                                            .putBoolean(KEY_FUSED_DUAL_PANE, it)
                                                             .apply()
                                                     },
                                                 )
@@ -2243,7 +2270,7 @@ private fun SettingsLayoutMaterial(
                                         content = listOf(
                                             {
                                                 M3SegmentDropdownItem(
-                                                    title = "工具栏中间位",
+                                                    title = "自定义功能",
                                                     summary = null,
                                                     options = LAYOUT_TOOL_OPTIONS,
                                                     selectedIndex = toolIndex,
@@ -2256,7 +2283,7 @@ private fun SettingsLayoutMaterial(
                                             {
                                                 M3SegmentSwitchItem(
                                                     title = "工具栏功能建议",
-                                                    summary = "开启后，会在合适的时候自动更换工具栏中间的功能",
+                                                    summary = "开启后，会在合适的时候自动更换自定义功能位的功能",
                                                     checked = toolSuggest,
                                                     onCheckedChange = {
                                                         toolSuggest = it
