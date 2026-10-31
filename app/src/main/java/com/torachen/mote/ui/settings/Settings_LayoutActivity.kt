@@ -1398,8 +1398,16 @@ private fun SettingsLayoutMiuix(
                                                             .apply()
                                                     },
                                                 )
+                                            }
+
+                                            SmallTitle("标题栏")
+                                            Card(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 12.dp)
+                                                    .padding(bottom = 12.dp),
+                                            ) {
                                                 SwitchPreference(
-                                                    title = "融合式双栏",
+                                                    title = "融合工具栏",
                                                     summary = "开启后，标题栏与工具栏将融合",
                                                     checked = fusedDualPaneEnabled,
                                                     onCheckedChange = {
@@ -1409,14 +1417,6 @@ private fun SettingsLayoutMiuix(
                                                             .apply()
                                                     },
                                                 )
-                                            }
-
-                                            SmallTitle("标题栏")
-                                            Card(
-                                                modifier = Modifier
-                                                    .padding(horizontal = 12.dp)
-                                                    .padding(bottom = 12.dp),
-                                            ) {
                                                 WindowDropdownPreference(
                                                     title = "标题栏位置",
                                                     entries = listOf(
@@ -2167,9 +2167,6 @@ private fun SettingsLayoutMaterial(
                                     var immersiveEnabled by remember {
                                         mutableStateOf(prefsB.getBoolean(KEY_IMMERSIVE_PAGE, true))
                                     }
-                                    var fusedEnabled by remember {
-                                        mutableStateOf(prefsB.getBoolean(KEY_FUSED_DUAL_PANE, false))
-                                    }
                                     MoteSegmentedColumn(
                                         color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
@@ -2182,17 +2179,6 @@ private fun SettingsLayoutMaterial(
                                                         immersiveEnabled = it
                                                         prefsB.edit()
                                                             .putBoolean(KEY_IMMERSIVE_PAGE, it)
-                                                            .apply()
-                                                    },
-                                                )
-                                                M3SegmentSwitchItem(
-                                                    title = "融合式双栏",
-                                                    summary = "开启后，标题栏与工具栏将融合",
-                                                    checked = fusedEnabled,
-                                                    onCheckedChange = {
-                                                        fusedEnabled = it
-                                                        prefsB.edit()
-                                                            .putBoolean(KEY_FUSED_DUAL_PANE, it)
                                                             .apply()
                                                     },
                                                 )
@@ -2213,6 +2199,9 @@ private fun SettingsLayoutMaterial(
                                 ) {
                                     val ctx = androidx.compose.ui.platform.LocalContext.current
                                     val prefsB = remember { ctx.getSharedPreferences("mote_prefs", android.content.Context.MODE_PRIVATE) }
+                                    var fusedEnabled by remember {
+                                        mutableStateOf(prefsB.getBoolean(KEY_FUSED_DUAL_PANE, false))
+                                    }
                                     var posIndex by remember { mutableIntStateOf(prefsB.getInt(KEY_HEADER_POSITION, 0)) }
                                     // 显示顺序：0=网页标题（存储值1），1=网页地址（存储值0）
                                     var textIndex by remember {
@@ -2221,6 +2210,19 @@ private fun SettingsLayoutMaterial(
                                     MoteSegmentedColumn(
                                         color = M3MaterialTheme.colorScheme.surface,
                                         content = listOf(
+                                            {
+                                                M3SegmentSwitchItem(
+                                                    title = "融合工具栏",
+                                                    summary = "开启后，标题栏与工具栏将融合",
+                                                    checked = fusedEnabled,
+                                                    onCheckedChange = {
+                                                        fusedEnabled = it
+                                                        prefsB.edit()
+                                                            .putBoolean(KEY_FUSED_DUAL_PANE, it)
+                                                            .apply()
+                                                    },
+                                                )
+                                            },
                                             {
                                                 M3SegmentDropdownItem(
                                                     title = "标题栏位置",
