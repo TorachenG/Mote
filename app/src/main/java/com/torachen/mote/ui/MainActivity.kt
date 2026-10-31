@@ -1289,6 +1289,34 @@ private fun parsePageThemeColors(raw: String?): Pair<Int?, Int?> {
 }
 
 
+private val JS_SWIPE_NAV_SYNC = """
+(function(){
+  if (window.__moteSwipeSync) { try { window.__moteSwipeSync(); } catch (e) {} return; }
+  function sync(){
+    try {
+      var vv = window.visualViewport;
+      var zoomed = !!(vv && vv.scale > 1.01);
+      var se = document.scrollingElement || document.documentElement;
+      var wide = !!(se && window.innerWidth && se.scrollWidth > window.innerWidth + 1);
+      var allowed = !(zoomed || wide);
+      if (window.moteBridge && window.moteBridge.setSwipeNavAllowed) {
+        window.moteBridge.setSwipeNavAllowed(allowed);
+      }
+    } catch (e) {}
+  }
+  window.__moteSwipeSync = sync;
+  sync();
+  window.addEventListener('resize', sync, true);
+  window.addEventListener('orientationchange', sync, true);
+  document.addEventListener('scroll', sync, true);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', sync);
+    window.visualViewport.addEventListener('scroll', sync);
+  }
+  setInterval(sync, 800);
+})();
+"""
+
 private val JS_CONTEXTMENU_TRACKER = """
 (function(){
   if (window.__mote_lp_hooked) return;
@@ -11916,6 +11944,8 @@ private fun createWebView(
                     view?.evaluateJavascript(JS_INTERCEPT_VIDEO, null)
 
                     view?.evaluateJavascript(JS_GESTURE_GUARD, null)
+                    // 让页面上报是否适合侧滑切页：被放大或可横向滚动时禁用
+                    view?.evaluateJavascript(JS_SWIPE_NAV_SYNC, null)
                     view?.evaluateJavascript(jsHook, null)
                     view?.evaluateJavascript(JS_PASSWORD_DETECT, null)
 
