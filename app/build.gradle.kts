@@ -150,6 +150,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // 资源压缩：剔除未被引用的 drawable / layout / string
+            isShrinkResources = true
         }
         // 仅用于生成 Baseline Profile 的可采集变体：不可调试、独立包名、debug 签名；
         // 必须保持未混淆，采集结果由 AGP 在 release 打包时按 mapping 重写
@@ -199,7 +201,8 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.materialIconsExtended)
-    implementation(libs.compose.ui.tooling.preview)
+    // 预览工具只给 debug 用，release 里没有 @Preview，不需要打进包
+    debugImplementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
     // ===== Material 3 =====
@@ -216,7 +219,6 @@ dependencies {
     implementation(libs.miuix.icons)
     implementation(libs.miuix.blur)
     implementation(libs.miuix.squircle)
-    implementation("top.yukonga.miuix.kmp:miuix-nav:0.9.4")
     implementation("top.yukonga.miuix.kmp:miuix-shader:0.9.4")
 
     // ===== AndroidX WebKit =====
