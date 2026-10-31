@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -625,13 +626,21 @@ private fun SettingsWebMiuix(
                                     .padding(bottom = 12.dp),
                             ) {
                                 SearchableItem(
-                                    title = "浏览器标识",
+                                    title = "浏览器 UA 标识",
                                     pageRoute = "settings_web",
                                     pageTitle = "网页浏览设置",
                                     itemKey = "settings_web_ua",
                                 ) {
+                                    val uaContext = LocalContext.current
                                     ArrowPreference(
-                                        title = "浏览器标识",
+                                        title = "浏览器 UA 标识",
+                                        endActions = {
+                                            top.yukonga.miuix.kmp.basic.Text(
+                                                text = UaStore.previewName(uaContext),
+                                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                fontSize = 14.sp,
+                                            )
+                                        },
                                         onClick = onOpenUaSettings,
                                     )
                                 }
@@ -979,7 +988,8 @@ private fun SettingsWebMaterial(
                             content = listOf(
                                 {
                                     M3SegmentArrowItem(
-                                        title = "浏览器标识",
+                                        title = "浏览器 UA 标识",
+                                        endText = UaStore.previewName(androidx.compose.ui.platform.LocalContext.current),
                                         onClick = onOpenUaSettings,
                                     )
                                 },

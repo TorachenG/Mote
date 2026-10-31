@@ -196,7 +196,7 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
 
     val barTitle = if (selecting) {
         if (selected.isEmpty()) "请选择项目" else "已选择 ${selected.size} 项"
-    } else "浏览器标识"
+    } else "浏览器 UA 标识"
 
     CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides navOwner) {
         Box(modifier = Modifier.fillMaxSize().background(surfaceColor)) {
@@ -265,7 +265,7 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                                         )
                                         Spacer(Modifier.height(12.dp))
                                         Text(
-                                            "暂无自定义浏览器标识",
+                                            "暂无自定义浏览器 UA 标识",
                                             fontSize = 14.sp,
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
@@ -321,7 +321,7 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                     item(key = "other_card") {
                         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                             WindowDropdownPreference(
-                                title = "电脑模式下的浏览器标识",
+                                title = "电脑模式下的浏览器 UA 标识",
                                 entries = listOf(
                                     DropdownEntry(
                                         items = UaStore.desktopOptions.mapIndexed { index, label ->
@@ -470,7 +470,7 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
 
     WindowDialog(
         show = showAddDialog,
-        title = "添加浏览器标识",
+        title = "添加浏览器 UA 标识",
         onDismissRequest = { showAddDialog = false },
     ) {
         Column(
@@ -532,7 +532,7 @@ private fun UaSettingsPageMaterial(onBack: () -> Unit) {
         containerColor = bg,
         topBar = {
             M3TopAppBar(
-                title = { M3Text("浏览器标识") },
+                title = { M3Text("浏览器 UA 标识") },
                 navigationIcon = {
                     M3IconButton(onClick = onBack) {
                         M3Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "返回")
@@ -589,7 +589,7 @@ private fun UaSettingsPageMaterial(onBack: () -> Unit) {
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     M3Text(
-                                        "暂无自定义浏览器标识",
+                                        "暂无自定义浏览器 UA 标识",
                                         style = M3MaterialTheme.typography.bodyMedium,
                                         color = M3MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -631,7 +631,7 @@ private fun UaSettingsPageMaterial(onBack: () -> Unit) {
                         content = listOf(
                             {
                                 M3SegmentDropdownItem(
-                                    title = "电脑模式下的浏览器标识",
+                                    title = "电脑模式下的浏览器 UA 标识",
                                     summary = null,
                                     options = UaStore.desktopOptions,
                                     selectedIndex = desktopIndex,
