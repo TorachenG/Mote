@@ -7428,7 +7428,7 @@ fun BrowserScreen(
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                                        .background(MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f))
                                         .clickable {
                                             clipUrl?.let {
                                                 urlInput = TextFieldValue(it)
@@ -16524,7 +16524,7 @@ private fun MoteUrlInputField(
         decorationBox = { innerTextField ->
             Box(
                 modifier = Modifier.background(
-                    color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    color = MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
                     shape = capsuleShape,
                 ),
                 contentAlignment = Alignment.CenterStart,
