@@ -264,11 +264,9 @@
     opacity:0;visibility:hidden;pointer-events:none;
     transition:opacity .26s cubic-bezier(.4,0,.2,1),visibility .26s}
   .lightbox.open{opacity:1;visibility:visible;pointer-events:auto}
-  .lightbox img{max-width:100%;max-height:100%;width:auto;height:auto;border-radius:16px;
+  .lightbox img{position:absolute;transform-origin:top left;border-radius:14px;
     box-shadow:0 30px 80px rgba(0,0,0,.6);background:#fff;
-    transform:scale(.88);opacity:.35;transform-origin:center;
-    transition:transform .34s cubic-bezier(.22,1,.36,1),opacity .26s}
-  .lightbox.open img{transform:scale(1);opacity:1}
+    will-change:transform,opacity}
   @media (prefers-reduced-motion: reduce){
     .lightbox,.lightbox img{transition:none}
   }
@@ -364,23 +362,23 @@
         </button>
         <div class="showcase-track" id="showcaseTrack">
           <figure class="shot-slide">
-            <img src="assets/mote-main.jpg" alt="Mote 新标签页" loading="lazy">
+            <img data-full="assets/full-mote-main.jpg" src="assets/mote-main.jpg" alt="Mote 新标签页" loading="lazy">
             <figcaption>默认隐藏繁杂的新闻资讯，不设令人烦忧的商业广告。此时此刻，只需专注搜你所想。</figcaption>
           </figure>
           <figure class="shot-slide">
-            <img src="assets/mote-qr.jpg" alt="Mote 扫一扫" loading="lazy">
+            <img data-full="assets/full-mote-qr.jpg" src="assets/mote-qr.jpg" alt="Mote 扫一扫" loading="lazy">
             <figcaption>在有限的安装包里尽量堆料：全能的相机功能、好用的资源嗅探、省心的同步功能...你想要的，这里都有。</figcaption>
           </figure>
           <figure class="shot-slide">
-            <img src="assets/mote-security.jpg" alt="Mote 网页安全中心" loading="lazy">
+            <img data-full="assets/full-mote-security.jpg" src="assets/mote-security.jpg" alt="Mote 网页安全中心" loading="lazy">
             <figcaption>你的浏览安全，是 Mote 的首要目标：防跟踪、拦广告、控权限，一应俱全</figcaption>
           </figure>
           <figure class="shot-slide">
-            <img src="assets/mote-theme.jpg" alt="Mote 主题与界面" loading="lazy">
+            <img data-full="assets/full-mote-theme.jpg" src="assets/mote-theme.jpg" alt="Mote 主题与界面" loading="lazy">
             <figcaption>高度定制的应用界面，打造属于自己的浏览器，让视觉更随心、交互更如意。</figcaption>
           </figure>
           <figure class="shot-slide">
-            <img src="assets/mote-ui.jpg" alt="Mote 文件管理" loading="lazy">
+            <img data-full="assets/full-mote-ui.jpg" src="assets/mote-ui.jpg" alt="Mote 文件管理" loading="lazy">
             <figcaption>灵感源于妙趣横生的万花筒，在细节处点缀细腻的视觉与动效，让指尖的体验更加舒展自然。</figcaption>
           </figure>
         </div>
@@ -401,7 +399,7 @@
           <div class="legacy-name">次元引擎</div>
           <div class="legacy-ver">0.1.8</div>
           <div class="shots">
-            <img class="shot" src="assets/ciyuan-home-thumb.jpg" alt="次元引擎 主页截图" loading="lazy">
+            <img class="shot" data-full="assets/full-ciyuan-home.jpg" src="assets/ciyuan-home-thumb.jpg" alt="次元引擎 主页截图" loading="lazy">
           </div>
           <a class="legacy-btn" href="downloads/ciyuan-engine-0.1.8.apk" download>下载 APK</a>
         </div>
@@ -410,8 +408,8 @@
           <div class="legacy-name">island</div>
           <div class="legacy-ver">0.3.0</div>
           <div class="shots">
-            <img class="shot" src="assets/island-home-thumb.jpg" alt="island 主页截图" loading="lazy">
-            <img class="shot" src="assets/island-settings-thumb.jpg" alt="island 设置页截图" loading="lazy">
+            <img class="shot" data-full="assets/full-island-home.jpg" src="assets/island-home-thumb.jpg" alt="island 主页截图" loading="lazy">
+            <img class="shot" data-full="assets/full-island-settings.jpg" src="assets/island-settings-thumb.jpg" alt="island 设置页截图" loading="lazy">
           </div>
           <a class="legacy-btn" href="downloads/island-0.3.0.apk" download>下载 APK</a>
         </div>
@@ -636,39 +634,6 @@
     window.addEventListener('resize', function () { syncShowcase(); updateNav(); });
     updateNav();
 
-    /* 点击截图放大预览 */
-    const lightbox = document.getElementById('lightbox');
-    const lightboxImg = document.getElementById('lightboxImg');
-    const lightboxClose = document.getElementById('lightboxClose');
-    function openLightbox(src, alt) {
-      if (!lightbox || !lightboxImg) return;
-      lightboxImg.src = src;
-      lightboxImg.alt = alt || '';
-      lightbox.classList.add('open');
-      lightbox.setAttribute('aria-hidden', 'false');
-    }
-    function closeLightbox() {
-      if (!lightbox) return;
-      lightbox.classList.remove('open');
-      lightbox.setAttribute('aria-hidden', 'true');
-      lightboxImg.removeAttribute('src');
-    }
-    Array.from(track.querySelectorAll('img')).forEach(function (img) {
-      img.style.cursor = 'zoom-in';
-      img.addEventListener('click', function () { openLightbox(img.src, img.alt); });
-    });
-    if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
-    if (lightbox) {
-      lightbox.addEventListener('click', function (e) {
-        if (e.target === lightbox) closeLightbox();
-      });
-    }
-    window.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeLightbox();
-      if (!lightbox || !lightbox.classList.contains('open')) return;
-      if (e.key === 'ArrowLeft') goShot(shotIndex - 1);
-      if (e.key === 'ArrowRight') goShot(shotIndex + 1);
-    });
   }
 })();
 </script>
@@ -689,6 +654,93 @@
   mask.addEventListener('click', function () { setOpen(false); });
   drawer.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
   window.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
+})();
+</script>
+
+<script>
+/* 截图放大：从缩略图位置平滑铺满，关闭时缩回原位置 */
+(function () {
+  const box = document.getElementById('lightbox');
+  const big = document.getElementById('lightboxImg');
+  const closeBtn = document.getElementById('lightboxClose');
+  if (!box || !big) return;
+  let fromRect = null;
+  let natural = { w: 1, h: 1 };
+  const REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function fit() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const s = Math.min((vw * 0.94) / natural.w, (vh * 0.94) / natural.h);
+    const w = natural.w * s, h = natural.h * s;
+    return { w: w, h: h, left: (vw - w) / 2, top: (vh - h) / 2 };
+  }
+
+  function open(img) {
+    const src = img.dataset.full || img.src;
+    const rect = img.getBoundingClientRect();
+    fromRect = rect;
+    const probe = new Image();
+    probe.onload = function () {
+      natural = { w: probe.naturalWidth || 1, h: probe.naturalHeight || 1 };
+      const t = fit();
+      big.src = src;
+      big.style.width = t.w + 'px';
+      big.style.height = t.h + 'px';
+      big.style.left = t.left + 'px';
+      big.style.top = t.top + 'px';
+      const sx = rect.width / t.w;
+      big.style.transition = 'none';
+      big.style.transform = 'translate(' + (rect.left - t.left) + 'px,' + (rect.top - t.top) + 'px) scale(' + sx + ')';
+      big.style.opacity = '0.55';
+      box.classList.add('open');
+      box.setAttribute('aria-hidden', 'false');
+      if (REDUCE) {
+        big.style.transform = 'none';
+        big.style.opacity = '1';
+        return;
+      }
+      requestAnimationFrame(function () {
+        big.style.transition = 'transform .44s cubic-bezier(.22,1,.36,1),opacity .3s';
+        big.style.transform = 'none';
+        big.style.opacity = '1';
+      });
+    };
+    probe.src = src;
+  }
+
+  function close() {
+    if (!box.classList.contains('open')) return;
+    box.classList.remove('open');
+    box.setAttribute('aria-hidden', 'true');
+    const w = parseFloat(big.style.width) || 1;
+    const left = parseFloat(big.style.left) || 0;
+    const top = parseFloat(big.style.top) || 0;
+    if (fromRect && !REDUCE) {
+      const sx = fromRect.width / w;
+      big.style.transition = 'transform .38s cubic-bezier(.4,0,.2,1),opacity .3s';
+      big.style.transform = 'translate(' + (fromRect.left - left) + 'px,' + (fromRect.top - top) + 'px) scale(' + sx + ')';
+      big.style.opacity = '0.5';
+      setTimeout(function () {
+        big.style.transition = 'none';
+        big.style.transform = '';
+        big.style.opacity = '';
+        big.removeAttribute('src');
+      }, 400);
+    } else {
+      big.removeAttribute('src');
+    }
+  }
+
+  document.querySelectorAll('.shot-slide img, .shot').forEach(function (img) {
+    img.style.cursor = 'zoom-in';
+    img.addEventListener('click', function (e) {
+      e.preventDefault();
+      open(img);
+    });
+  });
+  if (closeBtn) closeBtn.addEventListener('click', close);
+  box.addEventListener('click', function (e) { if (e.target === box) close(); });
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 })();
 </script>
 <script src="assets/nav.js"></script>
