@@ -27,6 +27,8 @@ cloudbase/admin/
 
 # build outputs
 *.apk
+# 官网的第二屏需要直接分发两个已废弃项目的安装包
+!docs/downloads/*.apk
 *.aab
 
 # 签名相关（切勿提交）

@@ -102,9 +102,59 @@
     .tags i{color:#4a515c}
     .star{filter:drop-shadow(0 10px 26px rgba(90,140,230,.18))}
   }
+
+  /* ---------- 整页滑动（第二屏：已废弃项目） ---------- */
+  html,body{height:100%}
+  body{overflow:hidden;min-height:0}
+  #pages{position:relative;height:100svh;transition:transform .72s cubic-bezier(.22,1,.36,1);will-change:transform}
+  .page{position:relative;height:100svh;display:flex;flex-direction:column;overflow-y:auto;overscroll-behavior:contain}
+  .page-one > main{flex:1}
+  .legacy{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:clamp(64px,7vw,110px) 24px clamp(48px,7vw,86px)}
+  .legacy-title{margin:0 0 clamp(26px,3.6vw,48px);font-size:clamp(20px,2.1vw,34px);font-weight:600;letter-spacing:1px;
+    background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 34%,#7f9cc9 68%,#6d93d0 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .legacy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(16px,2.4vw,40px);width:min(760px,100%)}
+  .legacy-card{display:flex;flex-direction:column;align-items:center;gap:clamp(7px,.9vw,11px);
+    padding:clamp(20px,2.4vw,34px) clamp(14px,2vw,28px);border-radius:22px;text-decoration:none;color:inherit;
+    background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
+    box-shadow:0 18px 40px rgba(90,120,170,.10);
+    transition:transform .22s cubic-bezier(.22,1,.36,1),box-shadow .22s,border-color .22s}
+  .legacy-card:hover{transform:translateY(-4px);box-shadow:0 26px 52px rgba(90,120,170,.18);border-color:rgba(47,123,246,.35)}
+  .legacy-icon{width:clamp(62px,6vw,86px);height:auto;border-radius:20px;box-shadow:0 10px 24px rgba(60,90,140,.18)}
+  .legacy-name{font-size:clamp(15px,1.15vw,18px);font-weight:600;color:#56606f;letter-spacing:.5px}
+  .legacy-ver{font-size:clamp(11.5px,.82vw,13px);color:#98a0ac;letter-spacing:1px}
+  .legacy-btn{margin-top:clamp(6px,.8vw,10px);padding:8px 20px;border-radius:999px;background:var(--blue);color:#fff;
+    font-size:clamp(12px,.85vw,14px);letter-spacing:.5px;box-shadow:0 8px 20px rgba(47,123,246,.22)}
+  .legacy-hint{position:absolute;left:50%;bottom:clamp(16px,2.6vh,30px);transform:translateX(-50%);
+    font-size:12.5px;letter-spacing:2px;color:#a7aeba}
+  .dots{position:fixed;right:clamp(12px,2vw,26px);top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:10px;z-index:60}
+  .dots button{width:9px;height:9px;padding:0;border:0;border-radius:50%;
+    background:rgba(140,155,175,.35);cursor:pointer;transition:background .2s,transform .2s}
+  .dots button.on{background:var(--blue);transform:scale(1.28)}
+  .page-two .legacy > *{opacity:0;transform:translate3d(0,26px,0);
+    transition:opacity .6s cubic-bezier(.22,1,.36,1),transform .6s cubic-bezier(.22,1,.36,1)}
+  #pages.at-two .page-two .legacy > *{opacity:1;transform:none}
+  #pages.at-two .page-two .legacy > *:nth-child(2){transition-delay:.08s}
+  @media (max-width:640px){.legacy-grid{grid-template-columns:1fr}}
+  @media (prefers-color-scheme: dark){
+    .legacy-title{background:linear-gradient(94deg,#c9d3e3 0%,#adc0dc 30%,#93b3e6 64%,#7ea6e0 100%);
+      -webkit-background-clip:text;background-clip:text}
+    .legacy-card{background:rgba(24,27,33,.72);border-color:rgba(120,150,200,.18);box-shadow:0 18px 40px rgba(0,0,0,.35)}
+    .legacy-card:hover{border-color:rgba(122,166,224,.5)}
+    .legacy-name{color:#c7d0de}
+  }
+  @media (prefers-reduced-motion: reduce){
+    #pages{transition:none}
+    .page-two .legacy > *{transition:none;opacity:1;transform:none}
+  }
 </style>
 </head>
 <body>
+
+<div id="pages">
+<section class="page page-one" id="page1">
 
   <div class="top absolute">
     <a class="brand" href="./" aria-label="回到首页">
@@ -162,6 +212,34 @@
     源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" data-mote-src="license" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" data-mote-src="notice" target="_blank" rel="noopener">NOTICE</a><br>
     版权所有 © 2026 Torachen
   </footer>
+  </section>
+
+  <section class="page page-two" id="page2">
+    <div class="legacy">
+      <h2 class="legacy-title">已废弃的项目，仅供 UI 展示</h2>
+      <div class="legacy-grid">
+        <a class="legacy-card" href="downloads/ciyuan-engine-0.1.8.apk" download>
+          <img class="legacy-icon" src="assets/ciyuan-icon.png" alt="次元引擎" loading="lazy">
+          <div class="legacy-name">次元引擎</div>
+          <div class="legacy-ver">0.1.8</div>
+          <span class="legacy-btn">下载 APK</span>
+        </a>
+        <a class="legacy-card" href="downloads/island-0.3.0.apk" download>
+          <img class="legacy-icon" src="assets/island-icon.png" alt="island" loading="lazy">
+          <div class="legacy-name">island</div>
+          <div class="legacy-ver">0.3.0</div>
+          <span class="legacy-btn">下载 APK</span>
+        </a>
+      </div>
+    </div>
+    <div class="legacy-hint">向上滑动返回</div>
+  </section>
+</div>
+
+<div class="dots" aria-label="页面切换">
+  <button type="button" class="on" aria-label="第一页"></button>
+  <button type="button" aria-label="第二页"></button>
+</div>
 
 <script src="assets/source.js"></script>
 <script>
@@ -246,6 +324,101 @@
       dl.href = rel.pageUrl;
     }
   } catch (e) {}
+})();
+</script>
+<script>
+/* 整页滑动：一次滑动直接切到下一页（参考 ak.hypergryph.com / ys.mihoyo.com），
+   不是"慢慢下移"。内部内容可滚动时优先让内容滚动。 */
+(function () {
+  const pages = document.getElementById('pages');
+  if (!pages) return;
+  const dots = Array.from(document.querySelectorAll('.dots button'));
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const total = pages.children.length;
+  let index = 0;
+  let lock = false;
+
+  function pageHeight() { return window.innerHeight; }
+
+  function apply(animate) {
+    const h = pageHeight();
+    pages.style.transition = animate && !reduce
+      ? 'transform .72s cubic-bezier(.22,1,.36,1)'
+      : 'none';
+    pages.style.transform = 'translate3d(0,' + (-index * h) + 'px,0)';
+    pages.classList.toggle('at-two', index === 1);
+    dots.forEach(function (d, k) { d.classList.toggle('on', k === index); });
+    if (!animate || reduce) {
+      // 让下一帧恢复过渡，避免窗口尺寸变化时发生动画
+      requestAnimationFrame(function () { pages.style.transition = 'transform .72s cubic-bezier(.22,1,.36,1)'; });
+    }
+  }
+
+  function go(i) {
+    index = Math.max(0, Math.min(total - 1, i));
+    apply(true);
+  }
+
+  function canInnerScroll(el, dir) {
+    if (!el || el.scrollHeight <= el.clientHeight + 1) return false;
+    const atTop = el.scrollTop <= 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    return dir > 0 ? !atBottom : !atTop;
+  }
+
+  function step(delta) {
+    if (lock) return;
+    const cur = pages.children[index];
+    if (canInnerScroll(cur, delta)) return;
+    const target = index + (delta > 0 ? 1 : -1);
+    if (target < 0 || target > total - 1) return;
+    lock = true;
+    go(target);
+    setTimeout(function () { lock = false; }, reduce ? 0 : 760);
+  }
+
+  let wheelAcc = 0;
+  let wheelAt = 0;
+  window.addEventListener('wheel', function (e) {
+    const cur = pages.children[index];
+    if (canInnerScroll(cur, e.deltaY)) return;
+    e.preventDefault();
+    const now = Date.now();
+    if (now - wheelAt > 260) wheelAcc = 0;
+    wheelAt = now;
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) >= 36) {
+      step(wheelAcc > 0 ? 1 : -1);
+      wheelAcc = 0;
+    }
+  }, { passive: false });
+
+  let touchY = null;
+  window.addEventListener('touchstart', function (e) {
+    touchY = e.touches.length ? e.touches[0].clientY : null;
+  }, { passive: true });
+  window.addEventListener('touchend', function (e) {
+    if (touchY == null) return;
+    const endY = e.changedTouches.length ? e.changedTouches[0].clientY : touchY;
+    const dy = touchY - endY;
+    touchY = null;
+    if (Math.abs(dy) < 46) return;
+    const cur = pages.children[index];
+    if (canInnerScroll(cur, dy > 0 ? 1 : -1)) return;
+    step(dy > 0 ? 1 : -1);
+  }, { passive: true });
+
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); step(1); }
+    else if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); step(-1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(total - 1); }
+  });
+
+  dots.forEach(function (d, k) { d.addEventListener('click', function () { go(k); }); });
+
+  window.addEventListener('resize', function () { apply(false); });
+  apply(false);
 })();
 </script>
 <script src="assets/nav.js"></script>
