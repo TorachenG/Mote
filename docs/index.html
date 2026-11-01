@@ -112,12 +112,12 @@
     scroll-snap-align:start;scroll-snap-stop:always}
   .page-one > main{flex:1}
   .legacy{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    padding:clamp(24px,3.4vh,52px) 20px;
-    width:100%;max-width:min(1080px,100%);margin:0 auto}
+    padding:clamp(96px,10vh,124px) 20px;
+    width:100%;max-width:min(1280px,100%);margin:0 auto}
   .legacy-title{margin:0 0 clamp(22px,3vw,40px);font-size:clamp(20px,2vw,40px);font-weight:600;letter-spacing:1px;
     background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 34%,#7f9cc9 68%,#6d93d0 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
-  .legacy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(16px,2.4vw,44px);width:min(880px,100%)}
+  .legacy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(16px,2.4vw,52px);width:min(1080px,100%)}
   .legacy-card{display:flex;flex-direction:column;align-items:center;gap:clamp(7px,.9vw,11px);
     padding:clamp(20px,2.4vw,34px) clamp(14px,2vw,28px);border-radius:22px;text-decoration:none;color:inherit;
     background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
@@ -161,12 +161,15 @@
     font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none}
   /* ---------- 第二页：卡片内截图 ---------- */
   .shots{display:flex;gap:6px;justify-content:center;margin-top:2px}
-  .shot{width:clamp(56px,7vw,140px);height:auto;border-radius:12px;object-fit:cover;object-position:top;
+  .shot{width:clamp(56px,6vw,132px);height:auto;border-radius:12px;object-fit:cover;object-position:top;
     border:1px solid rgba(120,150,200,.22);box-shadow:0 6px 16px rgba(60,90,140,.14);background:#fff}
-  .legacy-footer{margin-top:auto;padding:0 24px clamp(12px,2.2vh,24px);font-size:12px;line-height:1.7;
-    text-align:center;color:var(--muted)}
+  .page-two{display:flex;flex-direction:column}
+  .page-two .legacy{position:relative;inset:auto;flex:1;min-height:0}
+  .legacy-footer{position:fixed;left:0;right:0;bottom:0;z-index:80;margin:0;padding:6px 24px clamp(10px,1.6vh,18px);
+    opacity:0;pointer-events:none;transition:opacity .3s
+    font-size:12px;line-height:1.7;text-align:center;color:var(--muted)}
   .legacy-footer a{color:inherit}
-  .legacy{padding:clamp(42px,5.4vh,86px) 20px 10px}
+  body.at-p3 .legacy-footer{opacity:1;pointer-events:auto}
   /* ---------- 窄屏：导航折叠为侧边抽屉 ---------- */
   .nav-toggle{display:none;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;
     border:1px solid rgba(120,150,200,.22);background:rgba(255,255,255,.62);color:#6b7480;cursor:pointer;
@@ -187,8 +190,7 @@
     pointer-events:none;transition:opacity .3s}
   .drawer-mask.open{opacity:1;pointer-events:auto}
   @media (min-width:1000px){
-    .showcase-card{width:min(840px,100%);padding:clamp(14px,1.4vw,22px)}
-    .shot-slide img{height:min(62vh,600px)}
+    .showcase-card{width:min(660px,100%);padding:clamp(14px,1.4vw,20px)}
     .showcase-title{font-size:46px}
     .shot-slide figcaption{font-size:15.5px;max-width:640px}
   }
@@ -214,24 +216,24 @@
 
   /* ---------- 展示页（干净 / 强大 / 安全 / 定制 / 时尚） ---------- */
   .showcase{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:clamp(20px,3vh,40px) 16px;text-align:center;
-    width:100%;max-width:min(1120px,100%);margin:0 auto}
+    padding:clamp(96px,10vh,124px) 16px;text-align:center;
+    width:100%;max-width:min(1320px,100%);margin:0 auto}
   .showcase-title{margin:0 0 clamp(12px,1.8vh,22px);font-size:clamp(23px,2.4vw,42px);font-weight:600;
     letter-spacing:3px;transition:opacity .22s;
     background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 30%,#7f9cc9 64%,#6d93d0 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
-  .showcase-card{width:min(720px,100%);border-radius:24px;overflow:hidden;
+  .showcase-card{width:min(600px,100%);border-radius:26px;overflow:hidden;
     background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
     box-shadow:0 22px 50px rgba(90,120,170,.12);padding:clamp(10px,1.4vw,18px)}
   .showcase-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;
     -webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain}
   .showcase-track::-webkit-scrollbar{display:none}
   .shot-slide{flex:0 0 100%;scroll-snap-align:center;margin:0;
-    display:flex;flex-direction:column;align-items:center;gap:clamp(8px,1.2vh,12px)}
-  .shot-slide img{height:clamp(210px,52vh,560px);width:auto;max-width:100%;border-radius:16px;
+    display:flex;flex-direction:column;align-items:center;gap:clamp(16px,2.2vh,26px)}
+  .shot-slide img{height:clamp(190px,calc(100vh - 540px),560px);width:auto;max-width:100%;border-radius:18px;
     box-shadow:0 12px 28px rgba(60,90,140,.18);background:#fff}
-  .shot-slide figcaption{font-size:clamp(11.5px,1vw,15px);line-height:1.8;color:#7a8290;
-    max-width:min(560px,92%);margin:0 0 2px}
+  .shot-slide figcaption{font-size:clamp(13px,1.15vw,17px);line-height:1.85;color:#7a8290;
+    max-width:min(620px,92%);margin:clamp(6px,1vh,14px) 0 0}
   .showcase-dots{display:flex;gap:8px;margin-top:clamp(10px,1.8vh,16px)}
   .showcase-dots i{width:7px;height:7px;border-radius:50%;background:rgba(140,155,175,.35);
     transition:background .2s,transform .2s}
@@ -288,14 +290,22 @@
     .shot-nav:disabled{color:#6b7480}
     .lightbox img{background:#12151a}
   }
+
+  /* ---------- 最终尺寸（覆盖前面顺序造成的冲突） ---------- */
+  .showcase,.legacy{
+    position:absolute;inset:0;box-sizing:border-box;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+    padding:clamp(104px,10.5vh,126px) 20px clamp(14px,2vh,26px)}
+  .shot-slide img{height:min(32vh,310px)}
+  @media (min-width:1000px){
+    .shot-slide img{height:min(33vh,320px)}
+    .showcase-card{width:min(640px,100%)}
+  }
 </style>
 </head>
 <body>
 
-<div id="pages">
-<section class="page page-one" id="page1">
-
-  <div class="top absolute">
+  <div class="top fixed">
     <a class="brand" href="./" aria-label="回到首页">
       <div class="org">[ TORACHEN ]</div>
       <div class="name">MOTE</div>
@@ -322,6 +332,10 @@
       <svg viewBox="109.4 108.2 902.0 904.0" width="42" height="42" aria-hidden="true"><g transform="translate(0,1120.8) scale(1,-1)"><path d="M416.8,890.1 Q425.3,886.9 431.5,881.0 Q437.6,875.2 439.8,867.5 Q443.3,856.5 443.3,819.8 V751.2 Q443.3,714.2 439.8,703.1 Q437.6,695.4 431.3,689.6 Q424.9,683.7 416.8,681.0 Q404.5,677.0 370.5,677.0 H359.4 H311.9 H300.9 Q266.8,677.0 254.5,681.0 Q246.0,683.7 239.7,689.6 Q233.4,695.4 231.1,703.1 Q228.0,714.9 228.0,751.2 V819.8 Q228.0,838.7 228.7,849.9 Q229.4,861.2 231.1,867.5 Q233.4,875.2 239.7,881.0 Q246.0,886.9 254.5,890.1 Q262.9,892.7 278.4,893.4 Q293.8,894.1 311.9,894.1 H359.4 Q377.5,894.1 392.9,893.4 Q408.4,892.7 416.8,890.1 Z M447.8,601.9 Q471.8,610.1 489.4,628.7 Q507.1,647.2 517.6,672.1 Q524.6,689.1 526.5,710.7 Q528.5,732.4 528.5,767.9 V803.1 Q528.5,838.6 526.5,860.0 Q524.6,881.5 517.6,898.6 Q507.1,923.4 489.4,941.9 Q471.8,960.5 447.8,969.2 Q418.8,979.2 373.4,979.2 H297.8 Q252.5,979.2 223.5,969.2 Q199.5,960.5 181.6,941.8 Q163.8,923.0 153.8,898.6 Q146.7,881.5 144.8,860.0 Q142.8,838.6 142.8,803.1 V767.9 Q142.8,732.4 144.8,710.7 Q146.7,689.1 153.8,672.1 Q163.8,647.6 181.6,628.8 Q199.5,610.1 223.5,601.9 Q251.1,591.8 297.8,591.8 H373.4 Q420.6,591.8 447.8,601.9 Z M866.3,890.1 Q874.8,886.9 881.1,881.0 Q887.4,875.2 889.7,867.5 Q891.4,861.2 892.1,849.9 Q892.8,838.7 892.8,819.8 V751.2 Q892.8,732.3 892.1,720.8 Q891.4,709.4 889.7,703.1 Q887.4,695.4 881.1,689.6 Q874.8,683.7 866.3,681.0 Q854.0,677.0 819.9,677.0 H808.8 H761.4 H750.3 Q716.2,677.0 704.0,681.0 Q695.4,683.7 689.1,689.6 Q682.9,695.4 681.0,703.1 Q677.5,714.2 677.5,751.2 V819.8 Q677.5,856.5 681.0,867.5 Q683.2,875.2 689.5,881.0 Q695.8,886.9 704.0,890.1 Q712.4,892.7 727.9,893.4 Q743.3,894.1 761.4,894.1 H808.8 Q826.9,894.1 842.4,893.4 Q857.9,892.7 866.3,890.1 Z M897.3,601.9 Q921.2,610.1 939.1,628.8 Q957.0,647.6 967.0,672.1 Q974.1,689.1 976.0,710.7 Q978.0,732.4 978.0,767.9 V803.1 Q978.0,838.6 976.0,860.0 Q974.1,881.5 967.0,898.6 Q957.0,923.0 939.1,941.8 Q921.2,960.5 897.3,969.2 Q868.2,979.2 822.9,979.2 H747.3 Q702.0,979.2 673.0,969.2 Q649.0,960.5 631.3,941.9 Q613.6,923.4 603.2,898.6 Q596.2,881.5 594.3,860.0 Q592.3,838.6 592.3,803.1 V767.9 Q592.3,732.4 594.3,710.7 Q596.2,689.1 603.2,672.1 Q613.6,647.2 631.3,628.7 Q649.0,610.1 673.0,601.9 Q700.6,591.8 747.3,591.8 H822.9 Q870.1,591.8 897.3,601.9 Z M370.5,443.8 Q404.5,443.8 416.8,439.8 Q424.9,437.1 431.3,431.2 Q437.6,425.3 439.8,417.7 Q443.3,406.6 443.3,369.6 V301.0 Q443.3,264.3 439.8,253.3 Q437.6,245.6 431.5,239.7 Q425.3,233.9 416.8,230.7 Q408.4,228.1 392.9,227.4 Q377.5,226.7 359.4,226.7 H311.9 Q293.8,226.7 278.4,227.4 Q262.9,228.1 254.5,230.7 Q246.0,233.9 239.7,239.7 Q233.4,245.6 231.1,253.3 Q228.0,265.1 228.0,301.0 V369.6 Q228.0,388.5 228.7,400.0 Q229.4,411.4 231.1,417.7 Q233.4,425.3 239.7,431.2 Q246.0,437.1 254.5,439.8 Q266.8,443.8 300.9,443.8 H311.9 H359.4 Z M447.8,151.6 Q471.8,160.3 489.4,178.9 Q507.1,197.4 517.6,222.2 Q524.6,239.3 526.5,260.8 Q528.5,282.2 528.5,317.7 V352.9 Q528.5,388.3 526.5,410.0 Q524.6,431.7 517.6,448.7 Q507.1,473.6 489.4,492.1 Q471.8,510.7 447.8,518.9 Q420.6,529.0 373.4,529.0 H297.8 Q251.1,529.0 223.5,518.9 Q199.5,510.7 181.6,491.9 Q163.8,473.2 153.8,448.7 Q146.7,431.7 144.8,410.0 Q142.8,388.3 142.8,352.9 V317.7 Q142.8,282.2 144.8,260.8 Q146.7,239.3 153.8,222.2 Q163.8,197.7 181.6,179.0 Q199.5,160.3 223.5,151.6 Q252.5,141.6 297.8,141.6 H373.4 Q418.8,141.6 447.8,151.6 Z M819.9,443.8 Q854.0,443.8 866.3,439.8 Q874.8,437.1 881.1,431.2 Q887.4,425.3 889.7,417.7 Q891.4,411.4 892.1,400.0 Q892.8,388.5 892.8,369.6 V301.0 Q892.8,282.0 892.1,270.8 Q891.4,259.6 889.7,253.3 Q887.4,245.6 881.1,239.7 Q874.8,233.9 866.3,230.7 Q857.9,228.1 842.4,227.4 Q826.9,226.7 808.8,226.7 H761.4 Q743.3,226.7 727.9,227.4 Q712.4,228.1 704.0,230.7 Q695.4,233.9 689.1,239.7 Q682.9,245.6 681.0,253.3 Q677.5,264.3 677.5,301.0 V369.6 Q677.5,406.6 681.0,417.7 Q683.2,425.3 689.5,431.2 Q695.8,437.1 704.0,439.8 Q716.2,443.8 750.3,443.8 H761.4 H808.8 Z M897.3,151.6 Q921.2,160.3 939.1,179.0 Q957.0,197.7 967.0,222.2 Q974.1,239.3 976.0,260.8 Q978.0,282.2 978.0,317.7 V352.9 Q978.0,388.3 976.0,410.0 Q974.1,431.7 967.0,448.7 Q957.0,473.2 939.1,491.9 Q921.2,510.7 897.3,518.9 Q870.1,529.0 822.9,529.0 H747.3 Q700.6,529.0 673.0,518.9 Q649.0,510.7 631.3,492.1 Q613.6,473.6 603.2,448.7 Q596.2,431.7 594.3,410.0 Q592.3,388.3 592.3,352.9 V317.7 Q592.3,282.2 594.3,260.8 Q596.2,239.3 603.2,222.2 Q613.6,197.4 631.3,178.9 Q649.0,160.3 673.0,151.6 Q702.0,141.6 747.3,141.6 H822.9 Q868.2,141.6 897.3,151.6 Z" fill="currentColor"/></g></svg>
     </button>
   </div>
+
+<div id="pages">
+<section class="page page-one" id="page1">
+
 
   <main>
     <svg class="star" viewBox="0 0 100 100" aria-hidden="true">
@@ -559,6 +573,7 @@
     if (!h) return;
     index = Math.max(0, Math.min(sections.length - 1, Math.round(pages.scrollTop / h)));
     dots.forEach(function (d, k) { d.classList.toggle('on', k === index); });
+    document.body.classList.toggle('at-p3', index === sections.length - 1);
     if (history.replaceState) {
       history.replaceState(null, '', index === 0 ? location.pathname + location.search : '#p' + (index + 1));
     }
