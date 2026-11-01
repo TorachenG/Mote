@@ -84,7 +84,8 @@
     版权所有 © 2026 Torachen
   </footer>
 
-  <script src="assets/source.js"></script>
+  <script src="assets/release-local.js"></script>
+<script src="assets/source.js"></script>
 <script src="assets/nav.js"></script>
   <script src="assets/doc.js"></script>
   <script>
@@ -187,21 +188,22 @@
       }));
     }
 
-    MoteSource.releases(30)
-      .then(function (items) {
-        if (!Array.isArray(items) || !items.length) {
-          list.innerHTML = '<div class="card"><div class="state">还没有发布记录。</div></div>';
-          return;
-        }
-        list.innerHTML = items.map(card).join('');
-        hydrateDownloadSizes();
+    function renderList(items) {
+      if (!Array.isArray(items) || !items.length) {
+        list.innerHTML = '<div class="card"><div class="state">还没有发布记录。</div></div>';
+        return;
+      }
+      list.innerHTML = items.map(card).join('');
+      hydrateDownloadSizes();
+    }
+
+    MoteLocal.releases(30)
+      .then(function (localItems) {
+        if (localItems && localItems.length) { renderList(localItems); return null; }
+        return MoteSource.releases(30).then(renderList);
       })
       .catch(function () {
-        MoteSource.releasesPageUrl().then(function (url) {
-          list.innerHTML = '<div class="card"><div class="state">' +
-            '加载失败，请前往 <a href="' + url + '" target="_blank" rel="noopener">Releases</a> 查看。' +
-            '</div></div>';
-        }).catch(function () {
+        return MoteSource.releases(30).then(renderList).catch(function () {
           list.innerHTML = '<div class="card"><div class="state">加载失败，请稍后重试。</div></div>';
         });
       });

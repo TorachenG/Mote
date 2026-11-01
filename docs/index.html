@@ -157,8 +157,10 @@
   .tags{letter-spacing:2px}
   .accent{color:#3482ff;letter-spacing:2px}
   /* ---------- 第一页底部提示 ---------- */
-  .scroll-hint{position:absolute;left:50%;bottom:clamp(14px,2.4vh,28px);transform:translateX(-50%);
-    font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none}
+  .scroll-hint{position:fixed;left:50%;bottom:clamp(14px,2.4vh,28px);transform:translateX(-50%);
+    font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none;z-index:70;
+    opacity:0;transition:opacity .3s}
+  body.at-p1 .scroll-hint{opacity:1}
   /* ---------- 第二页：卡片内截图 ---------- */
   .shots{display:flex;gap:6px;justify-content:center;margin-top:2px}
   .shot{width:clamp(56px,6vw,132px);height:auto;border-radius:12px;object-fit:cover;object-position:top;
@@ -333,6 +335,8 @@
     </button>
   </div>
 
+  <div class="scroll-hint">向下滑动继续</div>
+
 <div id="pages">
 <section class="page page-one" id="page1">
 
@@ -361,7 +365,6 @@
     <p class="tags">
       探索 <span class="accent">简洁</span> 与 <span class="accent">功能</span> 之间的平衡
     </p>
-    <div class="scroll-hint">向下滑动继续</div>
   </main>
 
   </section>
@@ -457,6 +460,7 @@
   <a href="legal/privacy-policy.html">隐私政策</a>
 </aside>
 
+<script src="assets/release-local.js"></script>
 <script src="assets/source.js"></script>
 <script>
 (async function () {
@@ -493,7 +497,9 @@
 
     MoteSource.releasesPageUrl().then(url => { dl.href = url; }).catch(() => {});
 
-    const rel = await MoteSource.latestRelease();
+    let rel = null;
+    try { rel = await MoteLocal.latest(); } catch (e) {}
+    if (!rel) rel = await MoteSource.latestRelease();
     if (!rel) return;
     if (rel.tag) verEl.textContent = rel.tag;
     if (rel.publishedAt) {
@@ -574,6 +580,7 @@
     index = Math.max(0, Math.min(sections.length - 1, Math.round(pages.scrollTop / h)));
     dots.forEach(function (d, k) { d.classList.toggle('on', k === index); });
     document.body.classList.toggle('at-p3', index === sections.length - 1);
+    document.body.classList.toggle('at-p1', index === 0);
     if (history.replaceState) {
       history.replaceState(null, '', index === 0 ? location.pathname + location.search : '#p' + (index + 1));
     }
@@ -592,10 +599,15 @@
     else if (e.key === 'Home') { e.preventDefault(); go(0); }
     else if (e.key === 'End') { e.preventDefault(); go(sections.length - 1); }
   });
-  // 支持 #p2 / #p3 直接定位（也方便分享）
+  // 支持 #p2 / #p3 直接定位（也方便分享）；无 hash 时强制回到第一页，
+  // 避免浏览器恢复上一次的滚动位置导致首屏元素整体下移
   (function () {
     const m = (location.hash || '').match(/^#p([1-9]\d*)$/);
-    if (!m) return;
+    if (!m) {
+      pages.scrollTop = 0;
+      window.scrollTo(0, 0);
+      return;
+    }
     const k = Math.max(0, Math.min(sections.length - 1, Number(m[1]) - 1));
     pages.scrollTop = pageHeight() * k;
   })();
