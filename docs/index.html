@@ -151,6 +151,57 @@
   @media (prefers-reduced-motion: reduce){
     #pages{scroll-behavior:auto}
   }
+
+  /* ---------- 文案强调色（MIUIX 蓝） ---------- */
+  .tags{letter-spacing:2px}
+  .accent{color:#3482ff;letter-spacing:2px}
+  /* ---------- 第一页底部提示 ---------- */
+  .scroll-hint{position:absolute;left:50%;bottom:clamp(14px,2.4vh,28px);transform:translateX(-50%);
+    font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none}
+  /* ---------- 第二页：卡片内截图 ---------- */
+  .shots{display:flex;gap:6px;justify-content:center;margin-top:2px}
+  .shot{width:clamp(54px,7vw,84px);height:auto;border-radius:8px;object-fit:cover;object-position:top;
+    border:1px solid rgba(120,150,200,.22);box-shadow:0 6px 16px rgba(60,90,140,.14);background:#fff}
+  .legacy-footer{margin-top:auto;padding:0 24px clamp(12px,2.2vh,24px);font-size:12px;line-height:1.7;
+    text-align:center;color:var(--muted)}
+  .legacy-footer a{color:inherit}
+  .legacy{padding:clamp(42px,5.4vh,86px) 20px 10px}
+  /* ---------- 窄屏：导航折叠为侧边抽屉 ---------- */
+  .nav-toggle{display:none;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;
+    border:1px solid rgba(120,150,200,.22);background:rgba(255,255,255,.62);color:#6b7480;cursor:pointer;
+    transition:background .2s,color .2s,transform .2s}
+  .nav-toggle:active{transform:scale(.96)}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(78vw,320px);z-index:90;
+    background:rgba(250,251,253,.97);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+    transform:translateX(102%);transition:transform .34s cubic-bezier(.22,1,.36,1);
+    padding:calc(22px + env(safe-area-inset-top)) 20px 20px;display:flex;flex-direction:column;gap:2px;
+    box-shadow:-18px 0 44px rgba(90,120,170,.16)}
+  .drawer.open{transform:none}
+  .drawer a{display:block;padding:13px 10px;border-radius:12px;color:#4b5563;text-decoration:none;
+    font-size:15px;letter-spacing:.5px;transition:background .18s,color .18s}
+  .drawer a:hover,.drawer a:active{background:rgba(52,130,255,.09);color:#3482ff}
+  .drawer a.active{color:#3482ff}
+  .drawer-mask{position:fixed;inset:0;z-index:85;background:rgba(18,24,32,.3);opacity:0;
+    pointer-events:none;transition:opacity .3s}
+  .drawer-mask.open{opacity:1;pointer-events:auto}
+  @media (max-width:900px){
+    nav{display:none}
+    .nav-toggle{display:inline-flex;position:fixed;right:16px;
+      top:calc(14px + env(safe-area-inset-top));z-index:66}
+    .top{padding:18px 16px}
+    .brand .org{font-size:11px}
+    .brand .name{margin-top:4px;font-size:36px;letter-spacing:5px}
+    main{padding:64px 20px 40px}
+    h1{font-size:clamp(24px,7.2vw,34px)}
+    .tags{letter-spacing:1px}
+    .accent{letter-spacing:1px}
+  }
+  @media (prefers-color-scheme: dark){
+    .nav-toggle{background:rgba(28,32,40,.7);color:#c7d0de;border-color:rgba(120,150,200,.25)}
+    .drawer{background:rgba(22,25,31,.97);box-shadow:-18px 0 44px rgba(0,0,0,.5)}
+    .drawer a{color:#c7d0de}
+    .shot{background:#12151a}
+  }
 </style>
 </head>
 <body>
@@ -179,9 +230,18 @@
           <a href="legal/user-agreement.html">用户协议</a>
           <a href="legal/privacy-policy.html">隐私政策</a>
         </div>
-      </div><i>|</i>
-      <a href="developer.html">管理入口</a>
+      </div>
     </nav>
+    <button class="nav-toggle" id="navToggle" type="button" aria-label="菜单" aria-expanded="false">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="1.9">
+          <rect x="3.6" y="3.6" width="6.8" height="6.8" rx="2"/>
+          <rect x="13.6" y="3.6" width="6.8" height="6.8" rx="2"/>
+          <rect x="3.6" y="13.6" width="6.8" height="6.8" rx="2"/>
+          <rect x="13.6" y="13.6" width="6.8" height="6.8" rx="2"/>
+        </g>
+      </svg>
+    </button>
   </div>
 
   <main>
@@ -197,7 +257,7 @@
             fill="url(#starGrad)"/>
     </svg>
 
-    <h1>轻快、纯净的 Android 浏览器</h1>
+    <h1>纯净如纸、强大如城</h1>
 
     <p class="meta">
       版本 <span id="ver">0.3.0</span><span class="sep">｜</span><span id="date">2026 / 10 / 22</span>
@@ -206,35 +266,42 @@
     <a class="dl" id="dl" href="https://github.com/TorachenG/Mote/releases/latest">下载<span id="size"></span></a>
 
     <p class="tags">
-      简洁纯净<i>｜</i>极速流畅<i>｜</i>功能全面<i>｜</i>高度定制
+      探索 <span class="accent">简洁</span> 与 <span class="accent">功能</span> 之间的平衡
     </p>
+    <div class="scroll-hint">向下滑动继续</div>
   </main>
 
-  <footer>
-    源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" data-mote-src="license" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" data-mote-src="notice" target="_blank" rel="noopener">NOTICE</a><br>
-    版权所有 © 2026 Torachen
-  </footer>
   </section>
 
   <section class="page page-two" id="page2">
     <div class="legacy">
       <h2 class="legacy-title">已废弃的项目，仅供 UI 展示</h2>
       <div class="legacy-grid">
-        <a class="legacy-card" href="downloads/ciyuan-engine-0.1.8.apk" download>
+        <div class="legacy-card">
           <img class="legacy-icon" src="assets/ciyuan-icon.png" alt="次元引擎" loading="lazy">
           <div class="legacy-name">次元引擎</div>
           <div class="legacy-ver">0.1.8</div>
-          <span class="legacy-btn">下载 APK</span>
-        </a>
-        <a class="legacy-card" href="downloads/island-0.3.0.apk" download>
+          <div class="shots">
+            <img class="shot" src="assets/ciyuan-home-thumb.jpg" alt="次元引擎 主页截图" loading="lazy">
+          </div>
+          <a class="legacy-btn" href="downloads/ciyuan-engine-0.1.8.apk" download>下载 APK</a>
+        </div>
+        <div class="legacy-card">
           <img class="legacy-icon" src="assets/island-icon.png" alt="island" loading="lazy">
           <div class="legacy-name">island</div>
           <div class="legacy-ver">0.3.0</div>
-          <span class="legacy-btn">下载 APK</span>
-        </a>
+          <div class="shots">
+            <img class="shot" src="assets/island-home-thumb.jpg" alt="island 主页截图" loading="lazy">
+            <img class="shot" src="assets/island-settings-thumb.jpg" alt="island 设置页截图" loading="lazy">
+          </div>
+          <a class="legacy-btn" href="downloads/island-0.3.0.apk" download>下载 APK</a>
+        </div>
       </div>
     </div>
-    <div class="legacy-hint">向上滑动返回</div>
+    <footer class="legacy-footer">
+      源码基于 <a href="https://github.com/TorachenG/Mote/blob/main/LICENSE" data-mote-src="license" target="_blank" rel="noopener">Apache-2.0</a> 许可发布 · 第三方组件见 <a href="https://github.com/TorachenG/Mote/blob/main/NOTICE" data-mote-src="notice" target="_blank" rel="noopener">NOTICE</a><br>
+      版权所有 © 2026 Torachen
+    </footer>
   </section>
 </div>
 
@@ -242,6 +309,16 @@
   <button type="button" class="on" aria-label="第一页"></button>
   <button type="button" aria-label="第二页"></button>
 </div>
+
+<div class="drawer-mask" id="drawerMask"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <a href="./" class="active">首页</a>
+  <a href="https://github.com/TorachenG/Mote" target="_blank" rel="noopener">GitHub 仓库</a>
+  <a href="https://gitee.com/TorachenG/Mote" target="_blank" rel="noopener">Gitee 仓库</a>
+  <a href="changelog.html">更新日志</a>
+  <a href="legal/user-agreement.html">用户协议</a>
+  <a href="legal/privacy-policy.html">隐私政策</a>
+</aside>
 
 <script src="assets/source.js"></script>
 <script>
@@ -362,6 +439,25 @@
   });
   dots.forEach(function (d, k) { d.addEventListener('click', function () { go(k); }); });
   sync();
+})();
+</script>
+<script>
+/* 窄屏导航抽屉 */
+(function () {
+  const toggle = document.getElementById('navToggle');
+  const drawer = document.getElementById('drawer');
+  const mask = document.getElementById('drawerMask');
+  if (!toggle || !drawer || !mask) return;
+  function setOpen(open) {
+    drawer.classList.toggle('open', open);
+    mask.classList.toggle('open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
+  toggle.addEventListener('click', function () { setOpen(!drawer.classList.contains('open')); });
+  mask.addEventListener('click', function () { setOpen(false); });
+  drawer.querySelectorAll('a').forEach(function (a) { a.addEventListener('click', function () { setOpen(false); }); });
+  window.addEventListener('keydown', function (e) { if (e.key === 'Escape') setOpen(false); });
 })();
 </script>
 <script src="assets/nav.js"></script>
