@@ -167,12 +167,13 @@
   .legacy-footer a{color:inherit}
   .legacy{padding:clamp(42px,5.4vh,86px) 20px 10px}
   /* ---------- 窄屏：导航折叠为侧边抽屉 ---------- */
-  .nav-toggle{display:none;align-items:center;justify-content:center;width:44px;height:44px;border-radius:12px;
+  .nav-toggle{display:none;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;
     border:1px solid rgba(120,150,200,.22);background:rgba(255,255,255,.62);color:#6b7480;cursor:pointer;
     transition:background .2s,color .2s,transform .2s}
   .nav-toggle:active{transform:scale(.96)}
   .drawer{position:fixed;top:0;right:0;height:100%;width:min(78vw,320px);z-index:90;
-    background:rgba(250,251,253,.97);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);
+    background:rgba(250,251,253,.62);
+    -webkit-backdrop-filter:blur(26px) saturate(1.25);backdrop-filter:blur(26px) saturate(1.25);
     transform:translateX(102%);transition:transform .34s cubic-bezier(.22,1,.36,1);
     padding:calc(22px + env(safe-area-inset-top)) 20px 20px;display:flex;flex-direction:column;gap:2px;
     box-shadow:-18px 0 44px rgba(90,120,170,.16)}
@@ -198,9 +199,38 @@
   }
   @media (prefers-color-scheme: dark){
     .nav-toggle{background:rgba(28,32,40,.7);color:#c7d0de;border-color:rgba(120,150,200,.25)}
-    .drawer{background:rgba(22,25,31,.97);box-shadow:-18px 0 44px rgba(0,0,0,.5)}
+    .drawer{background:rgba(22,25,31,.58);
+      -webkit-backdrop-filter:blur(26px) saturate(1.25);backdrop-filter:blur(26px) saturate(1.25);
+      box-shadow:-18px 0 44px rgba(0,0,0,.5)}
     .drawer a{color:#c7d0de}
     .shot{background:#12151a}
+  }
+
+  /* ---------- 展示页（干净 / 强大 / 安全 / 定制 / 时尚） ---------- */
+  .showcase{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:clamp(34px,4.6vh,72px) 16px clamp(18px,3vh,28px);text-align:center;width:100%}
+  .showcase-title{margin:0 0 clamp(12px,1.8vh,20px);font-size:clamp(23px,2.8vw,38px);font-weight:600;
+    letter-spacing:3px;color:#5a6573;transition:opacity .22s}
+  .showcase-card{width:min(520px,100%);border-radius:24px;overflow:hidden;
+    background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
+    box-shadow:0 22px 50px rgba(90,120,170,.12);padding:clamp(10px,1.4vw,18px)}
+  .showcase-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain}
+  .showcase-track::-webkit-scrollbar{display:none}
+  .shot-slide{flex:0 0 100%;scroll-snap-align:center;margin:0;
+    display:flex;flex-direction:column;align-items:center;gap:clamp(8px,1.2vh,12px)}
+  .shot-slide img{height:clamp(200px,40vh,340px);width:auto;max-width:100%;border-radius:14px;
+    box-shadow:0 12px 28px rgba(60,90,140,.18);background:#fff}
+  .shot-slide figcaption{font-size:clamp(11.5px,.95vw,13.5px);line-height:1.8;color:#7a8290;
+    max-width:92%;margin:0 0 2px}
+  .showcase-dots{display:flex;gap:8px;margin-top:clamp(10px,1.8vh,16px)}
+  .showcase-dots i{width:7px;height:7px;border-radius:50%;background:rgba(140,155,175,.35);
+    transition:background .2s,transform .2s}
+  .showcase-dots i.on{background:#3482ff;transform:scale(1.25)}
+  @media (prefers-color-scheme: dark){
+    .showcase-title{color:#c7d0de}
+    .showcase-card{background:rgba(24,27,33,.72);border-color:rgba(120,150,200,.18);box-shadow:0 22px 50px rgba(0,0,0,.4)}
+    .shot-slide img{background:#12151a}
   }
 </style>
 </head>
@@ -273,7 +303,38 @@
 
   </section>
 
-  <section class="page page-two" id="page2">
+  <section class="page page-showcase" id="page2">
+    <div class="showcase">
+      <h2 class="showcase-title" id="showcaseTitle">干净</h2>
+      <div class="showcase-card">
+        <div class="showcase-track" id="showcaseTrack">
+          <figure class="shot-slide">
+            <img src="assets/mote-main.jpg" alt="Mote 新标签页" loading="lazy">
+            <figcaption>默认隐藏繁杂的新闻资讯，不设令人烦忧的商业广告。此时此刻，只需专注搜你所想。</figcaption>
+          </figure>
+          <figure class="shot-slide">
+            <img src="assets/mote-qr.jpg" alt="Mote 扫一扫" loading="lazy">
+            <figcaption>在有限的安装包里尽量堆料：全能的相机功能、好用的资源嗅探、省心的同步功能...你想要的，这里都有。</figcaption>
+          </figure>
+          <figure class="shot-slide">
+            <img src="assets/mote-security.jpg" alt="Mote 网页安全中心" loading="lazy">
+            <figcaption>你的浏览安全，是 Mote 的首要目标：防跟踪、拦广告、控权限，一应俱全</figcaption>
+          </figure>
+          <figure class="shot-slide">
+            <img src="assets/mote-theme.jpg" alt="Mote 主题与界面" loading="lazy">
+            <figcaption>高度定制的应用界面，打造属于自己的浏览器，让视觉更随心、交互更如意。</figcaption>
+          </figure>
+          <figure class="shot-slide">
+            <img src="assets/mote-ui.jpg" alt="Mote 文件管理" loading="lazy">
+            <figcaption>灵感源于妙趣横生的万花筒，在细节处点缀细腻的视觉与动效，让指尖的体验更加舒展自然。</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="showcase-dots" id="showcaseDots"></div>
+    </div>
+  </section>
+
+  <section class="page page-two" id="page3">
     <div class="legacy">
       <h2 class="legacy-title">已废弃的项目，仅供 UI 展示</h2>
       <div class="legacy-grid">
@@ -305,10 +366,7 @@
   </section>
 </div>
 
-<div class="dots" aria-label="页面切换">
-  <button type="button" class="on" aria-label="第一页"></button>
-  <button type="button" aria-label="第二页"></button>
-</div>
+<div class="dots" id="pageDots" aria-label="页面切换"></div>
 
 <div class="drawer-mask" id="drawerMask"></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
@@ -406,21 +464,35 @@
 })();
 </script>
 <script>
-/* 整页滑动：用原生滚动吸附（scroll-snap），一次滑动直接停在下一页 */
+/* 整页滑动：原生滚动吸附，一次滑动直接停在下一页 */
 (function () {
   const pages = document.getElementById('pages');
   if (!pages) return;
-  const dots = Array.from(document.querySelectorAll('.dots button'));
   const sections = Array.from(pages.querySelectorAll('.page'));
+  const dotWrap = document.getElementById('pageDots');
   let index = 0;
+
+  // 按页数生成圆点
+  const dots = [];
+  if (dotWrap) {
+    dotWrap.innerHTML = '';
+    sections.forEach(function (_, i) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('aria-label', '第 ' + (i + 1) + ' 页');
+      if (i === 0) b.classList.add('on');
+      b.addEventListener('click', function () { go(i); });
+      dotWrap.appendChild(b);
+      dots.push(b);
+    });
+  }
 
   function pageHeight() { return pages.clientHeight; }
 
   function sync() {
     const h = pageHeight();
     if (!h) return;
-    const i = Math.round(pages.scrollTop / h);
-    index = Math.max(0, Math.min(sections.length - 1, i));
+    index = Math.max(0, Math.min(sections.length - 1, Math.round(pages.scrollTop / h)));
     dots.forEach(function (d, k) { d.classList.toggle('on', k === index); });
   }
 
@@ -437,8 +509,38 @@
     else if (e.key === 'Home') { e.preventDefault(); go(0); }
     else if (e.key === 'End') { e.preventDefault(); go(sections.length - 1); }
   });
-  dots.forEach(function (d, k) { d.addEventListener('click', function () { go(k); }); });
   sync();
+
+  /* 展示页：卡片内横向滑动切换，标题随之改变 */
+  const track = document.getElementById('showcaseTrack');
+  const titleEl = document.getElementById('showcaseTitle');
+  const shotDots = document.getElementById('showcaseDots');
+  if (track && titleEl && shotDots) {
+    const titles = ['干净', '强大', '安全', '定制', '时尚'];
+    const slides = Array.from(track.children);
+    const marks = [];
+    slides.forEach(function (_, i) {
+      const m = document.createElement('i');
+      if (i === 0) m.classList.add('on');
+      shotDots.appendChild(m);
+      marks.push(m);
+    });
+    let shotIndex = 0;
+    function syncShowcase() {
+      const w = track.clientWidth || 1;
+      const idx = Math.max(0, Math.min(slides.length - 1, Math.round(track.scrollLeft / w)));
+      if (idx === shotIndex) return;
+      shotIndex = idx;
+      titleEl.style.opacity = '0';
+      window.setTimeout(function () {
+        titleEl.textContent = titles[idx] || '';
+        titleEl.style.opacity = '1';
+      }, 130);
+      marks.forEach(function (m, k) { m.classList.toggle('on', k === idx); });
+    }
+    track.addEventListener('scroll', syncShowcase, { passive: true });
+    window.addEventListener('resize', syncShowcase);
+  }
 })();
 </script>
 <script>
