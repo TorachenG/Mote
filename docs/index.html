@@ -112,12 +112,12 @@
     scroll-snap-align:start;scroll-snap-stop:always}
   .page-one > main{flex:1}
   .legacy{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    padding:clamp(96px,10vh,124px) 20px;
-    width:100%;max-width:min(1280px,100%);margin:0 auto}
+    padding:clamp(24px,3.4vh,52px) 20px;
+    width:100%;max-width:min(1080px,100%);margin:0 auto}
   .legacy-title{margin:0 0 clamp(22px,3vw,40px);font-size:clamp(20px,2vw,40px);font-weight:600;letter-spacing:1px;
     background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 34%,#7f9cc9 68%,#6d93d0 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
-  .legacy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(16px,2.4vw,52px);width:min(1080px,100%)}
+  .legacy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(16px,2.4vw,44px);width:min(880px,100%)}
   .legacy-card{display:flex;flex-direction:column;align-items:center;gap:clamp(7px,.9vw,11px);
     padding:clamp(20px,2.4vw,34px) clamp(14px,2vw,28px);border-radius:22px;text-decoration:none;color:inherit;
     background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
@@ -157,21 +157,16 @@
   .tags{letter-spacing:2px}
   .accent{color:#3482ff;letter-spacing:2px}
   /* ---------- 第一页底部提示 ---------- */
-  .scroll-hint{position:fixed;left:50%;bottom:clamp(14px,2.4vh,28px);transform:translateX(-50%);
-    font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none;z-index:70;
-    opacity:0;transition:opacity .3s}
-  body.at-p1 .scroll-hint{opacity:1}
+  .scroll-hint{position:absolute;left:50%;bottom:clamp(14px,2.4vh,28px);transform:translateX(-50%);
+    font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none}
   /* ---------- 第二页：卡片内截图 ---------- */
   .shots{display:flex;gap:6px;justify-content:center;margin-top:2px}
-  .shot{width:clamp(56px,6vw,132px);height:auto;border-radius:12px;object-fit:cover;object-position:top;
+  .shot{width:clamp(56px,7vw,140px);height:auto;border-radius:12px;object-fit:cover;object-position:top;
     border:1px solid rgba(120,150,200,.22);box-shadow:0 6px 16px rgba(60,90,140,.14);background:#fff}
-  .page-two{display:flex;flex-direction:column}
-  .page-two .legacy{position:relative;inset:auto;flex:1;min-height:0}
-  .legacy-footer{position:fixed;left:0;right:0;bottom:0;z-index:80;margin:0;padding:6px 24px clamp(10px,1.6vh,18px);
-    opacity:0;pointer-events:none;transition:opacity .3s
-    font-size:12px;line-height:1.7;text-align:center;color:var(--muted)}
+  .legacy-footer{margin-top:auto;padding:0 24px clamp(12px,2.2vh,24px);font-size:12px;line-height:1.7;
+    text-align:center;color:var(--muted)}
   .legacy-footer a{color:inherit}
-  body.at-p3 .legacy-footer{opacity:1;pointer-events:auto}
+  .legacy{padding:clamp(42px,5.4vh,86px) 20px 10px}
   /* ---------- 窄屏：导航折叠为侧边抽屉 ---------- */
   .nav-toggle{display:none;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;
     border:1px solid rgba(120,150,200,.22);background:rgba(255,255,255,.62);color:#6b7480;cursor:pointer;
@@ -192,7 +187,8 @@
     pointer-events:none;transition:opacity .3s}
   .drawer-mask.open{opacity:1;pointer-events:auto}
   @media (min-width:1000px){
-    .showcase-card{width:min(660px,100%);padding:clamp(14px,1.4vw,20px)}
+    .showcase-card{width:min(840px,100%);padding:clamp(14px,1.4vw,22px)}
+    .shot-slide img{height:min(62vh,600px)}
     .showcase-title{font-size:46px}
     .shot-slide figcaption{font-size:15.5px;max-width:640px}
   }
@@ -218,24 +214,24 @@
 
   /* ---------- 展示页（干净 / 强大 / 安全 / 定制 / 时尚） ---------- */
   .showcase{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:clamp(96px,10vh,124px) 16px;text-align:center;
-    width:100%;max-width:min(1320px,100%);margin:0 auto}
+    padding:clamp(20px,3vh,40px) 16px;text-align:center;
+    width:100%;max-width:min(1120px,100%);margin:0 auto}
   .showcase-title{margin:0 0 clamp(12px,1.8vh,22px);font-size:clamp(23px,2.4vw,42px);font-weight:600;
     letter-spacing:3px;transition:opacity .22s;
     background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 30%,#7f9cc9 64%,#6d93d0 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
-  .showcase-card{width:min(600px,100%);border-radius:26px;overflow:hidden;
+  .showcase-card{width:min(720px,100%);border-radius:24px;overflow:hidden;
     background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
     box-shadow:0 22px 50px rgba(90,120,170,.12);padding:clamp(10px,1.4vw,18px)}
   .showcase-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;
     -webkit-overflow-scrolling:touch;scrollbar-width:none;overscroll-behavior-x:contain}
   .showcase-track::-webkit-scrollbar{display:none}
   .shot-slide{flex:0 0 100%;scroll-snap-align:center;margin:0;
-    display:flex;flex-direction:column;align-items:center;gap:clamp(16px,2.2vh,26px)}
-  .shot-slide img{height:clamp(190px,calc(100vh - 540px),560px);width:auto;max-width:100%;border-radius:18px;
+    display:flex;flex-direction:column;align-items:center;gap:clamp(8px,1.2vh,12px)}
+  .shot-slide img{height:clamp(210px,52vh,560px);width:auto;max-width:100%;border-radius:16px;
     box-shadow:0 12px 28px rgba(60,90,140,.18);background:#fff}
-  .shot-slide figcaption{font-size:clamp(13px,1.15vw,17px);line-height:1.85;color:#7a8290;
-    max-width:min(620px,92%);margin:clamp(6px,1vh,14px) 0 0}
+  .shot-slide figcaption{font-size:clamp(11.5px,1vw,15px);line-height:1.8;color:#7a8290;
+    max-width:min(560px,92%);margin:0 0 2px}
   .showcase-dots{display:flex;gap:8px;margin-top:clamp(10px,1.8vh,16px)}
   .showcase-dots i{width:7px;height:7px;border-radius:50%;background:rgba(140,155,175,.35);
     transition:background .2s,transform .2s}
@@ -293,21 +289,16 @@
     .lightbox img{background:#12151a}
   }
 
-  /* ---------- 最终尺寸（覆盖前面顺序造成的冲突） ---------- */
-  .showcase,.legacy{
-    position:absolute;inset:0;box-sizing:border-box;
-    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-    padding:clamp(104px,10.5vh,126px) 20px clamp(14px,2vh,26px)}
-  .shot-slide img{height:min(32vh,310px)}
-  @media (min-width:1000px){
-    .shot-slide img{height:min(33vh,320px)}
-    .showcase-card{width:min(640px,100%)}
-  }
+  /* 顶部栏常驻：只改定位，不动结构 */
+  .top.absolute{position:fixed;inset:0 0 auto 0;z-index:75}
 </style>
 </head>
 <body>
 
-  <div class="top fixed">
+<div id="pages">
+<section class="page page-one" id="page1">
+
+  <div class="top absolute">
     <a class="brand" href="./" aria-label="回到首页">
       <div class="org">[ TORACHEN ]</div>
       <div class="name">MOTE</div>
@@ -335,12 +326,6 @@
     </button>
   </div>
 
-  <div class="scroll-hint">向下滑动继续</div>
-
-<div id="pages">
-<section class="page page-one" id="page1">
-
-
   <main>
     <svg class="star" viewBox="0 0 100 100" aria-hidden="true">
       <defs>
@@ -365,6 +350,7 @@
     <p class="tags">
       探索 <span class="accent">简洁</span> 与 <span class="accent">功能</span> 之间的平衡
     </p>
+    <div class="scroll-hint">向下滑动继续</div>
   </main>
 
   </section>
@@ -579,8 +565,6 @@
     if (!h) return;
     index = Math.max(0, Math.min(sections.length - 1, Math.round(pages.scrollTop / h)));
     dots.forEach(function (d, k) { d.classList.toggle('on', k === index); });
-    document.body.classList.toggle('at-p3', index === sections.length - 1);
-    document.body.classList.toggle('at-p1', index === 0);
     if (history.replaceState) {
       history.replaceState(null, '', index === 0 ? location.pathname + location.search : '#p' + (index + 1));
     }
@@ -599,15 +583,10 @@
     else if (e.key === 'Home') { e.preventDefault(); go(0); }
     else if (e.key === 'End') { e.preventDefault(); go(sections.length - 1); }
   });
-  // 支持 #p2 / #p3 直接定位（也方便分享）；无 hash 时强制回到第一页，
-  // 避免浏览器恢复上一次的滚动位置导致首屏元素整体下移
+  // 支持 #p2 / #p3 直接定位（也方便分享）
   (function () {
     const m = (location.hash || '').match(/^#p([1-9]\d*)$/);
-    if (!m) {
-      pages.scrollTop = 0;
-      window.scrollTo(0, 0);
-      return;
-    }
+    if (!m) { pages.scrollTop = 0; window.scrollTo(0, 0); return; }
     const k = Math.max(0, Math.min(sections.length - 1, Number(m[1]) - 1));
     pages.scrollTop = pageHeight() * k;
   })();
