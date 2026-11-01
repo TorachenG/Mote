@@ -234,6 +234,44 @@
     .showcase-card{background:rgba(24,27,33,.72);border-color:rgba(120,150,200,.18);box-shadow:0 22px 50px rgba(0,0,0,.4)}
     .shot-slide img{background:#12151a}
   }
+
+  /* ---------- 展示卡片左右切换按钮 ---------- */
+  .showcase-card{position:relative}
+  .shot-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:3;
+    width:42px;height:42px;border-radius:50%;padding:0;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:#5b6675;
+    border:1px solid rgba(120,150,200,.24);background:rgba(255,255,255,.82);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    box-shadow:0 6px 18px rgba(70,100,150,.16);
+    transition:opacity .2s,transform .2s,background .2s,color .2s}
+  .shot-nav.prev{left:8px}
+  .shot-nav.next{right:8px}
+  .shot-nav:hover{color:#3482ff}
+  .shot-nav:active{transform:translateY(-50%) scale(.94)}
+  .shot-nav:disabled{opacity:.32;cursor:default;color:#9aa3b0;box-shadow:none}
+  /* ---------- 截图放大预览 ---------- */
+  .lightbox{position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(10,12,16,.93);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  .lightbox.open{display:flex}
+  .lightbox img{max-width:100%;max-height:100%;width:auto;height:auto;border-radius:16px;
+    box-shadow:0 30px 80px rgba(0,0,0,.6);background:#fff}
+  .lightbox-close{position:absolute;top:calc(16px + env(safe-area-inset-top));left:16px;
+    width:44px;height:44px;border-radius:50%;padding:0;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:#fff;
+    border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.14);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  .lightbox-close:active{transform:scale(.94)}
+  @media (max-width:700px){
+    .shot-nav{width:34px;height:34px}
+    .shot-nav.prev{left:4px}
+    .shot-nav.next{right:4px}
+  }
+  @media (prefers-color-scheme: dark){
+    .shot-nav{background:rgba(30,34,42,.82);color:#c7d0de;border-color:rgba(120,150,200,.28)}
+    .shot-nav:disabled{color:#6b7480}
+    .lightbox img{background:#12151a}
+  }
 </style>
 </head>
 <body>
@@ -309,6 +347,12 @@
     <div class="showcase">
       <h2 class="showcase-title" id="showcaseTitle">干净</h2>
       <div class="showcase-card">
+        <button class="shot-nav prev" id="shotPrev" type="button" aria-label="上一张">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path d="M15 5 L8 12 L15 19" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
         <div class="showcase-track" id="showcaseTrack">
           <figure class="shot-slide">
             <img src="assets/mote-main.jpg" alt="Mote 新标签页" loading="lazy">
@@ -331,6 +375,12 @@
             <figcaption>灵感源于妙趣横生的万花筒，在细节处点缀细腻的视觉与动效，让指尖的体验更加舒展自然。</figcaption>
           </figure>
         </div>
+        <button class="shot-nav next" id="shotNext" type="button" aria-label="下一张">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path d="M9 5 L16 12 L9 19" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </div>
       <div class="showcase-dots" id="showcaseDots"></div>
     </div>
@@ -369,6 +419,16 @@
 </div>
 
 <div class="dots" id="pageDots" aria-label="页面切换"></div>
+
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <button class="lightbox-close" id="lightboxClose" type="button" aria-label="关闭">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path d="M6 6 L18 18 M18 6 L6 18" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round"/>
+    </svg>
+  </button>
+  <img id="lightboxImg" alt="">
+</div>
 
 <div class="drawer-mask" id="drawerMask"></div>
 <aside class="drawer" id="drawer" aria-hidden="true">
@@ -550,8 +610,56 @@
       }, 130);
       marks.forEach(function (m, k) { m.classList.toggle('on', k === idx); });
     }
-    track.addEventListener('scroll', syncShowcase, { passive: true });
-    window.addEventListener('resize', syncShowcase);
+    const prevBtn = document.getElementById('shotPrev');
+    const nextBtn = document.getElementById('shotNext');
+    function updateNav() {
+      if (prevBtn) prevBtn.disabled = shotIndex <= 0;
+      if (nextBtn) nextBtn.disabled = shotIndex >= slides.length - 1;
+    }
+    function goShot(i) {
+      const w = track.clientWidth || 1;
+      const k = Math.max(0, Math.min(slides.length - 1, i));
+      track.scrollTo({ left: w * k, behavior: 'smooth' });
+    }
+    if (prevBtn) prevBtn.addEventListener('click', function () { goShot(shotIndex - 1); });
+    if (nextBtn) nextBtn.addEventListener('click', function () { goShot(shotIndex + 1); });
+    track.addEventListener('scroll', function () { syncShowcase(); updateNav(); }, { passive: true });
+    window.addEventListener('resize', function () { syncShowcase(); updateNav(); });
+    updateNav();
+
+    /* 点击截图放大预览 */
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightboxImg');
+    const lightboxClose = document.getElementById('lightboxClose');
+    function openLightbox(src, alt) {
+      if (!lightbox || !lightboxImg) return;
+      lightboxImg.src = src;
+      lightboxImg.alt = alt || '';
+      lightbox.classList.add('open');
+      lightbox.setAttribute('aria-hidden', 'false');
+    }
+    function closeLightbox() {
+      if (!lightbox) return;
+      lightbox.classList.remove('open');
+      lightbox.setAttribute('aria-hidden', 'true');
+      lightboxImg.removeAttribute('src');
+    }
+    Array.from(track.querySelectorAll('img')).forEach(function (img) {
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', function () { openLightbox(img.src, img.alt); });
+    });
+    if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
+    if (lightbox) {
+      lightbox.addEventListener('click', function (e) {
+        if (e.target === lightbox) closeLightbox();
+      });
+    }
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeLightbox();
+      if (!lightbox || !lightbox.classList.contains('open')) return;
+      if (e.key === 'ArrowLeft') goShot(shotIndex - 1);
+      if (e.key === 'ArrowRight') goShot(shotIndex + 1);
+    });
   }
 })();
 </script>
