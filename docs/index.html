@@ -112,8 +112,8 @@
     scroll-snap-align:start;scroll-snap-stop:always}
   .page-one > main{flex:1}
   .legacy{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
-    padding:clamp(42px,5.4vh,86px) 20px 10px;
-    width:100%;max-width:min(1080px,100%);max-height:min(86vh,860px);margin:0 auto}
+    padding:clamp(24px,3.4vh,52px) 20px;
+    width:100%;max-width:min(1080px,100%);margin:0 auto}
   .legacy-title{margin:0 0 clamp(22px,3vw,40px);font-size:clamp(20px,2vw,40px);font-weight:600;letter-spacing:1px;
     background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 34%,#7f9cc9 68%,#6d93d0 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
@@ -161,14 +161,14 @@
     font-size:12.5px;letter-spacing:2px;color:#a7aeba;pointer-events:none}
   /* ---------- 第二页：卡片内截图 ---------- */
   .shots{display:flex;gap:6px;justify-content:center;margin-top:2px}
-  .shot{width:clamp(54px,6vw,108px);height:auto;border-radius:10px;object-fit:cover;object-position:top;
+  .shot{width:clamp(56px,7vw,140px);height:auto;border-radius:12px;object-fit:cover;object-position:top;
     border:1px solid rgba(120,150,200,.22);box-shadow:0 6px 16px rgba(60,90,140,.14);background:#fff}
   .legacy-footer{margin-top:auto;padding:0 24px clamp(12px,2.2vh,24px);font-size:12px;line-height:1.7;
     text-align:center;color:var(--muted)}
   .legacy-footer a{color:inherit}
   .legacy{padding:clamp(42px,5.4vh,86px) 20px 10px}
   /* ---------- 窄屏：导航折叠为侧边抽屉 ---------- */
-  .nav-toggle{display:none;align-items:center;justify-content:center;width:66px;height:66px;border-radius:19px;
+  .nav-toggle{display:none;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;
     border:1px solid rgba(120,150,200,.22);background:rgba(255,255,255,.62);color:#6b7480;cursor:pointer;
     transition:background .2s,color .2s,transform .2s}
   .nav-toggle:active{transform:scale(.96)}
@@ -188,7 +188,7 @@
   .drawer-mask.open{opacity:1;pointer-events:auto}
   @media (min-width:1000px){
     .showcase-card{width:min(840px,100%);padding:clamp(14px,1.4vw,22px)}
-    .shot-slide img{height:min(56vh,520px)}
+    .shot-slide img{height:min(62vh,600px)}
     .showcase-title{font-size:46px}
     .shot-slide figcaption{font-size:15.5px;max-width:640px}
   }
@@ -214,10 +214,12 @@
 
   /* ---------- 展示页（干净 / 强大 / 安全 / 定制 / 时尚） ---------- */
   .showcase{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:clamp(34px,4.6vh,72px) 16px clamp(18px,3vh,28px);text-align:center;
+    padding:clamp(20px,3vh,40px) 16px;text-align:center;
     width:100%;max-width:min(1120px,100%);margin:0 auto}
-  .showcase-title{margin:0 0 clamp(12px,1.8vh,20px);font-size:clamp(23px,2.4vw,42px);font-weight:600;
-    letter-spacing:3px;color:#5a6573;transition:opacity .22s}
+  .showcase-title{margin:0 0 clamp(12px,1.8vh,22px);font-size:clamp(23px,2.4vw,42px);font-weight:600;
+    letter-spacing:3px;transition:opacity .22s;
+    background:linear-gradient(94deg,#a8b0bb 0%,#9aa7bd 30%,#7f9cc9 64%,#6d93d0 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
   .showcase-card{width:min(720px,100%);border-radius:24px;overflow:hidden;
     background:rgba(255,255,255,.72);border:1px solid rgba(120,150,200,.16);
     box-shadow:0 22px 50px rgba(90,120,170,.12);padding:clamp(10px,1.4vw,18px)}
@@ -226,7 +228,7 @@
   .showcase-track::-webkit-scrollbar{display:none}
   .shot-slide{flex:0 0 100%;scroll-snap-align:center;margin:0;
     display:flex;flex-direction:column;align-items:center;gap:clamp(8px,1.2vh,12px)}
-  .shot-slide img{height:clamp(200px,46vh,460px);width:auto;max-width:100%;border-radius:14px;
+  .shot-slide img{height:clamp(210px,52vh,560px);width:auto;max-width:100%;border-radius:16px;
     box-shadow:0 12px 28px rgba(60,90,140,.18);background:#fff}
   .shot-slide figcaption{font-size:clamp(11.5px,1vw,15px);line-height:1.8;color:#7a8290;
     max-width:min(560px,92%);margin:0 0 2px}
@@ -235,7 +237,8 @@
     transition:background .2s,transform .2s}
   .showcase-dots i.on{background:#3482ff;transform:scale(1.25)}
   @media (prefers-color-scheme: dark){
-    .showcase-title{color:#c7d0de}
+    .showcase-title{background:linear-gradient(94deg,#c9d3e3 0%,#adc0dc 30%,#93b3e6 64%,#7ea6e0 100%);
+      -webkit-background-clip:text;background-clip:text}
     .showcase-card{background:rgba(24,27,33,.72);border-color:rgba(120,150,200,.18);box-shadow:0 22px 50px rgba(0,0,0,.4)}
     .shot-slide img{background:#12151a}
   }
