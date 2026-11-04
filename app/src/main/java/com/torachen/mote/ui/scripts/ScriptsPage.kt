@@ -76,6 +76,10 @@ import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.icon.extended.Rename
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
@@ -781,7 +785,7 @@ private fun ScriptsPageMiuix(
                     enabled = one,
                 ) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Rounded.Edit,
+                        imageVector = MiuixIcons.Edit,
                         contentDescription = "编辑",
                         tint = if (one) MiuixTheme.colorScheme.onSurface
                         else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
@@ -794,7 +798,7 @@ private fun ScriptsPageMiuix(
                     enabled = one,
                 ) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Rounded.EditNote,
+                        imageVector = MiuixIcons.Rename,
                         contentDescription = "重命名",
                         tint = if (one) MiuixTheme.colorScheme.onSurface
                         else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
@@ -807,7 +811,7 @@ private fun ScriptsPageMiuix(
                     enabled = selectedIds.isNotEmpty(),
                 ) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Rounded.Delete,
+                        imageVector = MiuixIcons.Delete,
                         contentDescription = "删除",
                         tint = Color(0xFFFF3B30),
                         modifier = Modifier.size(22.dp),
@@ -848,9 +852,10 @@ private fun ScriptRow(
         summary = "版本 ${script.version}",
         endActions = {
             if (selecting) {
-                androidx.compose.material3.Checkbox(
-                    checked = selected,
-                    onCheckedChange = null,
+                Checkbox(
+                    state = if (selected) androidx.compose.ui.state.ToggleableState.On
+                    else androidx.compose.ui.state.ToggleableState.Off,
+                    onClick = null,
                 )
             } else {
                 Switch(
