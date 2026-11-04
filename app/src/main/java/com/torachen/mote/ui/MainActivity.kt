@@ -5522,6 +5522,21 @@ fun BrowserScreen(
                         }
                     }
                 }
+                // 浏览器标识（含电脑模式 UA）变更后，立即套用到已打开的网页并重新加载
+                "ua_desktop_index", "ua_preset_index", "ua_custom_selected" -> {
+                    webViewMap.forEach { (id, wv) ->
+                        val desktop = windows.firstOrNull { it.id == id }?.desktopMode
+                            ?: globalDesktopMode
+                        try {
+                            wv.settings.userAgentString = UaStore.effectiveUa(context, desktop)
+                                ?: if (desktop) DESKTOP_UA else getMobileUserAgent(context)
+                        } catch (_: Exception) {}
+                    }
+                    val id = activeWindowId
+                    if (id != null) {
+                        try { webViewMap[id]?.reload() } catch (_: Exception) {}
+                    }
+                }
                 "web_desktop_mode" -> {
                     val enabled = prefs.getBoolean(key, false)
                     if (enabled != globalDesktopMode) {
