@@ -1198,9 +1198,14 @@ private val JS_DETECT_PAGE_THEME_COLOR = """
     function toHex(c) {
       if (!c) return '';
       var a = c[3];
-      var r = Math.round(c[0] * a + 255 * (1 - a));
-      var g = Math.round(c[1] * a + 255 * (1 - a));
-      var b = Math.round(c[2] * a + 255 * (1 - a));
+      // 半透明颜色要和页面所在环境混合，而不是一律混白：
+      // 深色页面常用 rgba(0,0,0,.x) 做背景，混白会把黑色取成白色
+      var darkEnv = false;
+      try { darkEnv = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
+      var base = darkEnv ? 0 : 255;
+      var r = Math.round(c[0] * a + base * (1 - a));
+      var g = Math.round(c[1] * a + base * (1 - a));
+      var b = Math.round(c[2] * a + base * (1 - a));
       return '#' + [r, g, b].map(function(v){
         v = Math.max(0, Math.min(255, v));
         return ('0' + v.toString(16)).slice(-2);

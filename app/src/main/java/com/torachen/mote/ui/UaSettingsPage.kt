@@ -222,27 +222,34 @@ private fun UaSettingsPageMiuix(onBack: () -> Unit) {
                     item(key = "preset_card") {
                         Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                             UaStore.presets.forEachIndexed { index, item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 56.dp)
-                                        .clickable {
-                                            preset = index
-                                            customSelected = null
-                                            UaStore.setPresetIndex(context, index)
-                                            UaStore.setCustomSelected(context, null)
-                                        }
-                                        .padding(horizontal = 16.dp, vertical = 13.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                                SearchableItem(
+                                    title = if (index == 0) "默认" else item.name,
+                                    pageRoute = "settings_ua",
+                                    pageTitle = "浏览器 UA 标识",
+                                    itemKey = "settings_ua_preset_$index",
                                 ) {
-                                    Text(
-                                        item.name,
-                                        style = MiuixTheme.textStyles.headline1,
-                                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                                        color = MiuixTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    RadioButton(selected = customSelected == null && preset == index, onClick = null)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 56.dp)
+                                            .clickable {
+                                                preset = index
+                                                customSelected = null
+                                                UaStore.setPresetIndex(context, index)
+                                                UaStore.setCustomSelected(context, null)
+                                            }
+                                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            item.name,
+                                            style = MiuixTheme.textStyles.headline1,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                            color = MiuixTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        RadioButton(selected = customSelected == null && preset == index, onClick = null)
+                                    }
                                 }
                             }
                         }

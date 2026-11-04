@@ -15,9 +15,10 @@ val generatedSettingsSearchDir: File = layout.buildDirectory
 
 val generateSettingsSearchCatalog by tasks.registering {
     group = "build"
-    description = "扫描 Settings_*.kt，自动生成设置项搜索目录"
+    description = "扫描源码中的 SearchableItem，自动生成设置项搜索目录"
 
-    val sourceDir = file("src/main/java/com/torachen/mote/ui/settings")
+    // 扫描整个源码目录：三级页面（如浏览器 UA 标识）与新增设置在 ui/ 下，不能只扫 settings/
+    val sourceDir = file("src/main/java")
     val outputDir = generatedSettingsSearchDir
 
     inputs.dir(sourceDir).withPropertyName("settingsSources")
@@ -28,20 +29,46 @@ val generateSettingsSearchCatalog by tasks.registering {
         val outFile = File(outputDir, "SettingsSearchCatalog.kt")
 
         val entries = mutableListOf<String>()
+        var order = 0
 
         if (sourceDir.exists()) {
-            val itemCallRegex = Regex("SearchableItem\\s*\\(([^)]*)\\)")
             val fieldRegex = Regex("(\\w+)\\s*=\\s*\"([^\"]*)\"")
             val tabIndexRegex = Regex("tabIndex\\s*=\\s*(\\d+)")
 
-            sourceDir.listFiles { f ->
-                f.isFile && f.name.startsWith("Settings_") && f.name.endsWith(".kt")
-            }
-                ?.sortedBy { it.name }
-                ?.forEach { file ->
+            sourceDir.walkTopDown()
+                .filter { it.isFile && it.name.endsWith(".kt") }
+                .sortedBy { it.relativeTo(sourceDir).path }
+                .forEach { file ->
                     val content = file.readText()
-                    itemCallRegex.findAll(content).forEach { match ->
-                        val body = match.groupValues[1]
+                    var cursor = 0
+                    while (cursor < content.length) {
+                        val call = content.indexOf("SearchableItem(", cursor)
+                        if (call < 0) break
+                        val open = content.indexOf('(', call)
+                        if (open < 0) break
+                        var depth = 0
+                        var end = -1
+                        var i = open
+                        while (i < content.length) {
+                            val ch = content[i]
+                            if (ch == '(') depth++
+                            else if (ch == ')') {
+                                depth--
+                                if (depth == 0) { end = i; break }
+                            } else if (ch == '"') {
+                                // 跳过字符串字面量，避免其中的括号干扰配对
+                                i++
+                                while (i < content.length && content[i] != '"') {
+                                    if (content[i] == '\\') i++
+                                    i++
+                                }
+                            }
+                            i++
+                        }
+                        if (end < 0) break
+                        val body = content.substring(open + 1, end)
+                        cursor = end + 1
+
                         var title: String? = null
                         var route: String? = null
                         var pageTitle: String? = null
@@ -66,8 +93,9 @@ val generateSettingsSearchCatalog by tasks.registering {
                             val tabArg =
                                 if (tabIndex != null) ", tabIndex = $tabIndex" else ""
                             entries.add(
-                                "    SearchableEntry(\"$title\", \"$route\", \"$pageTitle\", \"$itemKey\"$tabArg),"
+                                "    SearchableEntry(\"$title\", \"$route\", \"$pageTitle\", \"$itemKey\"$tabArg, order = $order),"
                             )
+                            order++
                         }
                     }
                 }

@@ -356,6 +356,8 @@ internal data class SearchableEntry(
     val itemKey: String,
     val tabIndex: Int? = null,
     val navigateRoute: String? = null,
+    /** 生成顺序，用于保持与设置页一致的排列 */
+    val order: Int = 0,
 ) {
     val subtitle: String
         get() = if (pageTitle.isBlank()) title else "$pageTitle > $title"
@@ -364,6 +366,7 @@ internal data class SearchableEntry(
 /** 三级页面归属的二级页面：搜索结果里并入同一个卡片展示 */
 internal val SETTINGS_SUB_PAGE_PARENT = mapOf(
     "settings_password_manager" to "settings_personal_info",
+    "settings_ua" to "settings_web",
 )
 
 internal object SettingsSearchRegistry {
@@ -423,8 +426,19 @@ internal object SettingsSearchRegistry {
                     navigateRoute = entry.pageRoute,
                 )
             }
-            // 二级页面自身的选项排在前面，三级页面的选项排在后面
-            .sortedWith(compareBy({ it.navigateRoute != null }, { it.title }))
+            .let { list ->
+                // 同一张卡片内：按父页面的出现顺序排列，二级项在前、三级项在后，
+                // 组内再按设置页里的书写顺序，避免按标题字母乱序
+                val groupOrder = list.groupBy { it.pageRoute }
+                    .mapValues { (_, items) -> items.minOf { it.order } }
+                list.sortedWith(
+                    compareBy(
+                        { groupOrder[it.pageRoute] ?: Int.MAX_VALUE },
+                        { it.navigateRoute != null },
+                        { it.order },
+                    )
+                )
+            }
     }
 
     fun all(): List<SearchableEntry> = mergedAll().toList()
@@ -806,6 +820,20 @@ private fun SettingsMainPageMiuix(
 
     DisposableEffect(Unit) {
         SettingsSearchRegistry.preload(SETTINGS_SEARCH_CATALOG)
+        // 三级页面里的动态列表（如浏览器 UA 预设）无法在编译期扫描，这里在启动时补注册
+        runCatching {
+            UaStore.presets.forEachIndexed { index, preset ->
+                SettingsSearchRegistry.register(
+                    SearchableEntry(
+                        title = if (index == 0) "默认" else preset.name,
+                        pageRoute = "settings_ua",
+                        pageTitle = "浏览器 UA 标识",
+                        itemKey = "settings_ua_preset_$index",
+                        order = 900 + index,
+                    )
+                )
+            }
+        }
         onDispose {
             SettingsSearchRegistry.clearPreload()
         }

@@ -115,7 +115,10 @@ internal fun LocalWebViewerPage(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // HTML 预览整页铺白：WebView 自身白底之外，容器与加载瞬间也保持白色，
+    // 避免深色模式下表面色从透明区域或加载间隙透出来
+    val pageBackground = if (request.isImage) Color.Transparent else Color.White
+    Column(modifier = Modifier.fillMaxSize().background(pageBackground)) {
         if (LocalUiMode.current == UiMode.Material) {
             FileViewerMaterialTopBar(
                 title = request.title,
@@ -190,7 +193,10 @@ internal fun LocalWebViewerPage(
         if (request.isImage) {
             LocalImageViewerContent(request.path)
         } else {
-            AndroidView(factory = { webView!! }, modifier = Modifier.fillMaxSize())
+            AndroidView(
+                factory = { webView!! },
+                modifier = Modifier.fillMaxSize().background(Color.White),
+            )
         }
     }
 }
