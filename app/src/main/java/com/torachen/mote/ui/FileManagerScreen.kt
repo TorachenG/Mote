@@ -1798,7 +1798,16 @@ private fun FileManagerMiuix(
                     canPull = {
                         pageListState.firstVisibleItemIndex == 0 && pageListState.firstVisibleItemScrollOffset == 0
                     },
-                    onRefresh = { controller.reload() },
+                    onRefresh = {
+                        controller.reload()
+                        // 等目录扫描真正结束再回弹并回到顶部，避免刷新中途列表跳位置
+                        var waited = 0
+                        while (controller.reloading && waited < 4000) {
+                            kotlinx.coroutines.delay(50)
+                            waited += 50
+                        }
+                        pageListState.scrollToItem(0)
+                    },
                     indicatorTopPadding = topPadding,
                     uiState = pullUi,
                 ) {
