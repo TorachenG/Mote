@@ -2202,32 +2202,30 @@ private fun PullIndicatorItem(state: PullRefreshUiState) {
     }
 }
 
-/** 空目录 / 空回收站占位 */
+/** 空目录 / 空回收站占位：与下载页空状态保持同一套样式 */
 @Composable
 private fun FmEmptyPlaceholder(isRecycle: Boolean) {
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(top = 96.dp, bottom = 48.dp),
-        contentAlignment = Alignment.Center,
+    Card(
+        modifier = Modifier
+            .padding(horizontal = 12.dp)
+            .padding(top = 12.dp, bottom = 12.dp),
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = if (isRecycle) Icons.Rounded.Delete else MiuixIcons.FolderFill,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f),
-                modifier = Modifier.size(56.dp),
-            )
-            Spacer(Modifier.height(14.dp))
-            Text(
-                text = if (isRecycle) "回收站是空的" else "此文件夹为空",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-            if (isRecycle) {
-                Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = if (isRecycle) Icons.Rounded.Delete else MiuixIcons.FolderFill,
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.size(48.dp),
+                )
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "删除的文件会先放在这里，保留 ${FileManagerPrefs.RECYCLE_RETENTION_DAYS} 天",
-                    style = MiuixTheme.textStyles.body2.copy(fontSize = 12.sp),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
+                    text = if (isRecycle) "回收站为空" else "此文件夹为空",
+                    fontSize = 14.sp,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
         }

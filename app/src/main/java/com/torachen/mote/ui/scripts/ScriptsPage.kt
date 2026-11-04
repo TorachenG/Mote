@@ -90,6 +90,7 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
+import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -617,7 +618,39 @@ private fun ScriptsPageMiuix(
             }
         }
 
-        // ★ 没有脚本时不显示「脚本」标题与卡片
+        // 没有脚本时显示与「默认搜索引擎」页一致的空状态占位
+        if (scripts.isEmpty()) {
+            item(key = "script_empty") {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                        .padding(bottom = 12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 56.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = MiuixIcons.File,
+                                contentDescription = null,
+                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier.size(48.dp),
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                text = "暂无脚本",
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         if (scripts.isNotEmpty()) {
             item(key = "script_title") {
                 SmallTitle("脚本")

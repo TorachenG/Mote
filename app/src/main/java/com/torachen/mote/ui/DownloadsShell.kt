@@ -98,10 +98,12 @@ fun DownloadsShell(
     var materialTab by remember { mutableIntStateOf(tab) }
     val openDownloadsFolder: () -> Unit = {
         val target = java.io.File(
-            android.os.Environment.getExternalStorageDirectory(),
-            "Download/Mote",
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS
+            ),
+            "Mote",
         )
-        if (!target.exists()) target.mkdirs()
+        runCatching { if (!target.exists()) target.mkdirs() }
         fileController.enter(target)
         materialTab = 1
         scope.launch { pagerState.animateScrollToPage(1) }
