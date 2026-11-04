@@ -1164,6 +1164,9 @@ private val JS_DETECT_ENGLISH_PAGE = """
 // 分别读取网页顶部 / 底部区域颜色：
 // 顶部优先 meta[name=theme-color]；顶部和底部都优先采样对应视口区域元素背景，
 // 最后回退 body/html 背景色。返回 "#rrggbb|#rrggbb"，无法识别的一侧为空。
+private fun buildPageThemeColorScript(dark: Boolean): String =
+    JS_DETECT_PAGE_THEME_COLOR.replace("__MOTE_DARK_ENV__", if (dark) "true" else "false")
+
 private val JS_DETECT_PAGE_THEME_COLOR = """
 (function(){
   try {
@@ -1200,9 +1203,9 @@ private val JS_DETECT_PAGE_THEME_COLOR = """
       var a = c[3];
       // 半透明颜色要和页面所在环境混合，而不是一律混白：
       // 深色页面常用 rgba(0,0,0,.x) 做背景，混白会把黑色取成白色
-      var darkEnv = false;
-      try { darkEnv = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
-      var base = darkEnv ? 0 : 255;
+      // 由原生侧按 App 主题注入，避免 WebView 的 prefers-color-scheme
+      // 与 App 的深色设置不一致时取错色
+      var base = __MOTE_DARK_ENV__ ? 0 : 255;
       var r = Math.round(c[0] * a + base * (1 - a));
       var g = Math.round(c[1] * a + base * (1 - a));
       var b = Math.round(c[2] * a + base * (1 - a));
@@ -11307,6 +11310,9 @@ private fun WebViewLayer(
     permissionLauncher: ActivityResultLauncher<Array<String>>,
     onExternalSchemeRequest: (String) -> Unit,
 ) {
+    // 当前 UI 是否深色（跟随 App 主题），用于网页取色时选择混合基色
+    val isDarkUi = MiuixTheme.colorScheme.surface.luminance() < 0.5f
+
     AndroidView(
         factory = { ctx ->
             FrameLayout(ctx).apply {
@@ -11377,7 +11383,7 @@ private fun WebViewLayer(
                                 // 沉浸式页面：探测网页主题色（页面加载完成 / SPA 路由变化时刷新）
                                 try {
                                     webViewMap[id]?.evaluateJavascript(
-                                        JS_DETECT_PAGE_THEME_COLOR
+                                        buildPageThemeColorScript(isDarkUi)
                                     ) { raw ->
                                         val currentUrl = windows
                                             .firstOrNull { it.id == id }
