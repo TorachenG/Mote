@@ -1164,6 +1164,31 @@ private val JS_DETECT_ENGLISH_PAGE = """
 // 分别读取网页顶部 / 底部区域颜色：
 // 顶部优先 meta[name=theme-color]；顶部和底部都优先采样对应视口区域元素背景，
 // 最后回退 body/html 背景色。返回 "#rrggbb|#rrggbb"，无法识别的一侧为空。
+/** 把网页的 prefers-color-scheme 与 color-scheme 强制对齐到 App 的夜间模式状态 */
+private fun buildColorSchemeScript(dark: Boolean): String = """
+(function(){
+  window.__moteForceDark = $dark;
+  try {
+    document.documentElement.style.colorScheme = window.__moteForceDark ? 'dark' : 'light';
+  } catch (e) {}
+  if (window.__moteSchemeHook) return;
+  window.__moteSchemeHook = true;
+  var orig = window.matchMedia.bind(window);
+  function fake(q, m){
+    return { matches: m, media: q, onchange: null,
+      addListener: function(){}, removeListener: function(){},
+      addEventListener: function(){}, removeEventListener: function(){},
+      dispatchEvent: function(){ return false; } };
+  }
+  window.matchMedia = function(query){
+    var q = String(query || '');
+    if (q.indexOf('prefers-color-scheme: dark') >= 0) return fake(q, !!window.__moteForceDark);
+    if (q.indexOf('prefers-color-scheme: light') >= 0) return fake(q, !window.__moteForceDark);
+    return orig(q);
+  };
+})();
+"""
+
 private fun buildPageThemeColorScript(dark: Boolean): String =
     JS_DETECT_PAGE_THEME_COLOR.replace("__MOTE_DARK_ENV__", if (dark) "true" else "false")
 
@@ -2343,6 +2368,9 @@ private fun isSystemDarkMode(context: Context): Boolean {
 
 
 private fun applyNightModeToWebView(wv: WebView, enabled: Boolean) {
+    try {
+        wv.evaluateJavascript(buildColorSchemeScript(enabled), null)
+    } catch (_: Exception) {}
     val nativeSupported = isNativeDarkModeSupported()
     val systemDark = isSystemDarkMode(wv.context)
 
@@ -11344,6 +11372,9 @@ private fun WebViewLayer(
                             initialForceZoom = forceZoomEnabled,
                             initialDefaultZoom = defaultZoomPercent,
                             initialUrlProvider = { windows.firstOrNull { it.id == id }?.url ?: "" },
+                            isNightModeEnabled = {
+                                windows.firstOrNull { it.id == id }?.nightMode == true
+                            },
                             isZoomRestoreEnabled = { zoomRestoreEnabledRef.value },
                             getSavedZoom = { host -> savedZoomsRef.value[host] },
                             onZoomChanged = { host, scale ->
@@ -11634,6 +11665,7 @@ private fun createWebView(
     initialForceZoom: Boolean,
     initialDefaultZoom: Int,
     initialUrlProvider: () -> String,
+    isNightModeEnabled: () -> Boolean,
     isZoomRestoreEnabled: () -> Boolean,
     getSavedZoom: (String) -> Float?,
     onZoomChanged: (host: String, scale: Float) -> Unit,
@@ -12187,6 +12219,11 @@ private fun createWebView(
                 }
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_DESKTOP_FINGERPRINT, null) } catch (_: Exception) {}
+                try {
+                    view?.evaluateJavascript(
+                        buildColorSchemeScript(isNightModeEnabled()), null
+                    )
+                } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_CLIPBOARD_HOOK, null) } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_COOKIE_HOOK, null) } catch (_: Exception) {}
                 try {
@@ -12267,6 +12304,11 @@ private fun createWebView(
 
                     // 电脑模式：页面脚本执行后再兜底覆盖一次指纹
                     view?.evaluateJavascript(JS_DESKTOP_FINGERPRINT, null)
+
+                    // 夜间模式：页面脚本执行后再对齐一次 prefers-color-scheme
+                    view?.evaluateJavascript(
+                        buildColorSchemeScript(isNightModeEnabled()), null
+                    )
 
                     // 拦截 blob: 下载（MEGA 等网盘用 createObjectURL 生成文件）
                     view?.evaluateJavascript(JS_BLOB_DOWNLOAD_HOOK, null)
