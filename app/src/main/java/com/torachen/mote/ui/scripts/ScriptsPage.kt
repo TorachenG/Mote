@@ -120,6 +120,9 @@ import androidx.compose.material3.TextButton as M3TextButton
 import androidx.compose.material3.TopAppBar as M3TopAppBar
 import androidx.compose.material3.TopAppBarDefaults as M3TopAppBarDefaults
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.filled.MoreVert
 
 import com.torachen.mote.service.UserScript
@@ -545,11 +548,18 @@ private fun ScriptsPageMiuix(
 ) {
     var showMoreMenu by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<UserScript?>(null) }
+    var selecting by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    fun exitSelect() {
+        selecting = false
+        selectedIds = emptySet()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
     LegalDocumentScaffold(
-        title = "脚本",
-        onBack = onBack,
+        title = if (selecting) "已选择 ${selectedIds.size} 项" else "脚本",
+        onBack = { if (selecting) exitSelect() else onBack() },
         actions = {
             Box {
                 IconButton(onClick = { showMoreMenu = true }) {
@@ -676,9 +686,24 @@ private fun ScriptsPageMiuix(
                                     }
                                     ScriptRow(
                                         script = script,
+                                        selecting = selecting,
+                                        selected = script.id in selectedIds,
                                         onToggle = { checked -> onToggleScript(script, checked) },
-                                        onClick = { onEditScript(script) },
-                                        onLongClick = { menuTarget = script },
+                                        onClick = {
+                                            if (selecting) {
+                                                selectedIds = if (script.id in selectedIds) {
+                                                    selectedIds - script.id
+                                                } else {
+                                                    selectedIds + script.id
+                                                }
+                                            } else {
+                                                onEditScript(script)
+                                            }
+                                        },
+                                        onLongClick = {
+                                            selecting = true
+                                            selectedIds = selectedIds + script.id
+                                        },
                                     )
                                 }
                             }
@@ -738,31 +763,77 @@ private fun ScriptsPageMiuix(
             )
         }
     }
-        // 底部悬浮按钮：圆形、图标跟随主题色（与默认搜索引擎页一致）
-        Box(
+        // 底部悬浮胶囊：多选时 编辑 / 重命名 / 删除，否则为添加
+        Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(
                     bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp,
                 )
-                .size(56.dp)
+                .padding(horizontal = 24.dp)
+                .height(56.dp)
                 .graphicsLayer {
-                    shape = androidx.compose.foundation.shape.CircleShape
+                    shape = RoundedCornerShape(28.dp)
                     shadowElevation = 24.dp.toPx()
                     ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                     spotShadowColor = Color.Transparent
                 }
-                .clip(androidx.compose.foundation.shape.CircleShape)
+                .clip(RoundedCornerShape(28.dp))
                 .background(MiuixTheme.colorScheme.surfaceContainer)
-                .clickable { onAddScript() },
-            contentAlignment = Alignment.Center,
+                .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = MiuixIcons.Add,
-                contentDescription = "添加脚本",
-                tint = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp),
-            )
+            if (selecting) {
+                val one = selectedIds.size == 1
+                val target = scripts.firstOrNull { it.id in selectedIds }
+                IconButton(
+                    onClick = { target?.let { onEditScript(it) } },
+                    enabled = one,
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.Edit,
+                        contentDescription = "编辑",
+                        tint = if (one) MiuixTheme.colorScheme.onSurface
+                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                IconButton(
+                    onClick = { target?.let { onRenameScript(it) } },
+                    enabled = one,
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.EditNote,
+                        contentDescription = "重命名",
+                        tint = if (one) MiuixTheme.colorScheme.onSurface
+                        else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                IconButton(
+                    onClick = { target?.let { onDeleteScript(it) } },
+                    enabled = selectedIds.isNotEmpty(),
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.Delete,
+                        contentDescription = "删除",
+                        tint = Color(0xFFFF3B30),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            } else {
+                IconButton(onClick = onAddScript) {
+                    Icon(
+                        imageVector = MiuixIcons.Add,
+                        contentDescription = "添加脚本",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -770,6 +841,8 @@ private fun ScriptsPageMiuix(
 @Composable
 private fun ScriptRow(
     script: UserScript,
+    selecting: Boolean,
+    selected: Boolean,
     onToggle: (Boolean) -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -785,10 +858,17 @@ private fun ScriptRow(
         title = script.name,
         summary = "版本 ${script.version}",
         endActions = {
-            Switch(
-                checked = script.enabled,
-                onCheckedChange = onToggle,
-            )
+            if (selecting) {
+                androidx.compose.material3.Checkbox(
+                    checked = selected,
+                    onCheckedChange = null,
+                )
+            } else {
+                Switch(
+                    checked = script.enabled,
+                    onCheckedChange = onToggle,
+                )
+            }
         },
     )
 }
