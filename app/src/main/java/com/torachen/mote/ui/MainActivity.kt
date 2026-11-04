@@ -7469,36 +7469,59 @@ fun BrowserScreen(
             val fusedLeading: @Composable () -> Unit = {
                 if (fusedDualPane) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        val tint = titleChrome.contentColor
-                        val backEnabled = canNavigateBack()
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable(enabled = backEnabled) { performNavigateBack() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.ChevronBackward,
-                                contentDescription = "后退",
-                                tint = if (backEnabled) tint else tint.copy(alpha = 0.3f),
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                        fusedDynamicTool?.let { tool ->
+                        if (isSearchFocused) {
+                            // 聚焦搜索时收起返回/动态工具，只留搜索栏左侧的扫码入口
+                            if (scanModuleEnabled) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .clickable {
+                                            clearSearchFocus()
+                                            onOpenScanner()
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = MiuixIcons.Scan,
+                                        contentDescription = "扫一扫",
+                                        tint = titleChrome.contentColor,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
+                            }
+                        } else {
+                            val tint = titleChrome.contentColor
+                            val backEnabled = canNavigateBack()
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .clickable { runDynamicToolAction(tool.id) },
+                                    .clickable(enabled = backEnabled) { performNavigateBack() },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    imageVector = tool.icon,
-                                    contentDescription = tool.title,
-                                    tint = tint,
+                                    imageVector = MiuixIcons.ChevronBackward,
+                                    contentDescription = "后退",
+                                    tint = if (backEnabled) tint else tint.copy(alpha = 0.3f),
                                     modifier = Modifier.size(22.dp),
                                 )
+                            }
+                            fusedDynamicTool?.let { tool ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .clickable { runDynamicToolAction(tool.id) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        imageVector = tool.icon,
+                                        contentDescription = tool.title,
+                                        tint = tint,
+                                        modifier = Modifier.size(22.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -7506,7 +7529,8 @@ fun BrowserScreen(
             }
 
             val fusedTrailing: @Composable () -> Unit = {
-                if (fusedDualPane) {
+                // 聚焦搜索时右侧图标全部让位给建议列表
+                if (fusedDualPane && !isSearchFocused) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
