@@ -813,7 +813,7 @@ private fun ScriptsPageMiuix(
                     Icon(
                         imageVector = MiuixIcons.Delete,
                         contentDescription = "删除",
-                        tint = Color(0xFFFF3B30),
+                        tint = MiuixTheme.colorScheme.onSurface,
                         modifier = Modifier.size(22.dp),
                     )
                 }
