@@ -562,6 +562,9 @@ private fun ScriptsPageMiuix(
         selectedIds = emptySet()
     }
 
+    // 多选时拦截系统返回：先退出多选，而不是直接离开页面
+    androidx.activity.compose.BackHandler(enabled = selecting) { exitSelect() }
+
     Box(modifier = Modifier.fillMaxSize()) {
     LegalDocumentScaffold(
         title = if (selecting) "已选择 ${selectedIds.size} 项" else "脚本",
