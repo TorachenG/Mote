@@ -672,18 +672,7 @@ private fun ScriptsPageMiuix(
                     ) {
                         Column(Modifier.fillMaxWidth()) {
                             run {
-                                scripts.forEachIndexed { index, script ->
-                                    if (index > 0) {
-                                        Spacer(
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(start = 16.dp)
-                                                .height(0.5.dp)
-                                                .background(
-                                                    MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.15f)
-                                                ),
-                                        )
-                                    }
+                                scripts.forEach { script ->
                                     ScriptRow(
                                         script = script,
                                         selecting = selecting,
