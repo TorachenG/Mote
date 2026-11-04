@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.captionBar
+import androidx.compose.ui.graphics.graphicsLayer
+import top.yukonga.miuix.kmp.icon.extended.Add
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -543,6 +545,7 @@ private fun ScriptsPageMiuix(
     var showMoreMenu by remember { mutableStateOf(false) }
     var menuTarget by remember { mutableStateOf<UserScript?>(null) }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     LegalDocumentScaffold(
         title = "脚本",
         onBack = onBack,
@@ -560,13 +563,6 @@ private fun ScriptsPageMiuix(
                     entries = listOf(
                         DropdownEntry(
                             items = listOf(
-                                DropdownItem(
-                                    text = "添加脚本",
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onAddScript()
-                                    },
-                                ),
                                 DropdownItem(
                                     text = "下载脚本",
                                     onClick = {
@@ -739,6 +735,36 @@ private fun ScriptsPageMiuix(
                         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
                     )
             )
+        }
+    }
+        // 底部悬浮胶囊：与默认搜索引擎页同款
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp,
+                )
+                .padding(horizontal = 24.dp)
+                .height(56.dp)
+                .graphicsLayer {
+                    shape = RoundedCornerShape(28.dp)
+                    shadowElevation = 24.dp.toPx()
+                    ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                    spotShadowColor = Color.Transparent
+                }
+                .clip(RoundedCornerShape(28.dp))
+                .background(MiuixTheme.colorScheme.surfaceContainer),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onAddScript) {
+                Icon(
+                    imageVector = MiuixIcons.Add,
+                    contentDescription = "添加脚本",
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
         }
     }
 }
