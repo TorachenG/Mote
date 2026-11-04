@@ -1909,30 +1909,6 @@ private fun FileManagerMiuix(
         }
 
 
-        if (controller.currentDir == controller.root && (pullUi.offset > 0f || pullUi.refreshing)) {
-            val density = androidx.compose.ui.platform.LocalDensity.current
-            val triggerPx = with(density) { 74.dp.toPx() }
-            val progress = if (pullUi.refreshing) 1f else (pullUi.offset / triggerPx).coerceIn(0f, 1f)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = topPadding + 2.dp)
-                    .size(22.dp)
-                    .graphicsLayer {
-                        val sc = progress * 1.6f
-                        scaleX = sc
-                        scaleY = sc
-                        translationY = pullUi.offset * 0.35f
-                    },
-            ) {
-                top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator(
-                    color = if (progress >= 1f) MiuixTheme.colorScheme.primary else Color(0xFF666666),
-                    size = 22.dp,
-                    strokeWidth = 2.5.dp,
-                )
-            }
-        }
-
         // 模糊层比标题栏更高，覆盖到目录轴下方，避免内容从目录轴处直接透出
         // 整段标题栏满强度模糊，渐变带收在标题栏底部之内，避免糊到第一条选项
         val fadeBand = 24.dp
