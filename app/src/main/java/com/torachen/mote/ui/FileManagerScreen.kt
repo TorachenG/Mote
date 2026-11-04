@@ -1023,6 +1023,40 @@ private fun openFile(
         return
     }
 
+    // APK 直接走系统安装界面，不要经过「打开方式」选择器
+    if (name.endsWith(".apk") || mime == "application/vnd.android.package-archive") {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            runCatching {
+                context.startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+                android.widget.Toast.makeText(
+                    context, "请允许安装未知应用后重试", android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+            return
+        }
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }.onFailure {
+            android.widget.Toast.makeText(
+                context, "无法启动安装界面", android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+        return
+    }
+
     val isVideo = mime.startsWith("video/") || listOf(
         ".mp4", ".mkv", ".webm", ".mov", ".avi", ".flv", ".m4v", ".3gp", ".ts"
     ).any { name.endsWith(it) }
