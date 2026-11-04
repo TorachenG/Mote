@@ -103,8 +103,12 @@ internal fun LocalWebViewerPage(
             }
             webViewClient = WebViewClient()
 
-            val file = File(request.path)
-            loadUrl(Uri.fromFile(file).toString())
+            // 用 FileProvider 的 content:// 加载，和「返回浏览器打开」走同一条路径：
+            // file:// 下 WebView 对页面内联/相对资源的加载规则不同，容易出现白屏或样式丢失
+            val target = request.browserUrl.ifBlank {
+                Uri.fromFile(File(request.path)).toString()
+            }
+            loadUrl(target)
         }
     }
     DisposableEffect(webView) {
