@@ -68,6 +68,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import com.torachen.mote.ui.fmTypeIcon
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.Image
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -1766,14 +1772,7 @@ private fun DownloadRunningItemMiuix(
             .padding(start = 16.dp, end = 12.dp, top = if (isFirst) 14.dp else 12.dp, bottom = if (isLast) 14.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = iconForMime(item.mimeType, item.fileName),
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.size(26.dp),
-            )
-        }
+        DownloadEntryIcon(item)
 
         Spacer(Modifier.width(12.dp))
 
@@ -1860,13 +1859,17 @@ private fun DownloadRowItemMiuix(
             .padding(start = 16.dp, end = 8.dp, top = if (isFirst) 14.dp else 10.dp, bottom = if (isLast) 14.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = if (isInvalid) MiuixIcons.Close else iconForMime(item.mimeType, item.fileName),
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(26.dp),
-            )
+        if (isInvalid) {
+            Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = MiuixIcons.Close,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+        } else {
+            DownloadEntryIcon(item)
         }
 
         Spacer(Modifier.width(12.dp))
@@ -2766,6 +2769,58 @@ private fun openDownloadedFile(context: Context, item: MoteDownloadTask, onBack:
     } catch (e: Exception) {
         Toast.makeText(context, "无法打开文件：${e.message}", Toast.LENGTH_SHORT).show()
     }
+}
+
+/** 下载条目图标：与存储目录保持一致（图标形状 + 分类配色），图片文件直接显示缩略图 */
+@Composable
+private fun DownloadEntryIcon(task: MoteDownloadTask, size: Dp = 36.dp) {
+    val fileName = task.fileName
+    val typeIcon = remember(fileName) { fmTypeIcon(java.io.File(fileName)) }
+    val isImage = typeIcon?.first == androidx.compose.material.icons.Icons.Rounded.Image
+    val bitmap by produceState<ImageBitmap?>(initialValue = null, task.filePath) {
+        value = if (isImage && task.filePath.isNotBlank()) {
+            withContext(Dispatchers.IO) { loadImageThumbnail(task.filePath) }
+        } else {
+            null
+        }
+    }
+    Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
+        val bmp = bitmap
+        when {
+            bmp != null -> Image(
+                bitmap = bmp,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size).clip(RoundedCornerShape(6.dp)),
+            )
+            typeIcon != null -> Icon(
+                imageVector = typeIcon.first,
+                contentDescription = null,
+                tint = typeIcon.second,
+                modifier = Modifier.size(26.dp),
+            )
+            else -> Icon(
+                imageVector = MiuixIcons.File,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.primary,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+    }
+}
+
+private fun loadImageThumbnail(path: String): ImageBitmap? = try {
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    android.graphics.BitmapFactory.decodeFile(path, bounds)
+    var sample = 1
+    while (bounds.outWidth / sample > 160 || bounds.outHeight / sample > 160) sample *= 2
+    val opts = android.graphics.BitmapFactory.Options().apply {
+        inSampleSize = sample
+        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+    }
+    android.graphics.BitmapFactory.decodeFile(path, opts)?.asImageBitmap()
+} catch (_: Throwable) {
+    null
 }
 
 private fun iconForMime(mime: String, fileName: String): ImageVector {

@@ -2216,6 +2216,15 @@ internal fun fmTypeIcon(file: java.io.File): Pair<androidx.compose.ui.graphics.v
     return when {
         ext in FileCategory.ARCHIVE.extensions ->
             androidx.compose.material.icons.Icons.Rounded.FolderZip to Color(0xFF3B6EF6)
+        // 文档按类型分色：PDF 红、Word 蓝、表格 绿、演示 橘
+        ext == "pdf" ->
+            androidx.compose.material.icons.Icons.Rounded.Description to Color(0xFFE8452C)
+        ext == "doc" || ext == "docx" ->
+            androidx.compose.material.icons.Icons.Rounded.Description to Color(0xFF2B7CD3)
+        ext == "xls" || ext == "xlsx" || ext == "csv" ->
+            androidx.compose.material.icons.Icons.Rounded.Description to Color(0xFF1D9E5A)
+        ext == "ppt" || ext == "pptx" ->
+            androidx.compose.material.icons.Icons.Rounded.Description to Color(0xFFE8842C)
         ext in FileCategory.DOCUMENT.extensions ->
             androidx.compose.material.icons.Icons.Rounded.Description to Color(0xFFFFD966)
         ext in FileCategory.IMAGE.extensions ->
