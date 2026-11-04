@@ -8657,9 +8657,15 @@ fun BrowserScreen(
             var updateApkReady by remember(dialogInfo.version) {
                 mutableStateOf(updateApkFile.exists())
             }
-            LaunchedEffect(showPendingDialog, isPendingDownloading) {
-                if (showPendingDialog && !isPendingDownloading) {
-                    updateApkReady = updateApkFile.exists()
+            // 弹窗打开期间持续检测安装包是否就绪，下载完成即把按钮切成「立即安装」
+            LaunchedEffect(showPendingDialog, dialogInfo.version) {
+                if (!showPendingDialog) return@LaunchedEffect
+                updateApkReady = updateApkFile.exists()
+                while (updateApkReady.not() && isActive) {
+                    kotlinx.coroutines.delay(600)
+                    if (updateApkFile.exists()) {
+                        updateApkReady = true
+                    }
                 }
             }
             UpdateDialog(
