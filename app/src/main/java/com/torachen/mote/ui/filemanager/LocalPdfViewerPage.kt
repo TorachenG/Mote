@@ -113,7 +113,14 @@ internal fun LocalPdfViewerPage(
                 htmlFile == null -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(progress = 0f, size = 28.dp)
+                            CircularProgressIndicator(
+                                progress = if (total > 0) {
+                                    (progress.toFloat() / total).coerceIn(0f, 1f)
+                                } else {
+                                    null
+                                },
+                                size = 28.dp,
+                            )
                             Text(
                                 text = if (total > 0) "正在渲染 PDF… $progress/$total" else "正在加载 PDF…",
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,

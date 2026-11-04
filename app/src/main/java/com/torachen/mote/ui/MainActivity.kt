@@ -438,6 +438,14 @@ internal object PendingScanResultStore {
     var pending by mutableStateOf<String?>(null)
 }
 
+internal object PendingBlockedDownloadStore {
+    var pending by mutableStateOf<PendingDownload?>(null)
+}
+
+internal object BlobDownloadResultStore {
+    var pending by mutableStateOf<String?>(null)
+}
+
 internal object PendingCropBitmapStore {
     var pending: Bitmap? = null
 }
@@ -1673,6 +1681,43 @@ private val JS_GESTURE_GUARD = """
   }, { passive: true, capture: true });
 })();
 """.trimIndent()
+
+private val JS_BLOB_DOWNLOAD_HOOK = """
+(function () {
+  if (window.__moteBlobHook) return;
+  window.__moteBlobHook = true;
+  window.__moteBlobUrls = window.__moteBlobUrls || {};
+  var origCreate = URL.createObjectURL;
+  URL.createObjectURL = function (blob) {
+    var u = origCreate.call(URL, blob);
+    try { window.__moteBlobUrls[u] = blob; } catch (e) {}
+    return u;
+  };
+  function grab(url, name) {
+    var blob = window.__moteBlobUrls[url];
+    if (!blob) return false;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var base64 = String(reader.result).split(',')[1] || '';
+        if (base64) window.moteBridge.downloadBlob(name || 'download', blob.type || '', base64);
+      } catch (e) {}
+    };
+    reader.readAsDataURL(blob);
+    return true;
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (href.indexOf('blob:') !== 0) return;
+    if (grab(href, a.getAttribute('download') || '')) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+})();
+"""
 
 private val JS_PASSWORD_DETECT = """
 (function(){
@@ -6715,6 +6760,31 @@ fun BrowserScreen(
         }
     }
 
+    val blobDownloaded = BlobDownloadResultStore.pending
+    LaunchedEffect(blobDownloaded) {
+        val name = blobDownloaded ?: return@LaunchedEffect
+        BlobDownloadResultStore.pending = null
+        snackbarHostState.showSnackbar(
+            message = if (name.isBlank()) "文件保存失败" else "已保存 $name 到下载目录",
+            duration = SnackbarDuration.Short,
+        )
+    }
+
+    val blockedDownload = PendingBlockedDownloadStore.pending
+    LaunchedEffect(blockedDownload) {
+        val dl = blockedDownload ?: return@LaunchedEffect
+        PendingBlockedDownloadStore.pending = null
+        val result = snackbarHostState.showSnackbar(
+            message = "已拦截网页的下载请求",
+            actionLabel = "依然下载",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            pendingDownload = dl
+            showDownloadDialog = true
+        }
+    }
+
     val pendingScan = PendingScanResultStore.pending
     LaunchedEffect(pendingScan) {
         val raw = pendingScan ?: return@LaunchedEffect
@@ -11542,6 +11612,18 @@ private fun createWebView(
             }
 
             @JavascriptInterface
+            fun downloadBlob(name: String, mime: String, base64: String) {
+                if (base64.isEmpty()) return
+                post {
+                    val bytes = runCatching {
+                        android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                    }.getOrNull() ?: return@post
+                    val saved = saveBlobDownload(context, name, mime, bytes)
+                    BlobDownloadResultStore.pending = if (saved) name else ""
+                }
+            }
+
+            @JavascriptInterface
             fun onPasswordSubmit(url: String, username: String, password: String) {
                 if (url.isBlank() || password.isBlank()) return
                 post {
@@ -12082,6 +12164,9 @@ private fun createWebView(
                     view?.evaluateJavascript(jsHook, null)
                     view?.evaluateJavascript(JS_PASSWORD_DETECT, null)
 
+                    // 拦截 blob: 下载（MEGA 等网盘用 createObjectURL 生成文件）
+                    view?.evaluateJavascript(JS_BLOB_DOWNLOAD_HOOK, null)
+
                     view?.let { onPageFinishedExtra(it) }
                 }
                 try {
@@ -12471,17 +12556,15 @@ private fun createWebView(
             val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
             val pageHost = SecurityStateHolder.info.host
             if (SecurityStateHolder.effectiveDownloadProtection(pageHost)) {
-                val lowerName = fileName.lowercase()
-                val riskyExt = listOf(".apk", ".exe", ".bat", ".cmd", ".sh", ".scr", ".msi", ".jar", ".vbs")
-                if (riskyExt.any { lowerName.endsWith(it) } ||
-                    mimetype.contains("vnd.android.package-archive", true)
-                ) {
+                if (isRiskyDownload(fileName, mimetype, url)) {
                     WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_SMART)
-                    Toast.makeText(
-                        context,
-                        "下载防护已拦截可疑文件：$fileName",
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    PendingBlockedDownloadStore.pending = PendingDownload(
+                        url = url,
+                        userAgent = userAgent,
+                        contentDisposition = contentDisposition,
+                        mimetype = mimetype,
+                        fileName = fileName,
+                    )
                     return@setDownloadListener
                 }
             }
@@ -15326,6 +15409,64 @@ private fun mediaStoreFileNameExists(context: Context, name: String): Boolean {
     } catch (_: Exception) {
         false
     }
+}
+
+private val RISKY_DOWNLOAD_EXT = setOf(
+    "exe", "scr", "bat", "cmd", "vbs", "js", "jar", "msi", "com", "pif", "ps1", "sh"
+)
+
+private val DOWNLOAD_DOUBLE_EXT = Regex(
+    """.*\.(apk|pdf|docx?|xlsx?|pptx?|jpe?g|png|gif|mp4|mp3|zip|rar|7z)\.(exe|scr|bat|cmd|vbs|js|ps1|msi|com|pif|sh|jar)$""",
+    RegexOption.IGNORE_CASE,
+)
+
+/**
+ * 判断一次下载请求是否值得拦截：
+ * 只有脚本类可执行文件、双扩展名伪装、以及非 HTTPS / IP 直连的安装包才算风险，
+ * 常规的 apk / 文档 / 压缩包直接放行，不再一刀切。
+ */
+private fun isRiskyDownload(fileName: String, mimetype: String?, url: String): Boolean {
+    val name = fileName.lowercase()
+    if (DOWNLOAD_DOUBLE_EXT.matches(name)) return true
+    val ext = name.substringAfterLast('.', "")
+    if (ext in RISKY_DOWNLOAD_EXT) return true
+    val isApk = ext == "apk" || mimetype?.contains("vnd.android.package-archive", true) == true
+    if (!isApk) return false
+    val https = url.startsWith("https://", ignoreCase = true)
+    val host = runCatching { java.net.URI(url).host.orEmpty() }.getOrNull().orEmpty()
+    val ipLike = host.isNotEmpty() && host.matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))
+    return !https || ipLike
+}
+
+/** 把网页用 blob: 生成的下载内容直接写入系统下载目录 */
+private fun saveBlobDownload(context: Context, name: String, mime: String, bytes: ByteArray): Boolean {
+    return runCatching {
+        val fileName = name.ifBlank { "download_${System.currentTimeMillis()}.bin" }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, mime.ifBlank { "application/octet-stream" })
+                put(MediaStore.Downloads.RELATIVE_PATH, "Download/Mote/")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            val uri = context.contentResolver.insert(collection, values) ?: return false
+            context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            context.contentResolver.update(uri, values, null, null)
+        } else {
+            val dir = File(
+                android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS
+                ),
+                "Mote",
+            )
+            dir.mkdirs()
+            File(dir, fileName).writeBytes(bytes)
+        }
+        true
+    }.getOrDefault(false)
 }
 
 private fun enqueueDownload(context: Context, dl: PendingDownload) {
