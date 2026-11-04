@@ -1682,6 +1682,80 @@ private val JS_GESTURE_GUARD = """
 })();
 """.trimIndent()
 
+/**
+ * 电脑模式指纹伪装：只在 UA 已经是桌面 UA 时生效。
+ * 覆盖 navigator / screen / matchMedia 等常见判定点，避免网页仍按手机排版或跳转 m 站。
+ */
+private val JS_DESKTOP_FINGERPRINT = """
+(function () {
+  try {
+    if (/Mobi|iPhone|iPad|Android.*Mobile/i.test(navigator.userAgent)) return;
+    if (window.__moteDesktopFP) return;
+    window.__moteDesktopFP = true;
+    var define = function (obj, prop, value) {
+      try { Object.defineProperty(obj, prop, { get: function () { return value; }, configurable: true }); } catch (e) {}
+    };
+    define(navigator, 'platform', 'Win32');
+    define(navigator, 'vendor', 'Google Inc.');
+    define(navigator, 'vendorSub', '');
+    define(navigator, 'productSub', '20030107');
+    define(navigator, 'maxTouchPoints', 0);
+    define(navigator, 'hardwareConcurrency', 8);
+    define(navigator, 'deviceMemory', 8);
+    define(navigator, 'webdriver', false);
+    define(navigator, 'language', 'zh-CN');
+    define(navigator, 'languages', ['zh-CN', 'zh', 'en']);
+    define(screen, 'width', 1920);
+    define(screen, 'height', 1080);
+    define(screen, 'availWidth', 1920);
+    define(screen, 'availHeight', 1040);
+    define(screen, 'colorDepth', 24);
+    define(screen, 'pixelDepth', 24);
+    define(window, 'outerWidth', 1920);
+    define(window, 'outerHeight', 1080);
+    define(window, 'devicePixelRatio', 1);
+    define(navigator, 'userAgentData', {
+      brands: [
+        { brand: 'Chromium', version: '130' },
+        { brand: 'Google Chrome', version: '130' },
+        { brand: 'Not-A.Brand', version: '99' }
+      ],
+      mobile: false,
+      platform: 'Windows',
+      getHighEntropyValues: function () {
+        return Promise.resolve({
+          architecture: 'x86', bitness: '64', mobile: false, model: '',
+          platform: 'Windows', platformVersion: '15.0.0', uaFullVersion: '130.0.0.0'
+        });
+      },
+      toJSON: function () {
+        return { brands: this.brands, mobile: false, platform: 'Windows' };
+      }
+    });
+    var fakeMatch = function (query, matches) {
+      return {
+        matches: matches, media: query, onchange: null,
+        addListener: function () {}, removeListener: function () {},
+        addEventListener: function () {}, removeEventListener: function () {},
+        dispatchEvent: function () { return false; }
+      };
+    };
+    var origMatchMedia = window.matchMedia;
+    window.matchMedia = function (query) {
+      var q = String(query || '');
+      if (q.indexOf('pointer: coarse') >= 0 || q.indexOf('any-pointer: coarse') >= 0) return fakeMatch(q, false);
+      if (q.indexOf('pointer: fine') >= 0 || q.indexOf('any-pointer: fine') >= 0) return fakeMatch(q, true);
+      if (q.indexOf('hover: none') >= 0) return fakeMatch(q, false);
+      if (q.indexOf('hover: hover') >= 0) return fakeMatch(q, true);
+      return origMatchMedia.call(window, q);
+    };
+    try { delete window.ontouchstart; } catch (e) {}
+    try { window.ontouchstart = undefined; } catch (e) {}
+    try { delete document.documentElement.ontouchstart; } catch (e) {}
+  } catch (e) {}
+})();
+"""
+
 private val JS_BLOB_DOWNLOAD_HOOK = """
 (function () {
   if (window.__moteBlobHook) return;
@@ -8528,27 +8602,25 @@ fun BrowserScreen(
                 onDownload = {
                     if (!isPendingDownloading) {
                         isPendingDownloading = true
-                        showPendingDialog = false
                         val url = dialogInfo.url
+                        val version = dialogInfo.version
+                        // 走应用内下载通道，弹窗保持打开
+                        enqueueDownload(
+                            context,
+                            PendingDownload(
+                                url = url,
+                                userAgent = android.webkit.WebSettings.getDefaultUserAgent(context),
+                                contentDisposition = null,
+                                mimetype = "application/vnd.android.package-archive",
+                                fileName = "Mote-$version.apk",
+                            ),
+                        )
                         scope.launch {
-                            delay(250)
-                            startApkDownload(
-                                context = context,
-                                downloadUrl = url,
-                                onComplete = {
-                                    isPendingDownloading = false
-                                    pendingDialogInfo = null
-                                },
-                                onFailed = { msg ->
-                                    isPendingDownloading = false
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            message = msg,
-                                            duration = SnackbarDuration.Short,
-                                        )
-                                    }
-                                },
+                            snackbarHostState.showSnackbar(
+                                message = "已开始下载 Mote $version，可在下载管理中查看",
+                                duration = SnackbarDuration.Short,
                             )
+                            isPendingDownloading = false
                         }
                     }
                 },
@@ -11511,8 +11583,10 @@ private fun WebViewLayer(
 private fun applyDesktopViewportSettings(wv: WebView, desktopMode: Boolean) {
     val s = wv.settings
     if (desktopMode) {
-        s.useWideViewPort = false
+        // 桌面模式：按真实像素宽度排版，不再用移动端 overview 缩放
+        s.useWideViewPort = true
         s.loadWithOverviewMode = false
+        s.textZoom = 100
         s.setSupportZoom(true)
         s.builtInZoomControls = true
         s.displayZoomControls = false
@@ -12086,6 +12160,7 @@ private fun createWebView(
                     SecurityStateHolder.reset(url)
                 }
                 try { view?.evaluateJavascript(JS_HOOK_XHR_FETCH, null) } catch (_: Exception) {}
+                try { view?.evaluateJavascript(JS_DESKTOP_FINGERPRINT, null) } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_CLIPBOARD_HOOK, null) } catch (_: Exception) {}
                 try { view?.evaluateJavascript(JS_COOKIE_HOOK, null) } catch (_: Exception) {}
                 try {
@@ -12163,6 +12238,9 @@ private fun createWebView(
                     view?.evaluateJavascript(JS_SWIPE_NAV_SYNC, null)
                     view?.evaluateJavascript(jsHook, null)
                     view?.evaluateJavascript(JS_PASSWORD_DETECT, null)
+
+                    // 电脑模式：页面脚本执行后再兜底覆盖一次指纹
+                    view?.evaluateJavascript(JS_DESKTOP_FINGERPRINT, null)
 
                     // 拦截 blob: 下载（MEGA 等网盘用 createObjectURL 生成文件）
                     view?.evaluateJavascript(JS_BLOB_DOWNLOAD_HOOK, null)

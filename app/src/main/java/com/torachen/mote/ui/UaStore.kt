@@ -96,10 +96,10 @@ internal object UaStore {
     }
 
     fun desktopUa(context: Context): String? = when (desktopIndex(context)) {
-        1 -> CHROME_WINDOWS
         2 -> IE11
         3 -> MAC_SAFARI
-        else -> null
+        // 默认（0）也必须是桌面 UA，否则电脑模式会退回移动 UA
+        else -> CHROME_WINDOWS
     }
 
     /** 当前生效的 UA；null 表示使用系统默认 */

@@ -1540,15 +1540,13 @@ private fun NativePlayerScreen(
     val notificationPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            backgroundPlayEnabled = true
-            prefs.edit().putBoolean("player_background_play", true).apply()
-            startPlaybackService()
-            captureCoverAsync()
-        } else {
-            backgroundPlayEnabled = false
-            prefs.edit().putBoolean("player_background_play", false).apply()
-            Toast.makeText(ctx, "未授予通知权限，无法开启后台播放", Toast.LENGTH_LONG).show()
+        // 无论是否授予通知权限，后台播放都应可用
+        backgroundPlayEnabled = true
+        prefs.edit().putBoolean("player_background_play", true).apply()
+        startPlaybackService()
+        captureCoverAsync()
+        if (!granted) {
+            Toast.makeText(ctx, "未授予通知权限，仅不显示媒体通知", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1559,24 +1557,11 @@ private fun NativePlayerScreen(
             stopPlaybackService()
             return
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                ctx, Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
-            if (granted) {
-                backgroundPlayEnabled = true
-                prefs.edit().putBoolean("player_background_play", true).apply()
-                startPlaybackService()
-                captureCoverAsync()
-            } else {
-                notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        } else {
-            backgroundPlayEnabled = true
-            prefs.edit().putBoolean("player_background_play", true).apply()
-            startPlaybackService()
-            captureCoverAsync()
-        }
+        // 通知权限只决定是否显示媒体通知，不影响后台播放本身
+        backgroundPlayEnabled = true
+        prefs.edit().putBoolean("player_background_play", true).apply()
+        startPlaybackService()
+        captureCoverAsync()
     }
 
     DisposableEffect(exo) {
