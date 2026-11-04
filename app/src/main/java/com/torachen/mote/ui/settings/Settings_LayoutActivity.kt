@@ -66,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -382,7 +383,8 @@ fun SettingsLayoutPage(
     val initialTabFromArgs = remember {
         SettingsLayoutNavArgs.initialTab.also { SettingsLayoutNavArgs.initialTab = 0 }
     }
-    var selectedTab by remember { mutableIntStateOf(initialTabFromArgs) }
+    // 用 rememberSaveable：切换界面风格会触发配置变化，普通 remember 会丢失当前标签页
+    var selectedTab by rememberSaveable { mutableIntStateOf(initialTabFromArgs) }
 
     // ---------------- 通用页：界面风格 ----------------
     var uiStyleIndex by remember {
