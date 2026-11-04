@@ -681,8 +681,8 @@ internal class FileManagerController(
 
     suspend fun reload() {
         val dir = currentDir
-        dirEntries = dirEntries - dir.absolutePath
-        // 已有缓存或处于回退浏览时不再遮盖，避免切回目录瞬间出现“闪白/闪内容”
+        // 保留旧列表直到新结果就绪：清空缓存会让 LazyColumn 的 item 数骤减，
+        // 滚动位置被夹到 0，从子目录返回时就会回到顶部
         reloading = entriesOf(dir).isEmpty() && !safMode
         val list = withContext(Dispatchers.IO) { listSource(dir) }
         // 列举期间目录已被切走：丢弃这次结果，避免旧目录内容覆盖新页面
