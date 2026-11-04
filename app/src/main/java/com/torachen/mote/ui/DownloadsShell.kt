@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.NavigationBarDisplayMode
@@ -56,6 +57,7 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -231,11 +233,11 @@ private fun DownloadsShellMiuix(
                 .clickable { onBack() },
             contentAlignment = Alignment.Center,
         ) {
-            androidx.compose.material3.Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            Icon(
+                imageVector = MiuixIcons.ChevronBackward,
                 contentDescription = "返回",
                 tint = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
 
