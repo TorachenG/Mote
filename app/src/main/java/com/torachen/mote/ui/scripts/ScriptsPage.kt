@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.captionBar
 import androidx.compose.ui.graphics.graphicsLayer
 import top.yukonga.miuix.kmp.icon.extended.Add
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -737,34 +738,31 @@ private fun ScriptsPageMiuix(
             )
         }
     }
-        // 底部悬浮胶囊：与默认搜索引擎页同款
-        Row(
+        // 底部悬浮按钮：圆形、图标跟随主题色（与默认搜索引擎页一致）
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(
                     bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp,
                 )
-                .padding(horizontal = 24.dp)
-                .height(56.dp)
+                .size(56.dp)
                 .graphicsLayer {
-                    shape = RoundedCornerShape(28.dp)
+                    shape = androidx.compose.foundation.shape.CircleShape
                     shadowElevation = 24.dp.toPx()
                     ambientShadowColor = Color.Black.copy(alpha = 0.35f)
                     spotShadowColor = Color.Transparent
                 }
-                .clip(RoundedCornerShape(28.dp))
-                .background(MiuixTheme.colorScheme.surfaceContainer),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .background(MiuixTheme.colorScheme.surfaceContainer)
+                .clickable { onAddScript() },
+            contentAlignment = Alignment.Center,
         ) {
-            IconButton(onClick = onAddScript) {
-                Icon(
-                    imageVector = MiuixIcons.Add,
-                    contentDescription = "添加脚本",
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
+            Icon(
+                imageVector = MiuixIcons.Add,
+                contentDescription = "添加脚本",
+                tint = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
