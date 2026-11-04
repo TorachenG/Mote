@@ -70,6 +70,11 @@ import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.window.WindowDialog
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.layout.DialogDefaults
+import androidx.compose.ui.text.style.TextAlign
 
 /** Cookie 详情页参数 */
 internal object CookieDetailNav {
@@ -165,6 +170,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit, onOpenOrigin: (String, St
     var expanded by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selecting by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var pendingDelete by remember { mutableStateOf<CookieSite?>(null) }
 
     LaunchedEffect(Unit) { loadCookieGroups { groups = it } }
 
@@ -296,7 +302,7 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit, onOpenOrigin: (String, St
                                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                         )
                                     }
-                                    IconButton(onClick = { clearCookieSite(context, site) }) {
+                                    IconButton(onClick = { pendingDelete = site }) {
                                         Icon(
                                             imageVector = MiuixIcons.Delete,
                                             contentDescription = "清除",
@@ -315,6 +321,41 @@ private fun CookieManagerPageMiuix(onBack: () -> Unit, onOpenOrigin: (String, St
                             Spacer(Modifier.height(6.dp))
                         }
                     }
+                }
+            }
+        }
+
+        val pending = pendingDelete
+        WindowDialog(
+            show = pending != null,
+            title = "删除",
+            onDismissRequest = { pendingDelete = null },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "确定要清除 ${pending?.origin.orEmpty()} 的 Cookie 与网站数据吗？",
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    style = MiuixTheme.textStyles.body1,
+                    color = DialogDefaults.summaryColor(),
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(onClick = { pendingDelete = null }, modifier = Modifier.weight(1f)) { Text("取消") }
+                    Button(
+                        onClick = {
+                            pending?.let { clearCookieSite(context, it) }
+                            pendingDelete = null
+                            loadCookieGroups { groups = it }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            color = MiuixTheme.colorScheme.primary,
+                            contentColor = Color.White,
+                        ),
+                    ) { Text("删除") }
                 }
             }
         }

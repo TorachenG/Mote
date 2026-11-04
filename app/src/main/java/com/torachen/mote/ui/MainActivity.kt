@@ -442,6 +442,10 @@ internal object PendingBlockedDownloadStore {
     var pending by mutableStateOf<PendingDownload?>(null)
 }
 
+internal object PendingExternalLaunchStore {
+    var pending by mutableStateOf<Pair<String, String>?>(null) // url to host
+}
+
 internal object BlobDownloadResultStore {
     var pending by mutableStateOf<String?>(null)
 }
@@ -6856,6 +6860,24 @@ fun BrowserScreen(
         )
     }
 
+    val blockedExternal = PendingExternalLaunchStore.pending
+    LaunchedEffect(blockedExternal) {
+        val (url, _) = blockedExternal ?: return@LaunchedEffect
+        PendingExternalLaunchStore.pending = null
+        val result = snackbarHostState.showSnackbar(
+            message = "已拦截跳转其它应用",
+            actionLabel = "本次允许",
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            openExternalUrl(context, url) { target ->
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(target))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .let { runCatching { context.startActivity(it) } }
+            }
+        }
+    }
+
     val blockedDownload = PendingBlockedDownloadStore.pending
     LaunchedEffect(blockedDownload) {
         val dl = blockedDownload ?: return@LaunchedEffect
@@ -12150,6 +12172,31 @@ private fun createWebView(
                         return false
                     }
 
+                    // ★ 跳转其它应用权限
+                    val externalHost = SecurityStateHolder.info.host
+                    val externalMode = WebPermissionStore.effectiveMode(
+                        context, externalHost, WebPermissionStore.EXTERNAL_APP
+                    )
+                    if (externalMode != WebPermissionStore.ALLOW) {
+                        if (externalMode == WebPermissionStore.DENY) {
+                            WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PERMISSION)
+                            PendingExternalLaunchStore.pending = url to externalHost
+                            return true
+                        }
+                        WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PERMISSION)
+                        val capturedUrl = url
+                        WebPermissionPrompt.request(
+                            context, WebPermissionStore.EXTERNAL_APP, externalHost
+                        ) { allow, _, _ ->
+                            if (allow) {
+                                post {
+                                    openExternalUrl(context, capturedUrl) { onExternalSchemeRequest(it) }
+                                }
+                            }
+                        }
+                        return true
+                    }
+
                     // ★ 需求：遇到系统快应用链接就拦截
                     val isQuickApp = lower.startsWith("hap://") ||
                             lower.startsWith("hwfastapp://") ||
@@ -12222,12 +12269,8 @@ private fun createWebView(
                         view?.evaluateJavascript(JS_DISABLE_WEBRTC, null)
                         WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PRIVACY)
                     }
-                    var permissionBlocks = 0
-                    if (!secPrefs.getBoolean("web_accept_cookie", true)) permissionBlocks++
-                    if (!secPrefs.getBoolean("web_remember_form", true)) permissionBlocks++
-                    if (permissionBlocks > 0) {
-                        WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PERMISSION, permissionBlocks)
-                    }
+                    // Cookie / 表单属于内容设置，不计入「权限管控」；
+                    // 权限统计只在网页真正申请或拦截权限时累加
                 } catch (_: Exception) {}
                 if (url != null) onFaviconFromDomain(url)
             }
@@ -15570,6 +15613,38 @@ private fun isRiskyDownload(fileName: String, mimetype: String?, url: String): B
 }
 
 /** 把网页用 blob: 生成的下载内容直接写入系统下载目录 */
+/** 打开外部应用链接（快应用 → 交给宿主处理，intent:// 解析，其它自定义 scheme 直接拉起） */
+private fun openExternalUrl(
+    context: Context,
+    url: String,
+    onQuickApp: (String) -> Unit,
+) {
+    val lower = url.lowercase()
+    val isQuickApp = lower.startsWith("hap://") ||
+        lower.startsWith("hwfastapp://") ||
+        lower.startsWith("mfastapp://") ||
+        lower.startsWith("opfastapp://") ||
+        lower.startsWith("fastapp://") ||
+        lower.contains("fastapp")
+    if (isQuickApp) {
+        onQuickApp(url)
+        return
+    }
+    if (lower.startsWith("intent://")) {
+        try {
+            val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (_: Exception) {}
+        return
+    }
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+}
+
 private fun saveBlobDownload(context: Context, name: String, mime: String, bytes: ByteArray): Boolean {
     return runCatching {
         val fileName = name.ifBlank { "download_${System.currentTimeMillis()}.bin" }

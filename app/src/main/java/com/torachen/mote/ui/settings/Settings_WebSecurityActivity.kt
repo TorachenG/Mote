@@ -63,6 +63,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -2402,6 +2403,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
     var blockRedirects by remember(host) { mutableStateOf(siteSettings.blockRedirects) }
     var rememberForm by remember { mutableStateOf(prefs.getBoolean(KEY_REMEMBER_FORM, true)) }
     var acceptCookie by remember { mutableStateOf(prefs.getBoolean(KEY_ACCEPT_COOKIE, true)) }
+    var permVersion by remember { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxSize().background(surface)) {
         TopAppBar(
@@ -2513,6 +2515,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         },
                     )
 
+                    key(permVersion) {
                     listOf(
                         WebPermissionStore.LOCATION to "定位",
                         WebPermissionStore.CAMERA to "相机",
@@ -2522,6 +2525,7 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                         WebPermissionStore.POPUP_WINDOW to "新建窗口",
                         WebPermissionStore.DIALOG to "弹出提示",
                         WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
+                        WebPermissionStore.EXTERNAL_APP to "跳转其它应用",
                     ).forEach { (kind, name) ->
                         val siteMode = WebPermissionStore.siteMode(context, host, kind) ?: WebPermissionStore.ASK
                         WindowDropdownPreference(
@@ -2529,14 +2533,15 @@ private fun WebSiteSettingsPageMiuix(host: String, onBack: () -> Unit) {
                             entries = listOf(
                                 DropdownEntry(
                                     items = listOf(
-                                        DropdownItem("询问", selected = siteMode == WebPermissionStore.ASK, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.ASK) }),
-                                        DropdownItem("允许", selected = siteMode == WebPermissionStore.ALLOW, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.ALLOW) }),
-                                        DropdownItem("拒绝", selected = siteMode == WebPermissionStore.DENY, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.DENY) }),
+                                        DropdownItem("询问", selected = siteMode == WebPermissionStore.ASK, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.ASK); permVersion++ }),
+                                        DropdownItem("允许", selected = siteMode == WebPermissionStore.ALLOW, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.ALLOW); permVersion++ }),
+                                        DropdownItem("拒绝", selected = siteMode == WebPermissionStore.DENY, onClick = { WebPermissionStore.setSiteMode(context, host, kind, WebPermissionStore.DENY); permVersion++ }),
                                     ),
                                 ),
                             ),
                             collapseOnSelection = true,
                         )
+                    }
                     }
                 }
             }
@@ -2775,6 +2780,7 @@ internal object WebPermissionStore {
     const val POPUP_WINDOW = "popup_window"
     const val DIALOG = "dialog"
     const val VIDEO_AUTOPLAY = "video_autoplay"
+    const val EXTERNAL_APP = "external_app"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
@@ -2828,6 +2834,7 @@ internal object WebPermissionStore {
         POPUP_WINDOW -> "新建窗口权限"
         DIALOG -> "弹出提示权限"
         VIDEO_AUTOPLAY -> "自动播放视频权限"
+        EXTERNAL_APP -> "跳转其它应用"
         else -> "网页权限"
     }
 }
@@ -2851,8 +2858,12 @@ internal object WebPermissionPrompt {
         val mode = WebPermissionStore.effectiveMode(context, host, kind)
         return when (mode) {
             WebPermissionStore.ALLOW -> { onDecision(true, false, false); true }
-            WebPermissionStore.DENY -> { onDecision(false, false, false); true }
+            WebPermissionStore.DENY -> {
+                WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PERMISSION)
+                onDecision(false, false, false); true
+            }
             else -> {
+                WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_PERMISSION)
                 pending = Pending(kind, host, onDecision)
                 true
             }
@@ -2968,6 +2979,7 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
         WebPermissionStore.POPUP_WINDOW to "新建窗口",
         WebPermissionStore.DIALOG to "弹出提示",
         WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
+        WebPermissionStore.EXTERNAL_APP to "跳转其它应用",
     )
 
     fun pick(kind: String) {
@@ -3010,6 +3022,7 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
         ) {
             item(key = "perms") {
                 Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+                    key(version) {
                     items.forEach { (kind, name) ->
                         val mode = WebPermissionStore.mode(context, kind)
                         WindowDropdownPreference(
@@ -3025,6 +3038,7 @@ private fun WebPermissionsPageMiuix(onBack: () -> Unit) {
                             ),
                             collapseOnSelection = true,
                         )
+                    }
                     }
                 }
             }
@@ -3051,6 +3065,7 @@ private fun WebPermissionsPageMaterial(onBack: () -> Unit) {
         WebPermissionStore.POPUP_WINDOW to "新建窗口",
         WebPermissionStore.DIALOG to "弹出提示",
         WebPermissionStore.VIDEO_AUTOPLAY to "自动播放视频",
+        WebPermissionStore.EXTERNAL_APP to "跳转其它应用",
     )
 
     fun pick(kind: String) {
