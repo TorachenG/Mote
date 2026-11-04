@@ -8646,11 +8646,43 @@ fun BrowserScreen(
 
         val dialogInfo = pendingDialogInfo
         if (dialogInfo != null) {
+            val updateApkFile = remember(dialogInfo.version) {
+                File(
+                    android.os.Environment.getExternalStoragePublicDirectory(
+                        android.os.Environment.DIRECTORY_DOWNLOADS
+                    ),
+                    "Mote/Mote-${dialogInfo.version}.apk",
+                )
+            }
+            var updateApkReady by remember(dialogInfo.version) {
+                mutableStateOf(updateApkFile.exists())
+            }
+            LaunchedEffect(showPendingDialog, isPendingDownloading) {
+                if (showPendingDialog && !isPendingDownloading) {
+                    updateApkReady = updateApkFile.exists()
+                }
+            }
             UpdateDialog(
                 show = showPendingDialog,
                 info = dialogInfo,
                 currentVersion = currentVersionName,
                 isDownloading = isPendingDownloading,
+                installReady = updateApkReady,
+                onInstall = {
+                    runCatching {
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            updateApkFile,
+                        )
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW)
+                                .setDataAndType(uri, "application/vnd.android.package-archive")
+                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                },
                 onDismiss = {
                     if (!isPendingDownloading) {
                         showPendingDialog = false

@@ -2801,7 +2801,7 @@ internal object WebPermissionStore {
     }
 
     private fun siteKey(context: Context, host: String, kind: String) =
-        "web_site_perm_${'$'}{host}_${'$'}{kind}"
+        "web_site_perm_${host}_${kind}"
 
     fun siteMode(context: Context, host: String, kind: String): String? =
         prefs(context).getString(siteKey(context, host, kind), null)

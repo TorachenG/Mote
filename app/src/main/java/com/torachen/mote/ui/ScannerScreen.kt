@@ -1659,6 +1659,18 @@ fun ScannerScreen(
             Toast.makeText(context, "相机未就绪", Toast.LENGTH_SHORT).show()
             return
         }
+        // 页面不会因旋转重建，拍照前按当前屏幕方向刷新目标旋转，
+        // 否则横屏拍出来的照片与识别框方向不一致，翻译文字会立起来
+        runCatching {
+            val activity = context as? Activity
+            val rotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                activity?.display?.rotation ?: Surface.ROTATION_0
+            } else {
+                @Suppress("DEPRECATION")
+                activity?.windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0
+            }
+            capture.targetRotation = rotation
+        }
         try {
             capture.takePicture(
                 ContextCompat.getMainExecutor(context),

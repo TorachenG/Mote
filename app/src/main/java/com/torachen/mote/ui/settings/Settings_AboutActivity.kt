@@ -1192,8 +1192,10 @@ internal fun UpdateDialog(
     info: UpdateState.HasUpdate?,
     currentVersion: String,
     isDownloading: Boolean,
+    installReady: Boolean = false,
     onDismiss: () -> Unit,
     onDownload: () -> Unit,
+    onInstall: () -> Unit = {},
 ) {
     val sheetTitle = if (info != null) {
         "发现新版本：$currentVersion → ${info.version}"
@@ -1251,14 +1253,22 @@ internal fun UpdateDialog(
                         enabled = !isDownloading,
                     ) { Text("暂时忽略") }
                     top.yukonga.miuix.kmp.basic.Button(
-                        onClick = onDownload,
+                        onClick = if (installReady) onInstall else onDownload,
                         modifier = Modifier.weight(1f),
                         enabled = !isDownloading,
                         colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors(
                             color = MiuixTheme.colorScheme.primary,
                             contentColor = Color.White,
                         ),
-                    ) { Text(if (isDownloading) "下载中…" else "立即更新") }
+                    ) {
+                        Text(
+                            when {
+                                isDownloading -> "下载中…"
+                                installReady -> "立即安装"
+                                else -> "立即更新"
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -1619,25 +1629,6 @@ internal fun startApkDownload(
     onComplete: () -> Unit,
     onFailed: (String) -> Unit,
 ) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        if (!context.packageManager.canRequestPackageInstalls()) {
-            try {
-                val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                    data = Uri.parse("package:${context.packageName}")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(intent)
-                Toast.makeText(
-                    context, "请允许安装未知应用后重新点击下载", Toast.LENGTH_LONG
-                ).show()
-            } catch (_: Exception) {
-                Toast.makeText(context, "无法打开安装权限设置", Toast.LENGTH_LONG).show()
-            }
-            onFailed("未授予安装权限")
-            return
-        }
-    }
-
     val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
     if (dm == null) { onFailed("系统下载服务不可用"); return }
 
@@ -1690,6 +1681,21 @@ internal fun startApkDownload(
 }
 
 private fun launchInstall(context: Context, dm: DownloadManager, downloadId: Long) {
+    // 安装前才检查未知来源权限，下载阶段不做拦截
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        !context.packageManager.canRequestPackageInstalls()
+    ) {
+        runCatching {
+            context.startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+            Toast.makeText(context, "请允许安装未知应用后返回继续安装", Toast.LENGTH_LONG).show()
+        }
+        return
+    }
     try {
         val uri = dm.getUriForDownloadedFile(downloadId)
         if (uri == null) {
