@@ -1287,13 +1287,8 @@ private fun DownloadManagerScreenMiuix(
                                 Icon(imageVector = MiuixIcons.Close, contentDescription = "退出多选", tint = MiuixTheme.colorScheme.onSurface)
                             }
                         } else {
-                            SettingsBackButton(
-                                onBack = onBack,
-                                progressiveTitleBlur = progressiveTitleBlur,
-                                backCardAlpha = backCardAlpha,
-                                backCardMaterialModifier = backCardMaterialModifier,
-                                iconTint = MiuixTheme.colorScheme.onSurface,
-                            )
+                            // 返回按钮由 DownloadsShell 固定在左上角，这里只留等宽占位
+                            Spacer(Modifier.size(48.dp))
                         }
                     },
                     actions = {

@@ -16,6 +16,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.defaultMinSize
@@ -24,9 +25,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Icon as M3Icon
 import androidx.compose.material3.MaterialTheme as M3MaterialTheme
@@ -41,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -213,6 +217,28 @@ private fun DownloadsShellMiuix(
                 }
             }
         }
+
+        // 固定返回按钮：不随两个页签的切页动画移动
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(
+                    start = 8.dp,
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 6.dp,
+                )
+                .size(48.dp)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .clickable { onBack() },
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = "返回",
+                tint = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.size(26.dp),
+            )
+        }
+
 
         AnimatedVisibility(
             visible = navBarVisible,
