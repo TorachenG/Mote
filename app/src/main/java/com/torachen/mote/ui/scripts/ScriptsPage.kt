@@ -566,6 +566,19 @@ private fun ScriptsPageMiuix(
         title = if (selecting) "已选择 ${selectedIds.size} 项" else "脚本",
         onBack = { if (selecting) exitSelect() else onBack() },
         actions = {
+            if (selecting) {
+                val allSelected = scripts.isNotEmpty() && selectedIds.size == scripts.size
+                IconButton(onClick = {
+                    selectedIds = if (allSelected) emptySet() else scripts.map { it.id }.toSet()
+                }) {
+                    Icon(
+                        imageVector = MiuixIcons.SelectAll,
+                        contentDescription = if (allSelected) "取消全选" else "全选",
+                        tint = if (allSelected) MiuixTheme.colorScheme.primary
+                        else MiuixTheme.colorScheme.onSurface,
+                    )
+                }
+            } else {
             Box {
                 IconButton(onClick = { showMoreMenu = true }) {
                     Icon(
@@ -610,7 +623,8 @@ private fun ScriptsPageMiuix(
                     onDismissRequest = { showMoreMenu = false },
                 )
             }
-        },
+            }
+        }
     ) {
         item(key = "feature_title") {
             SmallTitle("功能")
@@ -758,31 +772,6 @@ private fun ScriptsPageMiuix(
         }
     }
 
-        if (selecting) {
-            val allSelected = scripts.isNotEmpty() && selectedIds.size == scripts.size
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(
-                        end = 8.dp,
-                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
-                    )
-                    .size(48.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .clickable {
-                        selectedIds = if (allSelected) emptySet() else scripts.map { it.id }.toSet()
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = MiuixIcons.SelectAll,
-                    contentDescription = if (allSelected) "取消全选" else "全选",
-                    tint = if (allSelected) MiuixTheme.colorScheme.primary
-                    else MiuixTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-        }
         // 底部悬浮胶囊：多选时 编辑 / 重命名 / 删除，否则为添加
         Row(
             modifier = Modifier
