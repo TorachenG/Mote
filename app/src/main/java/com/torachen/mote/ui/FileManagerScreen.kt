@@ -80,6 +80,7 @@ import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.MusicNote
@@ -1908,7 +1909,13 @@ private fun FileManagerMiuix(
                             }
                         }
                     }
-                    items(controller.visibleEntries(dir)) { entry ->
+                    val shownEntries = controller.visibleEntries(dir)
+                    if (shownEntries.isEmpty() && !controller.reloading) {
+                        item(key = "empty_placeholder") {
+                            FmEmptyPlaceholder(isRecycle = controller.isInRecycle)
+                        }
+                    }
+                    items(shownEntries) { entry ->
                         MiuixEntryRow(controller, entry)
                     }
                 }
@@ -2192,6 +2199,38 @@ private fun PullIndicatorItem(state: PullRefreshUiState) {
         }
     } else {
         Spacer(Modifier.height(0.dp))
+    }
+}
+
+/** 空目录 / 空回收站占位 */
+@Composable
+private fun FmEmptyPlaceholder(isRecycle: Boolean) {
+    Box(
+        modifier = Modifier.fillMaxWidth().padding(top = 96.dp, bottom = 48.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                imageVector = if (isRecycle) Icons.Rounded.Delete else MiuixIcons.FolderFill,
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.6f),
+                modifier = Modifier.size(56.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = if (isRecycle) "回收站是空的" else "此文件夹为空",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+            if (isRecycle) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "删除的文件会先放在这里，保留 ${FileManagerPrefs.RECYCLE_RETENTION_DAYS} 天",
+                    style = MiuixTheme.textStyles.body2.copy(fontSize = 12.sp),
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(alpha = 0.7f),
+                )
+            }
+        }
     }
 }
 
