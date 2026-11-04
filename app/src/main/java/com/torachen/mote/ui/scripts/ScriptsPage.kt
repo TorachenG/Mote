@@ -99,6 +99,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.File
+import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.preference.SwitchPreference
@@ -565,6 +566,17 @@ private fun ScriptsPageMiuix(
     LegalDocumentScaffold(
         title = if (selecting) "已选择 ${selectedIds.size} 项" else "脚本",
         onBack = { if (selecting) exitSelect() else onBack() },
+        navigationIcon = if (selecting) {
+            {
+                IconButton(onClick = { exitSelect() }) {
+                    Icon(
+                        imageVector = MiuixIcons.Close,
+                        contentDescription = "退出多选",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        } else null,
         actions = {
             if (selecting) {
                 val allSelected = scripts.isNotEmpty() && selectedIds.size == scripts.size

@@ -439,6 +439,7 @@ internal fun LegalDocumentScaffold(
     title: String,
     onBack: () -> Unit,
     actions: (@Composable () -> Unit)? = null,
+    navigationIcon: (@Composable () -> Unit)? = null,
     listContent: LazyListScope.() -> Unit,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
@@ -586,13 +587,17 @@ internal fun LegalDocumentScaffold(
                     color = Color.Transparent,
                     defaultWindowInsetsPadding = false,
                     navigationIcon = {
-                        SettingsBackButton(
-                            onBack = onBack,
-                            progressiveTitleBlur = progressiveTitleBlur,
-                            backCardAlpha = backCardAlpha,
-                            backCardMaterialModifier = backCardMaterialModifier,
-                            iconTint = MiuixTheme.colorScheme.onSurface,
-                        )
+                        if (navigationIcon != null) {
+                            navigationIcon()
+                        } else {
+                            SettingsBackButton(
+                                onBack = onBack,
+                                progressiveTitleBlur = progressiveTitleBlur,
+                                backCardAlpha = backCardAlpha,
+                                backCardMaterialModifier = backCardMaterialModifier,
+                                iconTint = MiuixTheme.colorScheme.onSurface,
+                            )
+                        }
                     },
                     actions = { actions?.invoke() },
                 )
