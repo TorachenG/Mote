@@ -2368,68 +2368,29 @@ private fun isSystemDarkMode(context: Context): Boolean {
 
 
 private fun applyNightModeToWebView(wv: WebView, enabled: Boolean) {
+    // 网页的深色状态完全由夜间模式决定（伪造 prefers-color-scheme + color-scheme），
+    // 不再叠加系统算法暗化或 Dark Reader 反色，避免同一页面被压暗两次。
+    // 夜间使用时的整体调暗交给「夜间模式 → 调暗页面」的 UI 蒙版。
     try {
         wv.evaluateJavascript(buildColorSchemeScript(enabled), null)
     } catch (_: Exception) {}
-    val nativeSupported = isNativeDarkModeSupported()
-    val systemDark = isSystemDarkMode(wv.context)
-
-    if (!enabled) {
-        NightModeScriptHandlers.remove(wv)
-        try {
-            if (nativeSupported) {
-                WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, false)
-            }
-        } catch (_: Exception) {}
-        try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
-        try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
-        try { wv.setBackgroundColor(android.graphics.Color.WHITE) } catch (_: Exception) {}
-        return
-    }
-
-    // 立刻把 WebView 底层背景设为深色，消除加载过程中的白屏
+    NightModeScriptHandlers.remove(wv)
     try {
-        wv.setBackgroundColor(android.graphics.Color.parseColor("#1a1a1a"))
+        if (isNativeDarkModeSupported()) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, false)
+        }
     } catch (_: Exception) {}
-
-    // 系统深色 + 原生支持：无条件走原生算法暗化
-    if (nativeSupported && systemDark) {
-        NightModeScriptHandlers.remove(wv)
-        try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
-        try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
-        try {
-            WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, true)
-        } catch (_: Exception) {}
-        return
-    }
-
-    // Dark Reader 动态主题引擎（恒传 false，全局调暗交给 UI 蒙版）
-    val script = buildDarkReaderScript(false)
-
-    val reRegistered = NightModeScriptHandlers.ensure(wv, false) {
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(wv, script, setOf("*"))
-        } else null
-    }
-
-    if (reRegistered) {
-        try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
-        try { wv.evaluateJavascript(script, null) } catch (_: Exception) {}
-    } else {
-        try {
-            wv.evaluateJavascript(
-                "(function(){try{return !!window.__mote_dark_engine__;}catch(e){return false;}})()"
-            ) { raw ->
-                try {
-                    if (raw == "true") {
-                        wv.evaluateJavascript("window.__mote_dark_engine__.refresh();", null)
-                    } else {
-                        wv.evaluateJavascript(script, null)
-                    }
-                } catch (_: Exception) {}
+    try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
+    try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
+    try {
+        wv.setBackgroundColor(
+            if (enabled) {
+                android.graphics.Color.parseColor("#1a1a1a")
+            } else {
+                android.graphics.Color.WHITE
             }
-        } catch (_: Exception) {}
-    }
+        )
+    } catch (_: Exception) {}
 }
 
 private val JS_NO_IMG_ON = """
