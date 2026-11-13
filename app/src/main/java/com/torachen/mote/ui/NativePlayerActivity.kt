@@ -98,7 +98,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.rounded.Share
+import top.yukonga.miuix.kmp.icon.extended.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -3375,7 +3375,7 @@ private fun MoreMenu(
 ) {
     val funcs = listOf(
         "复制链接" to MiuixIcons.Copy,
-        "分享视频" to Icons.Rounded.Share,
+        "分享视频" to MiuixIcons.Share,
         (if (isBookmarked) "取消书签" else "添加书签") to
                 (if (isBookmarked) MiuixIcons.FavoritesFill else MiuixIcons.Favorites),
         "下载视频" to MiuixIcons.Download,

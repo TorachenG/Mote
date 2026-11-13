@@ -80,8 +80,10 @@ import androidx.compose.ui.zIndex
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.torachen.mote.ui.BrowserWebViewRegistry
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
@@ -156,14 +158,18 @@ internal fun dirSize(file: File?): Long {
     return total
 }
 
+internal fun webViewCacheDirs(context: Context): List<File> = listOf(
+    File(context.filesDir.parentFile, "app_webview/Default/Cache"),
+    File(context.filesDir.parentFile, "app_webview/Default/Code Cache"),
+    File(context.filesDir.parentFile, "app_webview/Default/HTTP Cache"),
+    File(context.filesDir.parentFile, "app_webview/Default/GPUCache"),
+    File(context.filesDir.parentFile, "app_webview/Default/DawnCache"),
+    File(context.cacheDir, "WebView"),
+    File(context.cacheDir, "org.chromium.android_webview"),
+)
+
 internal fun webViewCacheSize(context: Context): Long {
-    val candidates = listOf(
-        File(context.filesDir.parentFile, "app_webview/Default/Cache"),
-        File(context.filesDir.parentFile, "app_webview/Default/Code Cache"),
-        File(context.cacheDir, "WebView"),
-        File(context.cacheDir, "org.chromium.android_webview"),
-    )
-    return candidates.sumOf { dirSize(it) }
+    return webViewCacheDirs(context).sumOf { dirSize(it) }
 }
 
 internal fun imageCacheSize(context: Context): Long {
@@ -400,6 +406,13 @@ internal object AutoCacheCleaner {
     }
 
     internal fun clearWebViewCache(context: Context) {
+        // 只 new 一个 WebView 清理不到正在使用的实例，先把所有活动 WebView
+        // 的内存/磁盘缓存一起清掉，再删除统计口径里的缓存目录。
+        runCatching {
+            BrowserWebViewRegistry.webViews.values.forEach { wv ->
+                runCatching { wv.clearCache(true) }
+            }
+        }
         try {
             val wv = WebView(context)
             wv.clearCache(true)
@@ -408,6 +421,14 @@ internal object AutoCacheCleaner {
         try {
             WebStorage.getInstance().deleteAllData()
         } catch (_: Exception) {}
+        purgeWebViewCacheDirs(context)
+    }
+
+    /** 只删除网页缓存目录；用于 clearCache 异步落盘后再补一刀。 */
+    internal fun purgeWebViewCacheDirs(context: Context) {
+        webViewCacheDirs(context).forEach { dir ->
+            runCatching { dir.deleteRecursively() }
+        }
     }
 
     internal fun clearImageCache(context: Context) {
@@ -652,6 +673,12 @@ private fun SettingsSpaceManagementMiuix(
                 if ("image" in localChecked.value) deleteDownloadedFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif") }
                 if ("video" in localChecked.value) deleteDownloadedFiles { f -> f.extension.lowercase() in setOf("mp4", "mkv", "webm", "mov", "avi", "flv", "wmv", "3gp", "ts", "m4v") }
                 if ("other" in localChecked.value) deleteDownloadedFiles { f -> val ext = f.extension.lowercase(); val img = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif"); val vid = setOf("mp4", "mkv", "webm", "mov", "avi", "flv", "wmv", "3gp", "ts", "m4v"); ext !in img && ext !in vid }
+                if ("web" in cacheChecked.value) {
+                    // WebView 的 clearCache 是异步落盘的：稍等后再删一次缓存目录，
+                    // 避免刚清完又被重建的索引文件占出“清不到 0”的假象。
+                    delay(350)
+                    AutoCacheCleaner.purgeWebViewCacheDirs(context)
+                }
             }
             isClearing = false
             cacheChecked.value = emptySet()
@@ -912,6 +939,12 @@ private fun SettingsSpaceManagementMaterial(
                 if ("image" in localChecked.value) deleteDownloadedFiles { f -> f.extension.lowercase() in setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif") }
                 if ("video" in localChecked.value) deleteDownloadedFiles { f -> f.extension.lowercase() in setOf("mp4", "mkv", "webm", "mov", "avi", "flv", "wmv", "3gp", "ts", "m4v") }
                 if ("other" in localChecked.value) deleteDownloadedFiles { f -> val ext = f.extension.lowercase(); val img = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif"); val vid = setOf("mp4", "mkv", "webm", "mov", "avi", "flv", "wmv", "3gp", "ts", "m4v"); ext !in img && ext !in vid }
+                if ("web" in cacheChecked.value) {
+                    // WebView 的 clearCache 是异步落盘的：稍等后再删一次缓存目录，
+                    // 避免刚清完又被重建的索引文件占出“清不到 0”的假象。
+                    delay(350)
+                    AutoCacheCleaner.purgeWebViewCacheDirs(context)
+                }
             }
             isClearing = false
             cacheChecked.value = emptySet(); privacyChecked.value = emptySet(); localChecked.value = emptySet()

@@ -662,7 +662,7 @@ internal object MoteDownloader {
                     val taskNow = tasks.find { it.id == task.id }
                     val isRetry = taskNow?.isRetryFromMissing == true
                     if (isRetry) {
-                        toastEvent = "重新下载失败：${e.message ?: "网络错误"}"
+                        toastEvent = "恢复失败：${e.message ?: "网络错误"}"
                     }
                     updateTask(task.id) {
                         it.copy(
@@ -956,6 +956,7 @@ fun DownloadManagerScreen(
     onOpenTaskDetail: () -> Unit = {},
     onSelectionModeChange: (Boolean) -> Unit = {},
     onOpenDownloadsFolder: () -> Unit = {},
+    showBackButton: Boolean = true,
 ) {
     val context = LocalContext.current
     LaunchedEffect(MoteDownloader.toastEvent) {
@@ -971,6 +972,7 @@ fun DownloadManagerScreen(
     when (LocalUiMode.current) {
         UiMode.Miuix -> DownloadManagerScreenMiuix(
             onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange, onOpenDownloadsFolder,
+            showBackButton,
         )
         UiMode.Material -> DownloadManagerScreenMaterial(
             onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange, onOpenDownloadsFolder,
@@ -989,6 +991,7 @@ private fun DownloadManagerScreenMiuix(
     onOpenTaskDetail: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
     onOpenDownloadsFolder: () -> Unit,
+    showBackButton: Boolean,
 ) {
     val navOwner = rememberNavigationEventDispatcherOwner()
     val scrollBehavior = MiuixScrollBehavior()
@@ -1103,7 +1106,7 @@ private fun DownloadManagerScreenMiuix(
         exitMultiSelect()
         ids.forEach { MoteDownloader.remove(it, shouldDeleteLocal) }
         scope.launch {
-            snackbarHostState.showSnackbar("已删除 ${ids.size} 项任务", duration = SnackbarDuration.Short)
+            snackbarHostState.showSnackbar("已删除 ${ids.size} 项任务", duration = Snackbar2s)
         }
     }
 
@@ -1185,9 +1188,11 @@ private fun DownloadManagerScreenMiuix(
                                                     isSelected = item.id in selectedIds,
                                                     onClick = {
                                                         if (isMultiSelectMode) toggleSelect(item.id)
-                                                        else {
+                                                        else if (item.isMissing) {
                                                             PendingTaskDetailStore.pending = item
                                                             onOpenTaskDetail()
+                                                        } else {
+                                                            openDownloadedFile(context, item) { onBack() }
                                                         }
                                                     },
                                                     onLongClick = { if (!isMultiSelectMode) { isMultiSelectMode = true; toggleSelect(item.id) } },
@@ -1287,8 +1292,17 @@ private fun DownloadManagerScreenMiuix(
                                 Icon(imageVector = MiuixIcons.Close, contentDescription = "退出多选", tint = MiuixTheme.colorScheme.onSurface)
                             }
                         } else {
-                            // 返回按钮由 DownloadsShell 固定在左上角，这里只留等宽占位
-                            Spacer(Modifier.size(48.dp))
+                            if (showBackButton) {
+                                SettingsBackButton(
+                                    onBack = onBack,
+                                    progressiveTitleBlur = progressiveTitleBlur,
+                                    backCardAlpha = backCardAlpha,
+                                    backCardMaterialModifier = backCardMaterialModifier,
+                                    iconTint = MiuixTheme.colorScheme.onSurface,
+                                )
+                            } else {
+                                Spacer(Modifier.size(40.dp))
+                            }
                         }
                     },
                     actions = {
@@ -1377,7 +1391,7 @@ private fun DownloadManagerScreenMiuix(
                         val toShare = tasks.filter { it.id in selectedIds && it.status == MoteDownloadStatus.COMPLETED && !it.isMissing }
                         if (toShare.isEmpty()) {
                             scope.launch {
-                                snackbarHostState.showSnackbar("未选择可分享的文件", duration = SnackbarDuration.Short)
+                                snackbarHostState.showSnackbar("未选择可分享的文件", duration = Snackbar2s)
                             }
                         } else {
                             shareSelectedFiles(context, toShare)
@@ -1847,25 +1861,14 @@ private fun DownloadRowItemMiuix(
     val isInvalid = item.isMissing
     val contentColor = if (isInvalid) Color.Gray else if (item.status == MoteDownloadStatus.FAILED && item.failedAfterRetry) Color.Gray else MiuixTheme.colorScheme.onSurface
     val secondaryColor = if (isInvalid) Color.Gray.copy(alpha = 0.7f) else MiuixTheme.colorScheme.onSurfaceVariantSummary
-    val iconTint = if (isInvalid) Color.Gray else Color.Black
 
     Row(
         modifier = Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(start = 16.dp, end = 8.dp, top = if (isFirst) 14.dp else 10.dp, bottom = if (isLast) 14.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (isInvalid) {
-            Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = MiuixIcons.Close,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(26.dp),
-                )
-            }
-        } else {
-            DownloadEntryIcon(item)
-        }
+        // 失效文件不显示叉号：图片显示图片图标，其它文件显示灰色类型图标
+        DownloadEntryIcon(item, 40.dp)
 
         Spacer(Modifier.width(12.dp))
 
@@ -1887,7 +1890,7 @@ private fun DownloadRowItemMiuix(
                 )
             } else if (item.status == MoteDownloadStatus.FAILED && item.failedAfterRetry) {
                 Text(
-                    text = "重新下载失败 | ${formatDownloadTime(item.createTime)}",
+                    text = "恢复失败 | ${formatDownloadTime(item.createTime)}",
                     style = MiuixTheme.textStyles.body2,
                     color = secondaryColor,
                     maxLines = 1,
@@ -1922,7 +1925,7 @@ private fun DownloadRowItemMiuix(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "重新下载",
+                    text = "恢复",
                     style = MiuixTheme.textStyles.body2,
                     color = Color.White,
                 )
@@ -2030,7 +2033,17 @@ private fun DownloadManagerScreenMaterial(
         pendingDeleteIds = emptyList()
         exitMultiSelect()
         ids.forEach { MoteDownloader.remove(it, shouldDeleteLocal) }
-        scope.launch { snackbarHostState.showSnackbar("已删除 ${ids.size} 项任务", duration = M3SnackbarDuration.Short) }
+        scope.launch {
+            val autoDismiss = launch {
+                delay(2000)
+                snackbarHostState.currentSnackbarData?.dismiss()
+            }
+            snackbarHostState.showSnackbar(
+                "已删除 ${ids.size} 项任务",
+                duration = M3SnackbarDuration.Indefinite,
+            )
+            autoDismiss.cancel()
+        }
     }
 
     BackHandler(enabled = isMultiSelectMode) { exitMultiSelect() }
@@ -2155,9 +2168,11 @@ private fun DownloadManagerScreenMaterial(
                                             isSelected = item.id in selectedIds,
                                             onClick = {
                                                 if (isMultiSelectMode) toggleSelect(item.id)
-                                                else {
+                                                else if (item.isMissing) {
                                                     PendingTaskDetailStore.pending = item
                                                     onOpenTaskDetail()
+                                                } else {
+                                                    openDownloadedFile(context, item) { onBack() }
                                                 }
                                             },
                                             onLongClick = { if (!isMultiSelectMode) { isMultiSelectMode = true; toggleSelect(item.id) } },
@@ -2211,7 +2226,17 @@ private fun DownloadManagerScreenMaterial(
                             M3IconButton(onClick = {
                                 val toShare = tasks.filter { it.id in selectedIds && it.status == MoteDownloadStatus.COMPLETED && !it.isMissing }
                                 if (toShare.isEmpty()) {
-                                    scope.launch { snackbarHostState.showSnackbar("未选择可分享的文件", duration = M3SnackbarDuration.Short) }
+                                    scope.launch {
+            val autoDismiss = launch {
+                delay(2000)
+                snackbarHostState.currentSnackbarData?.dismiss()
+            }
+            snackbarHostState.showSnackbar(
+                "未选择可分享的文件",
+                duration = M3SnackbarDuration.Indefinite,
+            )
+            autoDismiss.cancel()
+        }
                                 } else {
                                     shareSelectedFiles(context, toShare)
                                 }
@@ -2527,13 +2552,7 @@ private fun M3DownloadFinishedItem(
         contentColor = contentColor,
     ) {
         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                if (isInvalid) {
-                    M3Icon(imageVector = Icons.Rounded.LinkOff, contentDescription = null, tint = M3MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(26.dp))
-                } else {
-                    M3Icon(imageVector = m3IconForMime(item.mimeType, item.fileName), contentDescription = null, tint = M3MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                }
-            }
+            DownloadEntryIcon(item, 40.dp)
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
@@ -2552,7 +2571,7 @@ private fun M3DownloadFinishedItem(
             } else if (isInvalid) {
                 M3Surface(onClick = onRetry, shape = RoundedCornerShape(16.dp), color = M3MaterialTheme.colorScheme.primary, contentColor = M3MaterialTheme.colorScheme.onPrimary) {
                     Box(modifier = Modifier.height(32.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                        M3Text("重新下载", style = M3MaterialTheme.typography.labelLarge)
+                        M3Text("恢复", style = M3MaterialTheme.typography.labelLarge)
                     }
                 }
             }
@@ -2589,7 +2608,7 @@ private fun M3DownloadFailedItem(
                 M3Text(text = item.fileName.ifBlank { "未命名文件" }, style = M3MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(2.dp))
                 M3Text(
-                    text = if (isRetryFailed) "重新下载失败 | ${formatDownloadTime(item.createTime)}" else "下载失败 | ${formatDownloadTime(item.createTime)}",
+                    text = if (isRetryFailed) "恢复失败 | ${formatDownloadTime(item.createTime)}" else "下载失败 | ${formatDownloadTime(item.createTime)}",
                     style = M3MaterialTheme.typography.bodySmall,
                     color = if (isRetryFailed) M3MaterialTheme.colorScheme.onSurfaceVariant else M3MaterialTheme.colorScheme.error,
                     maxLines = 1
@@ -2728,6 +2747,18 @@ private fun openDownloadedFile(context: Context, item: MoteDownloadTask, onBack:
         return
     }
 
+    // Word / Excel / PPT：优先用内置预览
+    if (localFile != null && localFile.isFile &&
+        com.torachen.mote.ui.office.OfficeDocumentParser.kindOf(localFile.name) != null
+    ) {
+        com.torachen.mote.ui.office.OfficePreviewActivity.start(
+            context,
+            localFile.absolutePath,
+            localFile.name,
+        )
+        return
+    }
+
     try {
         var openMime = mime
         if (openMime.isBlank() || openMime == "application/octet-stream" || openMime == "*/*") {
@@ -2768,40 +2799,29 @@ private fun openDownloadedFile(context: Context, item: MoteDownloadTask, onBack:
 
 /** 下载条目图标：与存储目录保持一致（图标形状 + 分类配色），图片文件直接显示缩略图 */
 @Composable
-private fun DownloadEntryIcon(task: MoteDownloadTask, size: Dp = 36.dp) {
-    val fileName = task.fileName
-    val typeIcon = remember(fileName) { fmTypeIcon(java.io.File(fileName)) }
-    val isImage = typeIcon?.first == androidx.compose.material.icons.Icons.Rounded.Image
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, task.filePath) {
-        value = if (isImage && task.filePath.isNotBlank()) {
-            withContext(Dispatchers.IO) { loadImageThumbnail(task.filePath) }
-        } else {
-            null
-        }
+private fun DownloadEntryIcon(task: MoteDownloadTask, size: Dp = 40.dp) {
+    // 与文件列表共用同一个缩略图/类型图标，保证图标大小和样式完全一致。
+    val file = remember(task.filePath, task.fileName) {
+        java.io.File(task.filePath.ifBlank { task.fileName })
     }
-    Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
-        val bmp = bitmap
-        when {
-            bmp != null -> Image(
-                bitmap = bmp,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(size).clip(RoundedCornerShape(6.dp)),
-            )
-            typeIcon != null -> Icon(
-                imageVector = typeIcon.first,
-                contentDescription = null,
-                tint = typeIcon.second,
-                modifier = Modifier.size(26.dp),
-            )
-            else -> Icon(
-                imageVector = MiuixIcons.File,
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.size(26.dp),
-            )
-        }
+    val isImage = remember(task.fileName, task.mimeType) {
+        task.fileName.substringAfterLast('.', "").lowercase() in FileCategory.IMAGE.extensions ||
+            task.mimeType.lowercase().startsWith("image/")
     }
+    val entry = remember(file, task.totalBytes, task.createTime, isImage) {
+        FsEntry(
+            file = file,
+            isDir = false,
+            size = task.totalBytes.coerceAtLeast(0L),
+            modified = task.createTime,
+        )
+    }
+    EntryThumb(
+        entry = entry,
+        size = size,
+        // 失效的图片仍显示图片图标，其它失效文件类型图标变灰
+        greyed = task.isMissing && !isImage,
+    )
 }
 
 private fun loadImageThumbnail(path: String): ImageBitmap? = try {

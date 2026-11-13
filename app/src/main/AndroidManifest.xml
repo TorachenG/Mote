@@ -23,6 +23,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -61,6 +63,42 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/mote_file_paths" />
         </provider>
+
+        <service
+            android:name=".service.MoteAccessibilityService"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/mote_accessibility_service" />
+        </service>
+
+        <service
+            android:name=".ui.ai.AiFloatingBubbleService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_ai_assistant" />
+        </service>
+
+        <activity
+            android:name=".ui.office.OfficePreviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Mote"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode" />
+
+        <activity
+            android:name=".ui.ai.AiFloatingActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.Mote.Floating"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.NativePlayerActivity"
@@ -199,8 +237,8 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_logo_triangle_blue"
-            android:roundIcon="@mipmap/ic_logo_triangle_blue"
+            android:icon="@mipmap/ic_logo_sparkle_aurora"
+            android:roundIcon="@mipmap/ic_logo_sparkle_aurora"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -213,8 +251,8 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_logo_triangle_green"
-            android:roundIcon="@mipmap/ic_logo_triangle_green"
+            android:icon="@mipmap/ic_logo_sparkle_blue"
+            android:roundIcon="@mipmap/ic_logo_sparkle_blue"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -227,8 +265,22 @@
             android:targetActivity=".ui.MainActivity"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/ic_logo_triangle_island"
-            android:roundIcon="@mipmap/ic_logo_triangle_island"
+            android:icon="@mipmap/ic_logo_sparkle_neon"
+            android:roundIcon="@mipmap/ic_logo_sparkle_neon"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name=".IconPlanet"
+            android:targetActivity=".ui.MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_logo_planet"
+            android:roundIcon="@mipmap/ic_logo_planet"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

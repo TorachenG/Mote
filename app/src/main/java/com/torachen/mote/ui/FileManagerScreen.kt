@@ -61,6 +61,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.graphics.graphicsLayer
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import androidx.compose.animation.core.animateDpAsState
@@ -214,6 +219,9 @@ private val FM_FALLBACK_HEIGHT = 128.dp
 /** 文件管理功能设置：设置页与文件管理页共享同一份 Compose 状态 */
 internal object FileManagerPrefs {
     const val KEY_RECYCLE_ENABLED = "fm_recycle_enabled"
+    const val KEY_SORT_FIELD = "fm_sort_field"
+    const val KEY_SORT_ASCENDING = "fm_sort_ascending"
+    const val KEY_LAYOUT_MODE = "fm_layout_mode"
     /** 回收站保留天数，与清理逻辑共用 */
     const val RECYCLE_RETENTION_DAYS = 30
 
@@ -234,6 +242,17 @@ internal object FileManagerPrefs {
         recycleEnabled = enabled
         prefs?.edit()?.putBoolean(KEY_RECYCLE_ENABLED, enabled)?.apply()
     }
+}
+
+internal enum class FmSortField(val label: String) {
+    NAME("名称"),
+    TIME("时间"),
+    SIZE("大小"),
+}
+
+internal enum class FmLayoutMode(val label: String) {
+    LIST("列表"),
+    GRID("宫格"),
 }
 
 internal class FileManagerController(
@@ -281,6 +300,55 @@ internal class FileManagerController(
 
     /** 是否显示主页（与目录列表互斥） */
     var showHome by mutableStateOf(true)
+
+    // ---------------- 排序 / 布局 ----------------
+    private val viewPrefs =
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+
+    var sortField by mutableStateOf(
+        FmSortField.values().getOrElse(
+            viewPrefs.getInt(FileManagerPrefs.KEY_SORT_FIELD, 0)
+        ) { FmSortField.NAME }
+    )
+        private set
+
+    var sortAscending by mutableStateOf(
+        viewPrefs.getBoolean(FileManagerPrefs.KEY_SORT_ASCENDING, true)
+    )
+        private set
+
+    var layoutMode by mutableStateOf(
+        FmLayoutMode.values().getOrElse(
+            viewPrefs.getInt(FileManagerPrefs.KEY_LAYOUT_MODE, 0)
+        ) { FmLayoutMode.LIST }
+    )
+        private set
+
+    private fun reorderCachedEntries() {
+        dirEntries = dirEntries.mapValues { (_, list) -> sortEntries(list) }
+        safEntries = sortEntries(safEntries)
+        categoryFiles = sortCategoryEntries(categoryFiles)
+    }
+
+    fun updateSortField(field: FmSortField) {
+        if (sortField == field) return
+        sortField = field
+        viewPrefs.edit().putInt(FileManagerPrefs.KEY_SORT_FIELD, field.ordinal).apply()
+        reorderCachedEntries()
+    }
+
+    fun updateSortAscending(ascending: Boolean) {
+        if (sortAscending == ascending) return
+        sortAscending = ascending
+        viewPrefs.edit().putBoolean(FileManagerPrefs.KEY_SORT_ASCENDING, ascending).apply()
+        reorderCachedEntries()
+    }
+
+    fun updateLayoutMode(mode: FmLayoutMode) {
+        if (layoutMode == mode) return
+        layoutMode = mode
+        viewPrefs.edit().putInt(FileManagerPrefs.KEY_LAYOUT_MODE, mode.ordinal).apply()
+    }
 
     /** 独立路由页模式：返回根目录的上一级应退出页面，而不是切回主页 */
     var routeMode by mutableStateOf(false)
@@ -396,19 +464,90 @@ internal class FileManagerController(
         paintOriginal.clear()
     }
 
+    // ---- 宫格涂抹多选：用每个格子的窗口坐标做矩形命中，支持任意列数 ----
+    private val gridCellBounds =
+        mutableMapOf<String, androidx.compose.ui.geometry.Rect>()
+    private val gridCellEntries = mutableMapOf<String, FsEntry>()
+    private val gridPaintOriginal = mutableMapOf<String, Boolean>()
+    private var gridPaintTarget = false
+    private var gridPaintStart: androidx.compose.ui.geometry.Rect? = null
+    private var gridPaintEntries: List<FsEntry> = emptyList()
+
+    /** 宫格涂抹进行中：此时不能让下拉刷新接管手势。 */
+    val isGridPainting: Boolean get() = gridPaintStart != null
+
+    fun registerGridCell(entry: FsEntry, bounds: androidx.compose.ui.geometry.Rect) {
+        gridCellBounds[entry.file.absolutePath] = bounds
+        gridCellEntries[entry.file.absolutePath] = entry
+    }
+
+    fun beginGridPaint(
+        entry: FsEntry,
+        bounds: androidx.compose.ui.geometry.Rect,
+        entries: List<FsEntry>,
+    ) {
+        gridPaintStart = bounds
+        gridPaintEntries = entries
+        gridPaintTarget = isSelected(entry)
+        gridPaintOriginal.clear()
+        // 起始格已在长按中翻转，记录翻转后的状态，保证矩形范围内都按目标状态
+        gridPaintOriginal[entry.file.absolutePath] = gridPaintTarget
+        paintGridTo(bounds.center)
+    }
+
+    fun paintGridTo(pointer: androidx.compose.ui.geometry.Offset) {
+        val start = gridPaintStart ?: return
+        val rect = androidx.compose.ui.geometry.Rect(
+            left = minOf(start.left, pointer.x),
+            top = minOf(start.top, pointer.y),
+            right = maxOf(start.right, pointer.x),
+            bottom = maxOf(start.bottom, pointer.y),
+        )
+        val validPaths = gridPaintEntries.map { it.file.absolutePath }.toSet()
+        val touched = mutableSetOf<String>()
+        gridCellBounds.forEach { (path, bounds) ->
+            if (path in validPaths && bounds.overlaps(rect)) touched += path
+        }
+        touched.forEach { path ->
+            val cell = gridCellEntries[path] ?: return@forEach
+            if (!gridPaintOriginal.containsKey(path)) {
+                gridPaintOriginal[path] = isSelected(cell)
+            }
+            setSelected(cell, gridPaintTarget)
+        }
+        gridPaintOriginal.forEach { (path, original) ->
+            if (path !in touched && path in validPaths) {
+                gridCellEntries[path]?.let { setSelected(it, original) }
+            }
+        }
+    }
+
+    fun endGridPaint() {
+        gridPaintStart = null
+        gridPaintOriginal.clear()
+        gridPaintEntries = emptyList()
+    }
+
     fun exitSelection() {
         selectionMode = false
         selected = emptyList()
+        endGridPaint()
     }
 
     fun openCategory(target: FileCategory) {
+        // 图片分类默认宫格 + 时间倒序；进入后仍可像存储目录一样通过菜单调整
+        if (target == FileCategory.IMAGE) {
+            updateSortField(FmSortField.TIME)
+            updateSortAscending(false)
+            updateLayoutMode(FmLayoutMode.GRID)
+        }
         category = target
         categoryLoading = true
         categoryFiles = emptyList()
         scanScope.launch {
             scanCategory(target) { partial ->
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main.immediate) {
-                    categoryFiles = partial
+                    categoryFiles = sortCategoryEntries(partial)
                 }
             }
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -469,12 +608,25 @@ internal class FileManagerController(
         else -> 2
     }
 
-    private fun sortEntries(entries: List<FsEntry>): List<FsEntry> =
-        entries.sortedWith(
-            compareByDescending<FsEntry> { it.isDir }
-                .thenBy { nameGroup(it.file.name) }
+    private fun sortEntries(entries: List<FsEntry>): List<FsEntry> {
+        val byField: Comparator<FsEntry> = when (sortField) {
+            FmSortField.NAME -> compareBy<FsEntry> { nameGroup(it.file.name) }
                 .thenBy { it.file.name.lowercase() }
+            FmSortField.TIME -> compareBy<FsEntry> { it.modified }
+                .thenBy { it.file.name.lowercase() }
+            FmSortField.SIZE -> compareBy<FsEntry> { it.size }
+                .thenBy { it.file.name.lowercase() }
+        }
+        val ordered = if (sortAscending) byField else byField.reversed()
+        // 目录始终排在文件前面
+        return entries.sortedWith(
+            compareByDescending<FsEntry> { it.isDir }.then(ordered)
         )
+    }
+
+    /** 分类列表与存储目录使用同一套排序设置 */
+    private fun sortCategoryEntries(entries: List<FsEntry>): List<FsEntry> =
+        sortEntries(entries)
 
     private fun mapEntries(files: Array<java.io.File>): List<FsEntry> =
         sortEntries(
@@ -707,12 +859,12 @@ internal class FileManagerController(
         val result = withContext(Dispatchers.IO) {
             scanCategory(target) { partial ->
                 withContext(Dispatchers.Main.immediate) {
-                    categoryFiles = partial
+                    categoryFiles = sortCategoryEntries(partial)
                 }
             }
         }
         withContext(Dispatchers.Main) {
-            categoryFiles = result
+            categoryFiles = sortCategoryEntries(result)
         }
     }
 
@@ -1098,6 +1250,16 @@ private fun openFile(
         return
     }
 
+    // Word / Excel / PPT：使用内置的 OOXML 预览页，不依赖系统是否安装 Office
+    if (com.torachen.mote.ui.office.OfficeDocumentParser.kindOf(file.name) != null) {
+        com.torachen.mote.ui.office.OfficePreviewActivity.start(
+            context,
+            file.absolutePath,
+            file.name,
+        )
+        return
+    }
+
     try {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mime)
@@ -1174,6 +1336,7 @@ internal fun FileManagerPage(
     onOpenFileSettings: () -> Unit = {},
     onSubPageChange: (Boolean) -> Unit = {},
     pageTitle: String = "文件",
+    showBackButton: Boolean = true,
 ) {
     val context = LocalContext.current
     val realController = controller ?: remember { FileManagerController(context, onOpenInBrowser, onBack) }
@@ -1374,6 +1537,7 @@ internal fun FileManagerPage(
             onMove = { if (controller.selected.isNotEmpty()) transferOp = PendingOp.MOVE },
             onTool = onTool,
             pageTitle = pageTitle,
+            showBackButton = showBackButton,
         )
         UiMode.Material -> FileManagerMaterial(
             controller = controller,
@@ -1387,6 +1551,7 @@ internal fun FileManagerPage(
             onMove = { if (controller.selected.isNotEmpty()) transferOp = PendingOp.MOVE },
             onTool = onTool,
             pageTitle = pageTitle,
+            showBackButton = showBackButton,
         )
     }
         }
@@ -1712,6 +1877,61 @@ private fun FileTransferSheet(
 /* ---------------- MIUIX ---------------- */
 
 @Composable
+private fun FmViewOptionsPopup(
+    show: Boolean,
+    controller: FileManagerController,
+    onDismiss: () -> Unit,
+) {
+    WindowCascadingListPopup(
+        show = show,
+        entries = listOf(
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(
+                        text = "排序",
+                        summary = "${controller.sortField.label} · ${if (controller.sortAscending) "升序" else "降序"}",
+                        children = FmSortField.values().map { field ->
+                            DropdownItem(
+                                text = field.label,
+                                selected = controller.sortField == field,
+                                onClick = { controller.updateSortField(field) },
+                            )
+                        } + listOf(
+                            DropdownItem(
+                                text = "升序",
+                                selected = controller.sortAscending,
+                                onClick = { controller.updateSortAscending(true) },
+                            ),
+                            DropdownItem(
+                                text = "降序",
+                                selected = !controller.sortAscending,
+                                onClick = { controller.updateSortAscending(false) },
+                            ),
+                        ),
+                    ),
+                    DropdownItem(
+                        text = "布局",
+                        summary = controller.layoutMode.label,
+                        children = FmLayoutMode.values().map { mode ->
+                            DropdownItem(
+                                text = mode.label,
+                                selected = controller.layoutMode == mode,
+                                onClick = {
+                                    controller.updateLayoutMode(mode)
+                                    onDismiss()
+                                },
+                            )
+                        },
+                    ),
+                ),
+            )
+        ),
+        onDismissRequest = onDismiss,
+        collapseOnSelection = false,
+    )
+}
+
+@Composable
 private fun FileManagerMiuix(
     controller: FileManagerController,
     onAbout: (List<FsEntry>) -> Unit,
@@ -1724,6 +1944,7 @@ private fun FileManagerMiuix(
     onMove: () -> Unit,
     onTool: (FmTool) -> Unit,
     pageTitle: String,
+    showBackButton: Boolean = true,
 ) {
     val scrollBehavior = MiuixScrollBehavior()
     val density = LocalDensity.current
@@ -1794,6 +2015,7 @@ private fun FileManagerMiuix(
 
     // 退出多选时用上一次的选择渲染，保证胶囊栏有完整的退出动画
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
+    var showViewMenu by remember { mutableStateOf(false) }
     LaunchedEffect(controller.selected) {
         if (controller.selected.isNotEmpty()) barItems = controller.selected
     }
@@ -1829,9 +2051,24 @@ private fun FileManagerMiuix(
             ) { dir ->
                 // 每个目录使用自己的 LazyListState，进出目录和过渡动画都不会重置滚动位置
                 val pageListState = controller.listStateFor(dir.absolutePath)
+                val pageGridState = rememberLazyGridState()
+                val isGrid = controller.layoutMode == FmLayoutMode.GRID
+                val shownEntries = controller.visibleEntries(dir)
+                val showSpecialNotices =
+                    (controller.safMode && controller.safFailed) ||
+                        (controller.dirUnreadable && !controller.safMode && !controller.isInRecycle) ||
+                        (controller.needsAllFiles && !controller.isInRecycle)
                 PullRefreshContainer(
                     canPull = {
-                        pageListState.firstVisibleItemIndex == 0 && pageListState.firstVisibleItemScrollOffset == 0
+                        controller.paintStartIndex < 0 && !controller.isGridPainting && (
+                            if (isGrid) {
+                                pageGridState.firstVisibleItemIndex == 0 &&
+                                    pageGridState.firstVisibleItemScrollOffset == 0
+                            } else {
+                                pageListState.firstVisibleItemIndex == 0 &&
+                                    pageListState.firstVisibleItemScrollOffset == 0
+                            }
+                            )
                     },
                     onRefresh = {
                         controller.reload()
@@ -1841,11 +2078,50 @@ private fun FileManagerMiuix(
                             kotlinx.coroutines.delay(50)
                             waited += 50
                         }
-                        pageListState.scrollToItem(0)
+                        if (isGrid) pageGridState.scrollToItem(0)
+                        else pageListState.scrollToItem(0)
                     },
-                    indicatorTopPadding = topPadding,
+                    indicatorTopPadding = topPadding +
+                            if (hasBreadcrumbRow) breadcrumbHeightDp else 0.dp,
                     uiState = pullUi,
                 ) {
+                if (isGrid) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 86.dp),
+                        state = pageGridState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .overScrollVertical()
+                            .onGloballyPositioned { coords ->
+                                controller.listViewportTop = coords.boundsInWindow().top
+                                controller.listViewportBottom = coords.boundsInWindow().bottom
+                            },
+                        contentPadding = PaddingValues(
+                            top = topPadding +
+                                    if (hasBreadcrumbRow) breadcrumbHeightDp else 0.dp,
+                            bottom = navBottom + 96.dp,
+                        ),
+                        overscrollEffect = null,
+                    ) {
+                        if (showSpecialNotices) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                FmSpecialNotices(controller)
+                            }
+                        }
+                        if (shownEntries.isEmpty() && !controller.reloading) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                FmEmptyPlaceholder(isRecycle = controller.isInRecycle)
+                            }
+                        }
+                        gridItems(
+                            items = shownEntries,
+                            key = { it.file.absolutePath },
+                        ) { entry ->
+                            MiuixEntryGrid(controller, entry, shownEntries)
+                        }
+                    }
+                } else {
                 LazyColumn(
                     state = pageListState,
                     modifier = Modifier
@@ -1863,87 +2139,11 @@ private fun FileManagerMiuix(
                     ),
                     overscrollEffect = null,
                 ) {
-                    if (controller.safMode && controller.safFailed) {
-                        item(key = "saf_failed") {
-                            Card(
-                                modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                                    Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        if (ShizukuBridge.binderAlive()) {
-                                            "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
-                                        } else {
-                                            "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
-                                        },
-                                        fontSize = 12.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
-                                    Spacer(Modifier.height(10.dp))
-                                    top.yukonga.miuix.kmp.basic.Button(
-                                        onClick = { controller.onRequestSafGrant?.invoke() },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text("选择目录授权")
-                                    }
-                                    if (ShizukuBridge.binderAlive()) {
-                                        Spacer(Modifier.height(8.dp))
-                                        top.yukonga.miuix.kmp.basic.Button(
-                                            onClick = {
-                                                if (ShizukuBridge.hasPermission()) {
-                                                    controller.useShizuku()
-                                                } else {
-                                                    ShizukuBridge.requestPermission()
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        ) {
-                                            Text("使用 Shizuku 访问")
-                                        }
-                                    }
-                                }
-                            }
+                    if (showSpecialNotices) {
+                        item(key = "special_notices") {
+                            FmSpecialNotices(controller)
                         }
                     }
-                    if (controller.dirUnreadable && !controller.safMode && !controller.isInRecycle) {
-                        item(key = "unreadable_hint") {
-                            Card(
-                                modifier = Modifier
-                                    .padding(horizontal = 12.dp)
-                                    .padding(bottom = 12.dp),
-                            ) {
-                                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                                    Text(
-                                        "受系统限制，Mote 无法读取该目录",
-                                        fontSize = 15.sp,
-                                        color = MiuixTheme.colorScheme.onSurface,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        "Android 11 起，普通应用不能访问其它应用的 Android/data 目录，可在系统「文件管理」中查看。",
-                                        fontSize = 12.sp,
-                                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (controller.needsAllFiles && !controller.isInRecycle) {
-                        item {
-                            Card(
-                                modifier = Modifier
-                                    .padding(horizontal = 12.dp)
-                                    .padding(bottom = 12.dp),
-                            ) {
-                                ArrowPreference(
-                                    title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
-                                    onClick = { requestAllFiles(controller.context) },
-                                )
-                            }
-                        }
-                    }
-                    val shownEntries = controller.visibleEntries(dir)
                     if (shownEntries.isEmpty() && !controller.reloading) {
                         item(key = "empty_placeholder") {
                             FmEmptyPlaceholder(isRecycle = controller.isInRecycle)
@@ -1952,6 +2152,7 @@ private fun FileManagerMiuix(
                     items(shownEntries) { entry ->
                         MiuixEntryRow(controller, entry)
                     }
+                }
                 }
                 }
             }
@@ -2029,7 +2230,7 @@ private fun FileManagerMiuix(
                             icon = MiuixIcons.ChevronBackward,
                             tint = MiuixTheme.colorScheme.onSurface,
                         )
-                        else -> SettingsBackButton(
+                        showBackButton -> SettingsBackButton(
                             onBack = {
                                 if (!controller.onBackPressed()) controller.onBack()
                             },
@@ -2038,6 +2239,7 @@ private fun FileManagerMiuix(
                             backCardMaterialModifier = backCardMaterialModifier,
                             iconTint = MiuixTheme.colorScheme.onSurface,
                         )
+                        else -> Spacer(Modifier.size(40.dp))
                     }
                 },
                 actions = {
@@ -2052,6 +2254,22 @@ private fun FileManagerMiuix(
                             tint = if (allSelected) MiuixTheme.colorScheme.primary
                             else MiuixTheme.colorScheme.onSurface,
                         )
+                    } else {
+                        Box {
+                            SettingsTopBarAction(
+                                backCardAlpha = backCardAlpha,
+                                backCardMaterialModifier = backCardMaterialModifier,
+                                onClick = { showViewMenu = true },
+                                contentDescription = "排序与布局",
+                                icon = MiuixIcons.More,
+                                tint = MiuixTheme.colorScheme.onSurface,
+                            )
+                            FmViewOptionsPopup(
+                                show = showViewMenu,
+                                controller = controller,
+                                onDismiss = { showViewMenu = false },
+                            )
+                        }
                     }
                 },
             )
@@ -2233,6 +2451,150 @@ private fun PullIndicatorItem(state: PullRefreshUiState) {
         }
     } else {
         Spacer(Modifier.height(0.dp))
+    }
+}
+
+/** 目录顶部的权限 / 无法读取等提示卡片 */
+@Composable
+private fun FmSpecialNotices(controller: FileManagerController) {
+    Column {
+        if (controller.safMode && controller.safFailed) {
+            Card(
+                modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    Text("无法读取该目录", fontSize = 15.sp, color = MiuixTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (ShizukuBridge.binderAlive()) {
+                            "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
+                        } else {
+                            "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
+                        },
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    top.yukonga.miuix.kmp.basic.Button(
+                        onClick = { controller.onRequestSafGrant?.invoke() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("选择目录授权")
+                    }
+                    if (ShizukuBridge.binderAlive()) {
+                        Spacer(Modifier.height(8.dp))
+                        top.yukonga.miuix.kmp.basic.Button(
+                            onClick = {
+                                if (ShizukuBridge.hasPermission()) {
+                                    controller.useShizuku()
+                                } else {
+                                    ShizukuBridge.requestPermission()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("使用 Shizuku 访问")
+                        }
+                    }
+                }
+            }
+        }
+        if (controller.dirUnreadable && !controller.safMode && !controller.isInRecycle) {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    Text(
+                        "受系统限制，Mote 无法读取该目录",
+                        fontSize = 15.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Android 11 起，普通应用不能访问其它应用的 Android/data 目录，可在系统「文件管理」中查看。",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    )
+                }
+            }
+        }
+        if (controller.needsAllFiles && !controller.isInRecycle) {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp),
+            ) {
+                ArrowPreference(
+                    title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
+                    onClick = { requestAllFiles(controller.context) },
+                )
+            }
+        }
+    }
+}
+
+/** Material 版的目录权限提示 */
+@Composable
+private fun FmMaterialSpecialNotices(controller: FileManagerController) {
+    Column {
+        if (controller.safMode && controller.safFailed) {
+            Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                M3Text("无法读取该目录", fontSize = 15.sp, color = M3MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(4.dp))
+                M3Text(
+                    if (ShizukuBridge.binderAlive()) {
+                        "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
+                    } else {
+                        "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
+                    },
+                    fontSize = 12.sp,
+                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.material3.Button(
+                    onClick = { controller.onRequestSafGrant?.invoke() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    M3Text("选择目录授权")
+                }
+                if (ShizukuBridge.binderAlive()) {
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            if (ShizukuBridge.hasPermission()) {
+                                controller.useShizuku()
+                            } else {
+                                ShizukuBridge.requestPermission()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        M3Text("使用 Shizuku 访问")
+                    }
+                }
+            }
+        }
+        if (controller.needsAllFiles && !controller.isInRecycle) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
+                    .padding(bottom = M3_SEGMENT_GROUP_GAP),
+            ) {
+                MoteSegmentedColumn(
+                    content = listOf(
+                        {
+                            M3SegmentArrowItem(
+                                title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
+                                onClick = { requestAllFiles(controller.context) },
+                            )
+                        }
+                    )
+                )
+            }
+        }
     }
 }
 
@@ -2455,13 +2817,46 @@ private fun CategoryListMiuix(
         visible = appeared,
         enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
     ) {
+    val gridState = rememberLazyGridState()
+    val useGrid = controller.layoutMode == FmLayoutMode.GRID
     PullRefreshContainer(
         canPull = {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            controller.paintStartIndex < 0 && !controller.isGridPainting && (
+                if (useGrid) {
+                    gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+                } else {
+                    listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                }
+                )
         },
         onRefresh = { controller.reloadCategory() },
         indicatorTopPadding = topPadding,
     ) {
+    if (useGrid) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 86.dp),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
+            contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
+            overscrollEffect = null,
+        ) {
+            if (controller.categoryFiles.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("没有找到相关文件", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    }
+                }
+            } else {
+                gridItems(
+                    items = controller.categoryFiles,
+                    key = { it.file.absolutePath },
+                ) { entry -> MiuixEntryGrid(controller, entry, controller.categoryFiles) }
+            }
+        }
+    } else {
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -2480,6 +2875,7 @@ private fun CategoryListMiuix(
     }
     }
     }
+    }
 
 }
 
@@ -2495,14 +2891,51 @@ private fun CategoryListMaterial(
         visible = appeared,
         enter = fadeIn(tween(200)) + slideInHorizontally(tween(280)) { it / 8 },
     ) {
+    val gridState = rememberLazyGridState()
+    val useGrid = controller.layoutMode == FmLayoutMode.GRID
     PullRefreshContainer(
         canPull = {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            controller.paintStartIndex < 0 && !controller.isGridPainting && (
+                if (useGrid) {
+                    gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+                } else {
+                    listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+                }
+                )
         },
         onRefresh = { controller.reloadCategory() },
         indicatorTopPadding = 4.dp,
         isMaterial = true,
     ) {
+    if (useGrid) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 86.dp),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().overScrollVertical(),
+            contentPadding = PaddingValues(top = topPadding, bottom = 96.dp),
+            overscrollEffect = null,
+        ) {
+            if (controller.categoryFiles.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        M3Text(
+                            "没有找到相关文件",
+                            fontSize = 13.sp,
+                            color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                gridItems(
+                    items = controller.categoryFiles,
+                    key = { it.file.absolutePath },
+                ) { entry -> MaterialEntryGrid(controller, entry, controller.categoryFiles) }
+            }
+        }
+    } else {
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
@@ -2521,10 +2954,131 @@ private fun CategoryListMaterial(
     }
     }
     }
+    }
 
 }
 
 @OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MiuixEntryGrid(
+    controller: FileManagerController,
+    entry: FsEntry,
+    entries: List<FsEntry>,
+) {
+    val selecting = controller.selecting
+    val selected = controller.isSelected(entry)
+    var suppressClick by remember { mutableStateOf(false) }
+    var cellBounds by remember {
+        mutableStateOf(androidx.compose.ui.geometry.Rect.Zero)
+    }
+    val cellScope = rememberCoroutineScope()
+
+    val onClick: () -> Unit = click@{
+        if (suppressClick) {
+            suppressClick = false
+            return@click
+        }
+        when {
+            selecting -> controller.toggle(entry)
+            entry.isDir -> controller.enter(entry.file)
+            else -> controller.open(entry)
+        }
+    }
+    val summary = if (entry.isDir) "文件夹" else fmFormatSize(entry.size)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .then(
+                if (selected) {
+                    Modifier.background(MiuixTheme.colorScheme.primary.copy(alpha = 0.10f))
+                } else {
+                    Modifier
+                }
+            )
+            .onGloballyPositioned { coords ->
+                val bounds = coords.boundsInWindow()
+                cellBounds = bounds
+                controller.registerGridCell(entry, bounds)
+            }
+            .pointerInput(entry.file.absolutePath) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        suppressClick = true
+                        if (controller.selecting) controller.toggle(entry)
+                        else controller.enterSelection(entry)
+                        controller.beginGridPaint(entry, cellBounds, entries)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        controller.paintGridTo(
+                            androidx.compose.ui.geometry.Offset(
+                                cellBounds.left + change.position.x,
+                                cellBounds.top + change.position.y,
+                            )
+                        )
+                    },
+                    onDragEnd = {
+                        controller.endGridPaint()
+                        cellScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            suppressClick = false
+                        }
+                    },
+                    onDragCancel = {
+                        controller.endGridPaint()
+                        cellScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            suppressClick = false
+                        }
+                    },
+                )
+            }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier.size(52.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            EntryThumb(entry, 44.dp)
+            if (selecting) {
+                Checkbox(
+                    state = if (selected) androidx.compose.ui.state.ToggleableState.On
+                    else androidx.compose.ui.state.ToggleableState.Off,
+                    onClick = null,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(20.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = entry.file.name,
+            fontSize = 12.sp,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            color = MiuixTheme.colorScheme.onSurface,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (summary.isNotBlank()) {
+            Text(
+                text = summary,
+                fontSize = 10.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
 @Composable
 private fun MiuixEntryRow(
     controller: FileManagerController,
@@ -2681,7 +3235,11 @@ private fun loadAppIcon(context: Context, pkg: String): ImageBitmap? = runCatchi
 }.getOrNull()
 
 @Composable
-private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp) {
+internal fun EntryThumb(
+    entry: FsEntry,
+    size: androidx.compose.ui.unit.Dp = 40.dp,
+    greyed: Boolean = false,
+) {
     val context = LocalContext.current
     val bitmap by produceState<ImageBitmap?>(initialValue = null, entry.file.absolutePath) {
         value = when {
@@ -2730,6 +3288,7 @@ private fun EntryThumb(entry: FsEntry, size: androidx.compose.ui.unit.Dp = 40.dp
                     contentDescription = null,
                     tint = when {
                         entry.isDir -> Color(0xFFFFD966)
+                        greyed -> Color.Gray
                         typed != null -> typed.second
                         else -> MiuixTheme.colorScheme.primary
                     },
@@ -2872,6 +3431,7 @@ private fun FileManagerMaterial(
     onMove: () -> Unit,
     onTool: (FmTool) -> Unit,
     pageTitle: String,
+    showBackButton: Boolean = true,
 ) {
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -2885,6 +3445,7 @@ private fun FileManagerMaterial(
 
     var barItems by remember { mutableStateOf<List<FsEntry>>(emptyList()) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showViewMenu by remember { mutableStateOf(false) }
     val materialContext = LocalContext.current
     LaunchedEffect(controller.selected) {
         if (controller.selected.isNotEmpty()) barItems = controller.selected
@@ -2929,17 +3490,58 @@ private fun FileManagerMaterial(
             ) { dir ->
                 // 每个目录独立的列表状态，返回/进入都保持原有滚动进度
                 val materialFileListState = controller.listStateFor(dir.absolutePath)
+                val materialGridState = rememberLazyGridState()
+                val materialIsGrid = controller.layoutMode == FmLayoutMode.GRID
+                val materialEntries = controller.visibleEntries(dir)
+                val materialShowSpecial =
+                    (controller.safMode && controller.safFailed) ||
+                        (controller.needsAllFiles && !controller.isInRecycle)
                 val materialPullUi = remember { PullRefreshUiState() }
                 PullRefreshContainer(
                     canPull = {
-                        materialFileListState.firstVisibleItemIndex == 0 &&
-                            materialFileListState.firstVisibleItemScrollOffset == 0
+                        controller.paintStartIndex < 0 && !controller.isGridPainting && (
+                            if (materialIsGrid) {
+                                materialGridState.firstVisibleItemIndex == 0 &&
+                                    materialGridState.firstVisibleItemScrollOffset == 0
+                            } else {
+                                materialFileListState.firstVisibleItemIndex == 0 &&
+                                    materialFileListState.firstVisibleItemScrollOffset == 0
+                            }
+                            )
                     },
                     onRefresh = { controller.reload() },
                     indicatorTopPadding = 4.dp,
                     uiState = materialPullUi,
                     isMaterial = true,
                 ) {
+                if (materialIsGrid) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 86.dp),
+                        state = materialGridState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection)
+                            .overScrollVertical()
+                            .onGloballyPositioned { coords ->
+                                controller.listViewportTop = coords.boundsInWindow().top
+                                controller.listViewportBottom = coords.boundsInWindow().bottom
+                            },
+                        contentPadding = PaddingValues(bottom = navBottom + 96.dp),
+                        overscrollEffect = null,
+                    ) {
+                        if (materialShowSpecial) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                FmMaterialSpecialNotices(controller)
+                            }
+                        }
+                        gridItems(
+                            items = materialEntries,
+                            key = { it.file.absolutePath },
+                        ) { entry ->
+                            MaterialEntryGrid(controller, entry, materialEntries)
+                        }
+                    }
+                } else {
                 LazyColumn(
                     state = materialFileListState,
                     modifier = Modifier
@@ -2952,69 +3554,17 @@ private fun FileManagerMaterial(
                         },
                     contentPadding = PaddingValues(bottom = navBottom + 96.dp),
                 ) {
-                    if (controller.safMode && controller.safFailed) {
-                        item(key = "saf_failed") {
-                            Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                                M3Text("无法读取该目录", fontSize = 15.sp, color = M3MaterialTheme.colorScheme.onSurface)
-                                Spacer(Modifier.height(4.dp))
-                                M3Text(
-                                    if (ShizukuBridge.binderAlive()) {
-                                        "Android 16+ 已禁止通过系统选择器授权 Android/data。请点击下方「使用 Shizuku 访问」并允许授权。"
-                                    } else {
-                                        "Android 16+ 已禁止通过系统选择器授权 Android/data，需要安装并启动 Shizuku 后使用「使用 Shizuku 访问」。"
-                                    },
-                                    fontSize = 12.sp,
-                                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(10.dp))
-                                androidx.compose.material3.Button(
-                                    onClick = { controller.onRequestSafGrant?.invoke() },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    M3Text("选择目录授权")
-                                }
-                                if (ShizukuBridge.binderAlive()) {
-                                    Spacer(Modifier.height(8.dp))
-                                    androidx.compose.material3.Button(
-                                        onClick = {
-                                            if (ShizukuBridge.hasPermission()) {
-                                                controller.useShizuku()
-                                            } else {
-                                                ShizukuBridge.requestPermission()
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        M3Text("使用 Shizuku 访问")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (controller.needsAllFiles && !controller.isInRecycle) {
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = M3_SEGMENT_LIST_HORIZONTAL_PADDING)
-                                    .padding(bottom = M3_SEGMENT_GROUP_GAP),
-                            ) {
-                                MoteSegmentedColumn(
-                                    content = listOf(
-                                        {
-                                            M3SegmentArrowItem(
-                                                title = "受系统限制，Mote 需要「所有文件访问权限」才能显示全部文件",
-                                                onClick = { requestAllFiles(controller.context) },
-                                            )
-                                        }
-                                    )
-                                )
-                            }
+                    if ((controller.safMode && controller.safFailed) ||
+                        (controller.needsAllFiles && !controller.isInRecycle)
+                    ) {
+                        item(key = "special_notices") {
+                            FmMaterialSpecialNotices(controller)
                         }
                     }
                     items(controller.visibleEntries(dir)) { entry ->
                         MaterialEntryRow(controller, entry)
                     }
+                }
                 }
                 }
             }
@@ -3035,19 +3585,33 @@ private fun FileManagerMaterial(
             M3TopAppBar(
                 title = { M3Text("文件") },
                 navigationIcon = {
-                    M3IconButton(onClick = {
-                        when {
-                            controller.selecting -> controller.exitSelection()
-                            !controller.up() -> controller.onBack()
+                    when {
+                        controller.selecting -> M3IconButton(onClick = { controller.exitSelection() }) {
+                            M3Icon(top.yukonga.miuix.kmp.icon.MiuixIcons.Back, contentDescription = "退出多选")
                         }
-                    }) {
-                        M3Icon(top.yukonga.miuix.kmp.icon.MiuixIcons.Back, contentDescription = "返回")
+                        showBackButton -> M3IconButton(onClick = {
+                            if (!controller.up()) controller.onBack()
+                        }) {
+                            M3Icon(top.yukonga.miuix.kmp.icon.MiuixIcons.Back, contentDescription = "返回")
+                        }
+                        else -> Spacer(Modifier.size(48.dp))
                     }
                 },
                 actions = {
                     if (controller.selecting) {
                         M3IconButton(onClick = { controller.toggleSelectAll() }) {
                             M3Icon(Icons.Filled.SelectAll, contentDescription = "全选")
+                        }
+                    } else {
+                        Box {
+                            M3IconButton(onClick = { showViewMenu = true }) {
+                                M3Icon(MiuixIcons.More, contentDescription = "排序与布局")
+                            }
+                            FmViewOptionsPopup(
+                                show = showViewMenu,
+                                controller = controller,
+                                onDismiss = { showViewMenu = false },
+                            )
                         }
                     }
                 },
@@ -3153,6 +3717,128 @@ private fun FileManagerMaterial(
 
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MaterialEntryGrid(
+    controller: FileManagerController,
+    entry: FsEntry,
+    entries: List<FsEntry>,
+) {
+    val selecting = controller.selecting
+    val selected = controller.isSelected(entry)
+    var suppressClick by remember { mutableStateOf(false) }
+    var cellBounds by remember {
+        mutableStateOf(androidx.compose.ui.geometry.Rect.Zero)
+    }
+    val cellScope = rememberCoroutineScope()
+
+    val onClick: () -> Unit = click@{
+        if (suppressClick) {
+            suppressClick = false
+            return@click
+        }
+        when {
+            selecting -> controller.toggle(entry)
+            entry.isDir -> controller.enter(entry.file)
+            else -> controller.open(entry)
+        }
+    }
+    val summary = if (entry.isDir) "文件夹" else fmFormatSize(entry.size)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .then(
+                if (selected) {
+                    Modifier.background(
+                        M3MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .onGloballyPositioned { coords ->
+                val bounds = coords.boundsInWindow()
+                cellBounds = bounds
+                controller.registerGridCell(entry, bounds)
+            }
+            .pointerInput(entry.file.absolutePath) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        suppressClick = true
+                        if (controller.selecting) controller.toggle(entry)
+                        else controller.enterSelection(entry)
+                        controller.beginGridPaint(entry, cellBounds, entries)
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        controller.paintGridTo(
+                            androidx.compose.ui.geometry.Offset(
+                                cellBounds.left + change.position.x,
+                                cellBounds.top + change.position.y,
+                            )
+                        )
+                    },
+                    onDragEnd = {
+                        controller.endGridPaint()
+                        cellScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            suppressClick = false
+                        }
+                    },
+                    onDragCancel = {
+                        controller.endGridPaint()
+                        cellScope.launch {
+                            kotlinx.coroutines.delay(300)
+                            suppressClick = false
+                        }
+                    },
+                )
+            }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier.size(52.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            EntryThumb(entry, 44.dp)
+            if (selecting) {
+                androidx.compose.material3.Checkbox(
+                    checked = selected,
+                    onCheckedChange = null,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(20.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        M3Text(
+            text = entry.file.name,
+            fontSize = 12.sp,
+            color = M3MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (summary.isNotBlank()) {
+            M3Text(
+                text = summary,
+                fontSize = 10.sp,
+                color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MaterialEntryRow(

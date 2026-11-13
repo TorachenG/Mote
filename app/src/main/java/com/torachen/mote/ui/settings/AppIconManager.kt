@@ -26,10 +26,11 @@ internal data class AppIconOption(
 
 internal val APP_ICON_OPTIONS: List<AppIconOption> = listOf(
     AppIconOption("default", "默认", R.mipmap.ic_logo, ".IconDefault", "默认"),
-    AppIconOption("sparkle", "星芒", R.mipmap.ic_logo_sparkle, ".IconSparkle", "默认"),
-    AppIconOption("tri_blue", "蓝色", R.mipmap.ic_logo_triangle_blue, ".IconNetwork", "三角"),
-    AppIconOption("tri_green", "绿色", R.mipmap.ic_logo_triangle_green, ".IconWave", "三角"),
-    AppIconOption("tri_island", "岛屿", R.mipmap.ic_logo_triangle_island, ".IconOrbit", "三角"),
+    AppIconOption("sparkle", "星芒", R.mipmap.ic_logo_sparkle, ".IconSparkle", "星芒"),
+    AppIconOption("sparkle_aurora", "极光", R.mipmap.ic_logo_sparkle_aurora, ".IconNetwork", "星芒"),
+    AppIconOption("sparkle_blue", "湛蓝", R.mipmap.ic_logo_sparkle_blue, ".IconWave", "星芒"),
+    AppIconOption("sparkle_neon", "霓虹", R.mipmap.ic_logo_sparkle_neon, ".IconOrbit", "星芒"),
+    AppIconOption("planet", "星球", R.mipmap.ic_logo_planet, ".IconPlanet", "星球"),
 )
 
 internal object AppIconManager {
@@ -39,7 +40,14 @@ internal object AppIconManager {
     fun currentId(context: Context): String {
         val prefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
         val saved = prefs.getString(KEY_APP_ICON, null)
-        return if (APP_ICON_OPTIONS.any { it.id == saved }) saved!! else APP_ICON_OPTIONS.first().id
+        // 旧的三角图标别名已改为星芒系列，保留已选中的桌面图标
+        val migrated = when (saved) {
+            "tri_blue" -> "sparkle_aurora"
+            "tri_green" -> "sparkle_blue"
+            "tri_island" -> "sparkle_neon"
+            else -> saved
+        }
+        return if (APP_ICON_OPTIONS.any { it.id == migrated }) migrated!! else APP_ICON_OPTIONS.first().id
     }
 
     /**

@@ -57,7 +57,6 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -104,7 +103,7 @@ fun DownloadsShell(
             "Mote",
         )
         runCatching { if (!target.exists()) target.mkdirs() }
-        fileController.enter(target)
+        fileController.enterList(target)
         materialTab = 1
         scope.launch { pagerState.animateScrollToPage(1) }
     }
@@ -207,6 +206,7 @@ private fun DownloadsShellMiuix(
                         onOpenTaskDetail = onOpenTaskDetail,
                         onSelectionModeChange = onDownloadsSelectingChange,
                         onOpenDownloadsFolder = onOpenDownloadsFolder,
+                        showBackButton = true,
                     )
                 } else {
                     FileManagerPage(
@@ -217,32 +217,11 @@ private fun DownloadsShellMiuix(
                         onOpenScanner = onOpenScanner,
                         onOpenFileSettings = onOpenFileSettings,
                         onSubPageChange = onFilesSubPageChange,
+                        showBackButton = true,
                     )
                 }
             }
         }
-
-        // 固定返回按钮：不随两个页签的切页动画移动
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(
-                    start = 8.dp,
-                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 6.dp,
-                )
-                .size(48.dp)
-                .clip(androidx.compose.foundation.shape.CircleShape)
-                .clickable { onBack() },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = MiuixIcons.ChevronBackward,
-                contentDescription = "返回",
-                tint = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-
 
         AnimatedVisibility(
             visible = navBarVisible,

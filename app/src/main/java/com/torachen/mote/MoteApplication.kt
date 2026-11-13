@@ -6,6 +6,9 @@ import android.content.SharedPreferences
 import android.util.Log
 import com.aptabase.Aptabase
 import com.torachen.mote.ui.MoteAppContextHolder
+import com.torachen.mote.ui.ai.AiChatStore
+import com.torachen.mote.ui.ai.AiProviderStore
+import com.torachen.mote.ui.ai.AiSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,6 +22,13 @@ class MoteApplication : Application() {
         super.onCreate()
         MoteAppContextHolder.appContext = applicationContext
         installCrashHandler()
+
+        // AI 助手：提前恢复服务配置与对话记录，保证进入页面时状态完整
+        runCatching {
+            AiProviderStore.ensureLoaded(this)
+            AiSettings.ensureLoaded(this)
+            AiChatStore.ensureLoaded(this)
+        }
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         repairLongPrefs(prefs)

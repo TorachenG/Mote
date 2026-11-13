@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Mote</string>
+    <string name="accessibility_service_label">Mote AI自动操作</string>
+    <string name="accessibility_service_description">允许 Mote AI 在自动操作模式下读取当前屏幕、点击控件和输入文字，以完成用户下达的手机操作任务。该权限仅在你主动开启自动操作时使用。</string>
 </resources>

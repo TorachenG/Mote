@@ -1,6 +1,3 @@
-@file:Suppress("UseKtx", "SpellCheckingInspection")
-@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-
 package com.torachen.mote.ui
 
 
@@ -106,6 +103,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -337,7 +336,6 @@ import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.SelectAll
 import top.yukonga.miuix.kmp.icon.extended.Translate
 import top.yukonga.miuix.kmp.icon.extended.Rename
-import top.yukonga.miuix.kmp.icon.extended.RecordingTape
 import top.yukonga.miuix.kmp.icon.extended.AppRecording
 import top.yukonga.miuix.kmp.icon.extended.Close2
 import top.yukonga.miuix.kmp.icon.extended.Delete
@@ -345,10 +343,13 @@ import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Weeks
+import top.yukonga.miuix.kmp.icon.extended.Months
 import top.yukonga.miuix.kmp.icon.extended.Notes
+import top.yukonga.miuix.kmp.icon.extended.Pin
 import top.yukonga.miuix.kmp.icon.extended.Forward
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Pause
+import top.yukonga.miuix.kmp.icon.extended.MindMap
 import top.yukonga.miuix.kmp.icon.extended.Music
 import top.yukonga.miuix.kmp.icon.extended.Filter
 import top.yukonga.miuix.kmp.icon.extended.Lock
@@ -364,6 +365,16 @@ import com.torachen.mote.service.UserScriptStore
 import com.torachen.mote.ui.scripts.ScriptEditorPage
 import com.torachen.mote.ui.scripts.ScriptsNavArgs
 import com.torachen.mote.ui.scripts.ScriptsPage
+import com.torachen.mote.ui.ai.AiChatPage
+import com.torachen.mote.ui.ai.AiGeneratedFilesRequest
+import com.torachen.mote.ui.ai.AiWebContext
+import com.torachen.mote.ui.ai.AiWebPageInfo
+import com.torachen.mote.ui.ai.AiFloatingController
+import com.torachen.mote.ui.ai.AiProviderEditPage
+import com.torachen.mote.ui.ai.AiProviderNav
+import com.torachen.mote.ui.ai.AiProvidersPage
+import com.torachen.mote.R
+import com.torachen.mote.ui.ai.AiSettingsPage
 import com.torachen.mote.ui.filemanager.FileManagerSettingsPage
 import com.torachen.mote.ui.filemanager.LocalFileViewerRequest
 import com.torachen.mote.ui.filemanager.LocalFileViewerState
@@ -377,12 +388,17 @@ import com.materialkolor.rememberDynamicColorScheme
 import org.json.JSONArray
 import org.json.JSONObject
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.lang.ref.WeakReference
@@ -412,6 +428,9 @@ private const val STYLE_ID_NO_IMG = "__mote_noimg__"
 
 private const val MAX_HISTORY_SIZE = 500
 private const val MAX_BOOKMARK_SIZE = 1000
+
+/** 除更新提示外，所有 Snackbar 统一显示 2 秒。 */
+internal val Snackbar2s = SnackbarDuration.Custom(2_000L)
 private const val MAX_SEARCH_HISTORY_SIZE = 20
 
 private const val SHAKE_G_FORCE_THRESHOLD = 2.1f
@@ -486,6 +505,8 @@ internal object PendingJsDialogStore {
 
 internal object SettingsLayoutNavArgs {
     var initialTab: Int = 0
+    /** 上次停留的标签页，切换界面风格导致页面重建时用它恢复，避免跳回浏览器页 */
+    var currentTab: Int = 0
     var flashSearchHistoryOnEnter: Boolean = false
 }
 
@@ -516,6 +537,13 @@ internal object GlobalOverlayState {
     var isOpen by mutableStateOf(false)
 }
 
+/** 浏览器工具栏请求打开 AI 对话；由页面栈统一消费。 */
+internal object AiChatLaunchRequest {
+    var pending by mutableStateOf(false)
+}
+
+/** AI 对话请求在浏览器中打开网址或本地 HTML。 */
+
 // ★ 新增：用于在 Activity 重建时保留页面栈和窗口数据
 internal object PageNavigationStateHolder {
     val pageStack = mutableStateListOf(PageEntry(id = "browser_0", route = "browser"))
@@ -524,6 +552,11 @@ internal object PageNavigationStateHolder {
 internal object BrowserWindowStateHolder {
     val windows = mutableStateListOf<BrowserWindow>()
     var activeWindowId: String? = null
+}
+
+/** BrowserScreen 创建的全部 WebView，供悬浮 AI 读取所有窗口正文。 */
+internal object BrowserWebViewRegistry {
+    val webViews = mutableMapOf<String, WebView>()
 }
 private class SearchQueryHolder {
     var value: String = ""
@@ -982,7 +1015,7 @@ private fun getMobileUserAgent(context: Context): String {
     }
 }
 
-private fun getBaseDomain(host: String): String {
+internal fun getBaseDomain(host: String): String {
     if (host.isBlank()) return ""
     val parts = host.split(".")
     return if (parts.size >= 2) parts.takeLast(2).joinToString(".") else host
@@ -1003,6 +1036,42 @@ private fun extractSearchQueryFromUrl(url: String): String? {
     } catch (_: Exception) {
         null
     }
+}
+
+private fun searchQueryForResultPage(
+    url: String,
+    searchEngines: List<Pair<String, String>>,
+): String? {
+    if (url.isBlank()) return null
+    val urlObj = try { url.toUri() } catch (_: Exception) { null } ?: return null
+    val engineBase = searchEngines.firstOrNull { (_, pattern) ->
+        val p = pattern.substringAfter("://").substringBefore("/")
+        val pBase = getBaseDomain(p)
+        val uBase = getBaseDomain(urlObj.host ?: "")
+        pBase.isNotBlank() && pBase == uBase
+    } ?: return null
+    val path = (urlObj.path ?: "").lowercase()
+    val urlQuery = extractSearchQueryFromUrl(url)
+    // 抖音等站点的搜索词在路径里：/search/关键词
+    val pathQuery = if (engineBase.first == "抖音") {
+        val segments = urlObj.pathSegments
+        val index = segments.indexOfFirst { it == "search" }
+        segments.getOrNull(index + 1)?.takeIf { it.isNotBlank() }
+    } else {
+        null
+    }
+    val effectiveQuery = urlQuery?.takeIf { it.isNotBlank() } ?: pathQuery
+    val isResult = when {
+        !effectiveQuery.isNullOrBlank() -> true
+        engineBase.first == "百度" || engineBase.first == "神马" -> path.startsWith("/s")
+        engineBase.first == "必应" || engineBase.first == "抖音" || engineBase.first == "谷歌" ->
+            path.startsWith("/search")
+        engineBase.first == "搜狗" ->
+            path.startsWith("/web/searchList") || path.startsWith("/s")
+        engineBase.first == "自定义" -> urlQuery != null
+        else -> false
+    }
+    return if (isResult) effectiveQuery else null
 }
 
 private fun formatHistoryTime(timestamp: Long): String {
@@ -1314,7 +1383,20 @@ private val JS_DETECT_PAGE_THEME_COLOR = """
 })();
 """.trimIndent()
 
-private fun parsePageThemeColors(raw: String?): Pair<Int?, Int?> {
+private fun darkenForNightMode(argb: Int): Int {
+    val a = (argb ushr 24) and 0xFF
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    val lum = (0.2126f * r + 0.7152f * g + 0.0722f * b) / 255f
+    if (lum <= 0.35f) return argb
+    val nr = (r * 0.10f + 4f).toInt().coerceIn(0, 255)
+    val ng = (g * 0.10f + 4f).toInt().coerceIn(0, 255)
+    val nb = (b * 0.10f + 4f).toInt().coerceIn(0, 255)
+    return (a shl 24) or (nr shl 16) or (ng shl 8) or nb
+}
+
+private fun parsePageThemeColors(raw: String?, nightMode: Boolean = false): Pair<Int?, Int?> {
     if (raw.isNullOrBlank()) return null to null
     val value = raw.trim().trim('"').trim()
     if (value.isEmpty()) return null to null
@@ -1330,7 +1412,13 @@ private fun parsePageThemeColors(raw: String?): Pair<Int?, Int?> {
     }
 
     val parts = value.split("|", limit = 2)
-    return parseHex(parts.getOrNull(0)) to parseHex(parts.getOrNull(1))
+    val top = parseHex(parts.getOrNull(0))
+    val bottom = parseHex(parts.getOrNull(1))
+    return if (nightMode) {
+        top?.let(::darkenForNightMode) to bottom?.let(::darkenForNightMode)
+    } else {
+        top to bottom
+    }
 }
 
 
@@ -2371,21 +2459,108 @@ private fun isSystemDarkMode(context: Context): Boolean {
 }
 
 
+@Composable
+private fun BrowserNightModeSync(
+    activeWindowId: String?,
+    immersivePageEnabled: Boolean,
+    globalNightMode: Boolean,
+    onNightModeChange: (Boolean) -> Unit,
+) {
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    val surface = MiuixTheme.colorScheme.surface
+    val isUiDarkMode = surface.luminance() < 0.5f
+    val systemDark = (LocalConfiguration.current.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+    val windows = BrowserWindowStateHolder.windows
+    val webViews = BrowserWebViewRegistry.webViews
+    val scope = rememberCoroutineScope()
+
+    fun updateWindow(id: String, block: (BrowserWindow) -> Unit) {
+        val index = windows.indexOfFirst { it.id == id }
+        if (index >= 0) windows[index] = windows[index].copy().also(block)
+    }
+
+    fun refreshColors() {
+        val id = activeWindowId ?: return
+        val wv = webViews[id] ?: return
+        val night = windows.firstOrNull { it.id == id }?.nightMode == true
+        scope.launch {
+            // 等原生深色重绘/页面加载完成后再采样，避免取到旧颜色
+            delay(80)
+            try {
+                wv.evaluateJavascript(buildPageThemeColorScript(night)) { raw ->
+                    val (top, bottom) = parsePageThemeColors(raw, night)
+                    updateWindow(id) {
+                        it.themeColor = top
+                        it.bottomThemeColor = bottom
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    LaunchedEffect(isUiDarkMode, systemDark) {
+        val mode = prefs.getInt("web_night_mode", 0)
+        if (mode != 0) return@LaunchedEffect
+        val enabled = isUiDarkMode || systemDark
+        onNightModeChange(enabled)
+        // 跟随系统时系统深浅变化要立即套用到所有已打开网页，不能等刷新
+        windows.forEach { win ->
+            updateWindow(win.id) { it.nightMode = enabled }
+            webViews[win.id]?.let { applyNightModeToWebView(it, enabled) }
+        }
+        refreshColors()
+    }
+
+    LaunchedEffect(immersivePageEnabled, activeWindowId) { refreshColors() }
+    LaunchedEffect(globalNightMode) { refreshColors() }
+}
+
 private fun applyNightModeToWebView(wv: WebView, enabled: Boolean) {
-    // 网页的深色状态完全由夜间模式决定（伪造 prefers-color-scheme + color-scheme），
-    // 不再叠加系统算法暗化或 Dark Reader 反色，避免同一页面被压暗两次。
-    // 夜间使用时的整体调暗交给「夜间模式 → 调暗页面」的 UI 蒙版。
+    // 优先使用 WebView 原生深色：不注入 Dark Reader，切换时立即重绘，
+    // 关闭后也能恢复网页原本的浅色，不需要刷新页面。
+    var nativeApplied = false
     try {
-        wv.evaluateJavascript(buildColorSchemeScript(enabled), null)
-    } catch (_: Exception) {}
-    NightModeScriptHandlers.remove(wv)
-    try {
-        if (isNativeDarkModeSupported()) {
-            WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, false)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, enabled)
+            nativeApplied = true
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(
+                wv.settings,
+                if (enabled) WebSettingsCompat.FORCE_DARK_ON
+                else WebSettingsCompat.FORCE_DARK_OFF,
+            )
+            nativeApplied = true
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+            WebSettingsCompat.setForceDarkStrategy(
+                wv.settings,
+                if (enabled) {
+                    WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING
+                } else {
+                    WebSettingsCompat.DARK_STRATEGY_USER_AGENT_DARKENING_ONLY
+                },
+            )
         }
     } catch (_: Exception) {}
-    try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
-    try { wv.evaluateJavascript(JS_DARK_READER_OFF, null) } catch (_: Exception) {}
+
+    NightModeScriptHandlers.remove(wv)
+    if (!nativeApplied) {
+        // 老版本 WebView 没有原生算法暗色时的兜底
+        try { wv.evaluateJavascript(buildColorSchemeScript(enabled), null) } catch (_: Exception) {}
+        try {
+            wv.evaluateJavascript(
+                if (enabled) buildDarkReaderScript(false) else JS_DARK_READER_OFF,
+                null,
+            )
+        } catch (_: Exception) {}
+        try { wv.evaluateJavascript(JS_NIGHT_OFF, null) } catch (_: Exception) {}
+    }
     try {
         wv.setBackgroundColor(
             if (enabled) {
@@ -2857,6 +3032,7 @@ data class ToolDef(
     val isToggle: Boolean = false,
     val customIcon: (@Composable (isActive: Boolean) -> Unit)? = null,
     val customItem: (@Composable (isActive: Boolean) -> Unit)? = null,
+    val specialAction: ((Context) -> Unit)? = null,
 )
 
 data class BrowserWindow(
@@ -2878,6 +3054,28 @@ data class BrowserWindow(
     var themeColor: Int? = null,
     var bottomThemeColor: Int? = null,
 )
+
+/** 把浏览器窗口快照和当前正文同步给悬浮 AI / 对话 AI。 */
+@Composable
+private fun AiWebContextPoller() {
+    LaunchedEffect(Unit) {
+        while (true) {
+            val windows = BrowserWindowStateHolder.windows
+            val activeWindowId = BrowserWindowStateHolder.activeWindowId
+            AiWebContext.updatePages(
+                windows.map { window ->
+                    AiWebPageInfo(
+                        id = window.id,
+                        title = window.title,
+                        url = window.url,
+                        isActive = window.id == activeWindowId,
+                    )
+                },
+            )
+            delay(2_000L)
+        }
+    }
+}
 
 data class HistoryEntry(
     val title: String,
@@ -2969,7 +3167,31 @@ fun rememberScreenCornerRadius(fallback: Dp = 28.dp): Dp {
 }
 
 internal fun defaultTools(): List<ToolDef> = listOf(
+    ToolDef(
+        id = "ai_chat",
+        title = "Mote AI",
+        icon = MiuixIcons.MindMap,
+        customIcon = { isActive ->
+            Image(
+                painter = painterResource(id = R.mipmap.mote_logo),
+                contentDescription = "Mote AI",
+                modifier = Modifier.size(26.dp),
+                colorFilter = ColorFilter.tint(
+                    if (isActive) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onSurface,
+                ),
+            )
+        },
+    ),
     ToolDef("bookmarks", "书签列表", MiuixIcons.FavoritesFill),
+    ToolDef(
+        id = "ai_summarize",
+        title = "总结网页",
+        icon = MiuixIcons.Pin,
+        specialAction = { ctx ->
+            AiFloatingController.openPanelWithPrompt(ctx, "帮我总结当前网页")
+        },
+    ),
     ToolDef("history", "历史记录", MiuixIcons.Recent),
     ToolDef("downloads", "下载/文件", MiuixIcons.Download),
     ToolDef("refresh", "刷新网页", MiuixIcons.Refresh),
@@ -2984,7 +3206,7 @@ internal fun defaultTools(): List<ToolDef> = listOf(
     ToolDef("zoom", "网页缩放", MiuixIcons.VerticalSplit),
     ToolDef("translate", "网页翻译", MiuixIcons.Translate, isToggle = true),
     ToolDef("print", "打印/PDF", MiuixIcons.Rename),
-    ToolDef("sniff", "资源嗅探", MiuixIcons.RecordingTape),
+    ToolDef("sniff", "资源嗅探", MiuixIcons.Months),
     ToolDef("view_source", "网页源码", MiuixIcons.Weeks),
     ToolDef("run_script", "脚本", MiuixIcons.Notes),
     ToolDef("play_in_player", "播放视频", MiuixIcons.Play),
@@ -3367,6 +3589,7 @@ class MainActivity : ComponentActivity() {
             MoteThemeWrapper {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     Box(modifier = Modifier.fillMaxSize()) {
+                        AiWebContextPoller()
                         AppRoot()
                         PrivacyPolicyDialog()
                         WebPermissionDialogHost()
@@ -3443,6 +3666,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AiFloatingController.stopTemporary(this)
         try {
             window.decorView.requestApplyInsets()
 
@@ -3928,6 +4152,13 @@ fun AppRoot() {
         }
     }
 
+    LaunchedEffect(AiChatLaunchRequest.pending) {
+        if (AiChatLaunchRequest.pending) {
+            AiChatLaunchRequest.pending = false
+            if (pageStack.none { it.route == "ai_chat" }) pushPage("ai_chat")
+        }
+    }
+
     val openSettings: () -> Unit = remember { { pushPage("settings_main") } }
     val openScanner: () -> Unit = remember { { pushPage("scanner") } }
     val handlePop: () -> Unit = remember { { popPage() } }
@@ -4055,6 +4286,25 @@ fun AppRoot() {
                         pushPage("downloads")
                     }
                     PendingOpenDownloadsStore.pending = false
+                }
+            }
+
+            val openGeneratedFiles = AiGeneratedFilesRequest.pending
+            LaunchedEffect(openGeneratedFiles) {
+                if (openGeneratedFiles) {
+                    val dir = File(
+                        Environment.getExternalStorageDirectory(),
+                        "Download/Mote",
+                    ).apply { mkdirs() }
+                    FileManagerDirRequest.path = dir.absolutePath
+                    FileManagerDirRequest.category = null
+                    FileManagerDirRequest.title = "生成的文件"
+                    FileManagerDirRequest.fromShortcut = false
+                    FileManagerDirRequest.token = System.nanoTime()
+                    if (pageStack.lastOrNull()?.route != "file_manager_dir") {
+                        pushPage("file_manager_dir")
+                    }
+                    AiGeneratedFilesRequest.pending = false
                 }
             }
         }
@@ -4208,6 +4458,27 @@ private fun RenderPageContent(
                 onBack = { onPop() },
                 onOpenDoc = { docRoute -> onPush(docRoute) },
             )
+            // ★ Mote AI：对话页 + 设置页 + 服务配置页
+            "ai_chat" -> AiChatPage(
+                onBack = { onPop() },
+                onOpenSettings = { onPush("settings_ai") },
+            )
+            "settings_ai" -> AiSettingsPage(
+                onBack = { onPop() },
+                onOpenProviders = { onPush("ai_providers") },
+            )
+            "ai_providers" -> AiProvidersPage(
+                onBack = { onPop() },
+                onEditProvider = { id ->
+                    AiProviderNav.openExisting(id)
+                    onPush("ai_provider_edit")
+                },
+                onAddPreset = { presetId ->
+                    AiProviderNav.openPreset(presetId)
+                    onPush("ai_provider_edit")
+                },
+            )
+            "ai_provider_edit" -> AiProviderEditPage(onBack = { onPop() })
             // ★ 法律文档：开源许可 / 第三方许可 / 隐私政策 / 用户协议 / 体验改进计划
             in LEGAL_DOC_ROUTES -> LegalDocumentPage(
                 route = entry.route,
@@ -4339,6 +4610,10 @@ private fun routeTitle(route: String): String = when (route) {
     "settings_home" -> "主页设置"
     "settings_search" -> "搜索设置"
     "settings_custom_engines" -> "默认搜索引擎"
+    "ai_chat" -> "Mote AI"
+    "settings_ai" -> "AI 设置"
+    "ai_providers" -> "AI 服务"
+    "ai_provider_edit" -> "AI 服务"
     "settings_web" -> "网页浏览设置"
     "settings_icon" -> "图标"
     "settings_layout" -> "主题与界面"
@@ -4493,6 +4768,10 @@ private fun BrowserHeader(
     bottomInset: Dp = 0.dp,
     containerColor: Color = Color.Transparent,
 ) {
+    var headerTop by remember { mutableFloatStateOf(0f) }
+    var headerBottom by remember { mutableFloatStateOf(0f) }
+    var headerWidth by remember { mutableIntStateOf(0) }
+
     val fieldSlot: @Composable () -> Unit = {
         if (fused) {
             Row(
@@ -4513,40 +4792,81 @@ private fun BrowserHeader(
             inputField()
         }
     }
-    if (atBottom) {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .background(containerColor)
-                .padding(bottom = bottomInset),
-        ) {
-            Spacer(Modifier.height(4.dp))
-            engineSwitcher()
-            BottomSearchBar(
-                inputField = fieldSlot,
-                outsideEndAction = outsideEndAction,
-                expanded = expanded,
-                onExpandedChange = onExpandedChange,
-                content = content,
-            )
-            trailing()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords ->
+                val bounds = coords.boundsInWindow()
+                headerTop = bounds.top
+                headerBottom = bounds.bottom
+                headerWidth = coords.size.width
+            },
+    ) {
+        if (atBottom) {
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .background(containerColor)
+                    .padding(bottom = bottomInset),
+            ) {
+                Spacer(Modifier.height(4.dp))
+                engineSwitcher()
+                BottomSearchBar(
+                    inputField = fieldSlot,
+                    outsideEndAction = outsideEndAction,
+                    expanded = expanded,
+                    onExpandedChange = onExpandedChange,
+                    content = {},
+                )
+                trailing()
+            }
+        } else {
+            Column(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .background(containerColor)
+                    .statusBarsPadding(),
+            ) {
+                SearchBar(
+                    inputField = fieldSlot,
+                    onExpandedChange = onExpandedChange,
+                    expanded = expanded,
+                    outsideEndAction = outsideEndAction,
+                    content = {},
+                )
+                engineSwitcher()
+                Spacer(Modifier.height(4.dp))
+            }
         }
-    } else {
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .background(containerColor)
-                .statusBarsPadding(),
-        ) {
-            SearchBar(
-                inputField = fieldSlot,
-                onExpandedChange = onExpandedChange,
-                expanded = expanded,
-                outsideEndAction = outsideEndAction,
-                content = content,
-            )
-            engineSwitcher()
-            Spacer(Modifier.height(4.dp))
+
+        // 搜索建议/历史用 Popup 浮在网页上方，而不是撑高标题栏。
+        // 这样点搜索框只显示浮层，WebView 的尺寸、全屏状态和页面布局都不会变化。
+        if (expanded && headerWidth > 0 && headerBottom > headerTop) {
+            val headerHeight = (headerBottom - headerTop).roundToInt()
+            val offsetY = if (atBottom) -headerHeight else headerHeight
+            val popupShape = if (atBottom) {
+                RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+            } else {
+                RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)
+            }
+            Popup(
+                alignment = if (atBottom) Alignment.BottomStart else Alignment.TopStart,
+                offset = IntOffset(0, offsetY),
+                properties = PopupProperties(
+                    focusable = false,
+                    dismissOnClickOutside = false,
+                    dismissOnBackPress = false,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(with(LocalDensity.current) { headerWidth.toDp() })
+                        .clip(popupShape)
+                        .background(containerColor),
+                ) {
+                    content()
+                }
+            }
         }
     }
 }
@@ -4905,6 +5225,447 @@ private fun BrowserBottomBar(
     }
 }
 
+private fun fusedHeaderEnter() = fadeIn(tween(160)) + expandHorizontally(
+    animationSpec = tween(
+        durationMillis = 240,
+        easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f),
+    ),
+)
+
+private fun fusedHeaderExit() = fadeOut(tween(120)) + shrinkHorizontally(
+    animationSpec = tween(
+        durationMillis = 200,
+        easing = CubicBezierEasing(0.4f, 0f, 1f, 1f),
+    ),
+)
+
+@Composable
+private fun FusedHeaderLeading(
+    focused: Boolean,
+    scanEnabled: Boolean,
+    tint: Color,
+    backEnabled: Boolean,
+    onBack: () -> Unit,
+    tool: ToolDef?,
+    onTool: (String) -> Unit,
+    onScan: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AnimatedVisibility(
+            visible = !focused,
+            enter = fusedHeaderEnter(),
+            exit = fusedHeaderExit(),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = backEnabled, onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.ChevronBackward,
+                        contentDescription = "后退",
+                        tint = if (backEnabled) tint else tint.copy(alpha = 0.3f),
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+                tool?.let {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .clickable { onTool(it.id) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (it.customIcon != null) {
+                            it.customIcon(true)
+                        } else {
+                            Icon(
+                                imageVector = it.icon,
+                                contentDescription = it.title,
+                                tint = tint,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = focused && scanEnabled,
+            enter = fusedHeaderEnter(),
+            exit = fusedHeaderExit(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onScan),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.Scan,
+                    contentDescription = "扫一扫",
+                    tint = tint,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FusedHeaderTrailing(
+    visible: Boolean,
+    tint: Color,
+    windowCount: Int,
+    pulseTrigger: Int,
+    onOpenWindows: () -> Unit,
+    onOpenTools: () -> Unit,
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fusedHeaderEnter(),
+        exit = fusedHeaderExit(),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenWindows),
+                contentAlignment = Alignment.Center,
+            ) {
+                WindowManagerIcon(
+                    count = windowCount,
+                    tint = tint,
+                    pulseTrigger = pulseTrigger,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenTools),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.GridView,
+                    contentDescription = "工具栏",
+                    tint = tint,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BrowserHeaderInputRow(
+    fusedDualPane: Boolean,
+    activeWindow: BrowserWindow?,
+    titleChrome: ChromePalette,
+    urlInput: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    onSearch: () -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+    label: String,
+    scanModuleEnabled: Boolean,
+    searchFocused: Boolean,
+    onScan: () -> Unit,
+    onFaviconClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (!fusedDualPane) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .clickable(onClick = onFaviconClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                FaviconOrFallback(
+                    favicon = activeWindow?.favicon,
+                    size = 22.dp,
+                    fallbackTint = titleChrome.contentColor,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+        }
+
+        MoteUrlInputField(
+            value = urlInput,
+            onValueChange = onValueChange,
+            onSearch = onSearch,
+            expanded = expanded,
+            onExpandedChange = onExpandedChange,
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { onFocusChanged(it.isFocused) },
+            label = label,
+            contentColor = titleChrome.contentColor,
+            leadingIconTint = titleChrome.contentColor.copy(alpha = 0.2f),
+        )
+
+        AnimatedVisibility(
+            visible = scanModuleEnabled && !searchFocused && !fusedDualPane,
+            enter = expandHorizontally(
+                animationSpec = tween(durationMillis = 220),
+                expandFrom = Alignment.Start,
+            ) + fadeIn(tween(durationMillis = 160)),
+            exit = shrinkHorizontally(
+                animationSpec = tween(durationMillis = 220),
+                shrinkTowards = Alignment.Start,
+            ) + fadeOut(tween(durationMillis = 160)),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.width(4.dp))
+                MiuixCircleIconButton(onClick = onScan, size = 32.dp) {
+                    Icon(
+                        imageVector = MiuixIcons.Scan,
+                        contentDescription = "扫一扫",
+                        tint = titleChrome.contentColor,
+                        modifier = Modifier.size(25.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.BrowserHeaderExpandedContent(
+    focused: Boolean,
+    inputText: String,
+    headerAtBottom: Boolean,
+    contentAnimAnchor: Alignment.Vertical,
+    titleChrome: ChromePalette,
+    suggestions: List<String>,
+    forceHideHistory: Boolean,
+    historyEnabled: Boolean,
+    searchHistory: List<String>,
+    incognito: Boolean,
+    context: Context,
+    prefs: android.content.SharedPreferences,
+    onInputChange: (TextFieldValue) -> Unit,
+    onPick: (String) -> Unit,
+    onClearHistory: () -> Unit,
+    onRemoveHistory: (Int) -> Unit,
+) {
+    var clipboardUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(focused) {
+        clipboardUrl = if (focused) {
+            withContext(Dispatchers.IO) { readClipboardUrl(context, prefs) }
+        } else null
+    }
+    val clipUrl = clipboardUrl
+    val clipboardJumpSuggestion: @Composable () -> Unit = {
+        AnimatedVisibility(
+            visible = focused && inputText.isBlank() && clipUrl != null,
+            enter = expandVertically(
+                animationSpec = tween(220),
+                expandFrom = contentAnimAnchor,
+            ) + fadeIn(tween(160)),
+            exit = shrinkVertically(
+                animationSpec = tween(200),
+                shrinkTowards = contentAnimAnchor,
+            ) + fadeOut(tween(120)),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        .clickable {
+                            clipUrl?.let {
+                                onInputChange(TextFieldValue(it))
+                                onPick(it)
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Link,
+                        contentDescription = null,
+                        tint = titleChrome.secondaryContentColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "复制的链接",
+                            fontSize = 14.sp,
+                            color = titleChrome.contentColor,
+                        )
+                        Text(
+                            text = clipUrl.orEmpty(),
+                            fontSize = 12.sp,
+                            color = titleChrome.secondaryContentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (!headerAtBottom) clipboardJumpSuggestion()
+    AnimatedVisibility(
+        visible = focused && inputText.isNotBlank() && suggestions.isNotEmpty(),
+        enter = expandVertically(
+            animationSpec = tween(220),
+            expandFrom = contentAnimAnchor,
+        ) + fadeIn(tween(160)),
+        exit = shrinkVertically(
+            animationSpec = tween(200),
+            shrinkTowards = contentAnimAnchor,
+        ) + fadeOut(tween(120)),
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .animateContentSize(),
+        ) {
+            items(
+                count = suggestions.size,
+                key = { idx -> "suggest_${suggestions[idx]}" },
+            ) { idx ->
+                val item = suggestions[idx]
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItem(fadeOutSpec = null)
+                        .clickable { onPick(item) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Search,
+                        contentDescription = null,
+                        tint = titleChrome.secondaryContentColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = item,
+                        fontSize = 14.sp,
+                        color = titleChrome.contentColor,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+
+    AnimatedVisibility(
+        visible = !forceHideHistory &&
+                historyEnabled &&
+                searchHistory.isNotEmpty() &&
+                inputText.isBlank() &&
+                !incognito,
+        enter = expandVertically(
+            animationSpec = tween(220),
+            expandFrom = contentAnimAnchor,
+        ) + fadeIn(tween(160)),
+        exit = shrinkVertically(
+            animationSpec = tween(200),
+            shrinkTowards = contentAnimAnchor,
+        ) + fadeOut(tween(120)),
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .animateContentSize(),
+        ) {
+            item(key = "search_history_header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "搜索历史",
+                        fontSize = 12.sp,
+                        color = titleChrome.secondaryContentColor,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "清空",
+                        fontSize = 12.sp,
+                        color = titleChrome.accentColor,
+                        modifier = Modifier.clickable(
+                            interactionSource = null,
+                            indication = null,
+                            onClick = onClearHistory,
+                        ),
+                    )
+                }
+            }
+            items(
+                count = searchHistory.size,
+                key = { idx -> "search_his_${searchHistory[idx]}" },
+            ) { idx ->
+                val item = searchHistory[idx]
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItem(fadeOutSpec = null)
+                        .clickable { onPick(item) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = MiuixIcons.Recent,
+                        contentDescription = null,
+                        tint = titleChrome.secondaryContentColor,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = item,
+                        fontSize = 14.sp,
+                        color = titleChrome.contentColor,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = null,
+                                indication = null,
+                            ) { onRemoveHistory(idx) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = MiuixIcons.Close,
+                            contentDescription = "删除",
+                            tint = titleChrome.secondaryContentColor,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+    if (headerAtBottom) clipboardJumpSuggestion()
+}
+
 // ============================================================
 // 浏览器主界面
 // ============================================================
@@ -4929,6 +5690,11 @@ fun BrowserScreen(
 
     val surfaceColor = MiuixTheme.colorScheme.surface
     val isUiDarkMode = surfaceColor.luminance() < 0.5f
+    val systemDark = (LocalConfiguration.current.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+    val effectiveNightMode = isUiDarkMode || systemDark
+    val effectiveNightModeState = rememberUpdatedState(effectiveNightMode)
     val isLightTheme = !isUiDarkMode
     val buttonBg = if (isLightTheme) Color.White
     else MiuixTheme.colorScheme.secondaryContainer
@@ -4962,7 +5728,7 @@ fun BrowserScreen(
         val nightMode = when (nightIdx) {
             1 -> false
             2 -> true
-            else -> isUiDarkMode
+            else -> effectiveNightMode
         }
         windows.add(
             BrowserWindow(
@@ -4982,7 +5748,7 @@ fun BrowserScreen(
     LaunchedEffect(activeWindowId) {
         BrowserWindowStateHolder.activeWindowId = activeWindowId
     }
-    val webViewMap = remember { mutableMapOf<String, WebView>() }
+    val webViewMap = BrowserWebViewRegistry.webViews
 
     val activeWindow: BrowserWindow? = windows.firstOrNull { it.id == activeWindowId }
 
@@ -5188,7 +5954,7 @@ fun BrowserScreen(
             scope.launch {
                 snackbarHostState.showSnackbar(
                     message = "语音引擎未就绪",
-                    duration = SnackbarDuration.Short,
+                    duration = Snackbar2s,
                 )
             }
             return
@@ -5242,7 +6008,7 @@ fun BrowserScreen(
     }
 
     var dynamicToolIndex by remember {
-        mutableIntStateOf(prefs.getInt("web_dynamic_tool", 1).coerceIn(0, 9))
+        mutableIntStateOf(prefs.getInt("web_dynamic_tool", 1).coerceIn(0, 10))
     }
     var dynamicToolSuggestEnabled by remember {
         mutableStateOf(prefs.getBoolean("web_dynamic_tool_suggest", true))
@@ -5321,7 +6087,7 @@ fun BrowserScreen(
         return when (idx) {
             1 -> false
             2 -> true
-            else -> isUiDarkMode
+            else -> effectiveNightModeState.value
         }
     }
 
@@ -5493,10 +6259,10 @@ fun BrowserScreen(
                     val enabled = readNightModeFromPrefs()
                     if (enabled != globalNightMode) {
                         globalNightMode = enabled
-                        val id = activeWindowId
-                        if (id != null) {
-                            updateWindow(id) { it.nightMode = enabled }
-                            webViewMap[id]?.let { applyNightModeToWebView(it, enabled) }
+                        // 所有窗口一起切换，避免只有当前标签页变深/变浅
+                        windows.forEach { win ->
+                            updateWindow(win.id) { it.nightMode = enabled }
+                            webViewMap[win.id]?.let { applyNightModeToWebView(it, enabled) }
                         }
                     }
                     val mode = prefs.getInt(key, 0)
@@ -5568,7 +6334,7 @@ fun BrowserScreen(
                     swipeNavEnabled = prefs.getBoolean(key, true)
                 }
                 "web_dynamic_tool" -> {
-                    dynamicToolIndex = prefs.getInt(key, 1).coerceIn(0, 9)
+                    dynamicToolIndex = prefs.getInt(key, 1).coerceIn(0, 10)
                 }
                 "web_dynamic_tool_suggest" -> {
                     dynamicToolSuggestEnabled = prefs.getBoolean(key, true)
@@ -6176,7 +6942,7 @@ fun BrowserScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(
                         message = "无痕模式已开启",
-                        duration = SnackbarDuration.Short,
+                        duration = Snackbar2s,
                     )
                 }
             }
@@ -6188,7 +6954,7 @@ fun BrowserScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(
                         message = "无痕模式已关闭",
-                        duration = SnackbarDuration.Short,
+                        duration = Snackbar2s,
                     )
                 }
             }
@@ -6210,15 +6976,12 @@ fun BrowserScreen(
         pendingIncognitoSync = null
     }
 
-    LaunchedEffect(isUiDarkMode) {
-        val mode = prefs.getInt("web_night_mode", 0)
-        if (mode != 0) return@LaunchedEffect
-        if (isUiDarkMode == globalNightMode) return@LaunchedEffect
-        globalNightMode = isUiDarkMode
-        val id = activeWindowId ?: return@LaunchedEffect
-        updateWindow(id) { it.nightMode = isUiDarkMode }
-        webViewMap[id]?.let { applyNightModeToWebView(it, isUiDarkMode) }
-    }
+    BrowserNightModeSync(
+        activeWindowId = activeWindowId,
+        immersivePageEnabled = immersivePageEnabled,
+        globalNightMode = globalNightMode,
+        onNightModeChange = { globalNightMode = it },
+    )
 
     LaunchedEffect(pendingDefaultZoomChange) {
         val v = pendingDefaultZoomChange ?: return@LaunchedEffect
@@ -6343,7 +7106,7 @@ fun BrowserScreen(
             scope.launch {
                 snackbarHostState.showSnackbar(
                     message = "至少要保留一个窗口",
-                    duration = SnackbarDuration.Short,
+                    duration = Snackbar2s,
                 )
             }
             return
@@ -6445,16 +7208,15 @@ fun BrowserScreen(
         val rawIndex = prefs.getInt("default_search_engine", 0)
         val engineIndex = rawIndex.coerceIn(0, searchEngines.lastIndex)
 
-        val isDirectUrl = !forceSearch && (
+        val directScheme = !forceSearch && (
                 trimmed.startsWith("http://", ignoreCase = true) ||
                         trimmed.startsWith("https://", ignoreCase = true) ||
-                        trimmed.startsWith("ftp://", ignoreCase = true) ||
-                        isWebsite(trimmed))
+                        trimmed.startsWith("ftp://", ignoreCase = true)
+                )
+        val isDirectUrl = directScheme || (!forceSearch && isWebsite(trimmed))
 
         val url = when {
-            !forceSearch && (trimmed.startsWith("http://", ignoreCase = true) ||
-                    trimmed.startsWith("https://", ignoreCase = true) ||
-                    trimmed.startsWith("ftp://", ignoreCase = true)) -> trimmed
+            directScheme -> trimmed
             !forceSearch && isWebsite(trimmed) -> "https://$trimmed"
             else -> {
                 val engine = searchEngines.getOrElse(engineIndex) { searchEngines[0] }
@@ -6585,7 +7347,7 @@ fun BrowserScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(
                         message = "未发现可嗅探的资源",
-                        duration = SnackbarDuration.Short,
+                        duration = Snackbar2s,
                     )
                 }
             }
@@ -6607,7 +7369,7 @@ fun BrowserScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(
                         message = "已恢复原文",
-                        duration = SnackbarDuration.Short,
+                        duration = Snackbar2s,
                     )
                 }
             }
@@ -6621,7 +7383,7 @@ fun BrowserScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(
                         message = "无法读取页面内容",
-                        duration = SnackbarDuration.Short,
+                        duration = Snackbar2s,
                     )
                 }
                 return@evaluateJavascript
@@ -6641,7 +7403,7 @@ fun BrowserScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar(
                         message = "页面没有可翻译的文本",
-                        duration = SnackbarDuration.Short,
+                        duration = Snackbar2s,
                     )
                 }
                 return@evaluateJavascript
@@ -6653,7 +7415,7 @@ fun BrowserScreen(
                     snackbarHostState.showSnackbar(
                         message = "正在翻译…",
                         withDismissAction = true,
-                        duration = SnackbarDuration.Indefinite,
+                        duration = Snackbar2s,
                     )
                 }
             }
@@ -6694,7 +7456,7 @@ fun BrowserScreen(
                         withContext(Dispatchers.Main) {
                             snackbarHostState.showSnackbar(
                                 message = "翻译完成",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     }
@@ -6713,7 +7475,7 @@ fun BrowserScreen(
                         withContext(Dispatchers.Main) {
                             snackbarHostState.showSnackbar(
                                 message = "翻译失败：${e.message ?: "网络错误"}",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     }
@@ -6824,7 +7586,7 @@ fun BrowserScreen(
         val result = snackbarHostState.showSnackbar(
             message = "上次打开过 ${urls.size} 个页面",
             actionLabel = "恢复",
-            duration = SnackbarDuration.Long,
+            duration = Snackbar2s,
         )
 
         if (result == SnackbarResult.ActionPerformed) {
@@ -6856,7 +7618,7 @@ fun BrowserScreen(
         BlobDownloadResultStore.pending = null
         snackbarHostState.showSnackbar(
             message = if (name.isBlank()) "文件保存失败" else "已保存 $name 到下载目录",
-            duration = SnackbarDuration.Short,
+            duration = Snackbar2s,
         )
     }
 
@@ -6867,7 +7629,7 @@ fun BrowserScreen(
         val result = snackbarHostState.showSnackbar(
             message = "已拦截跳转其它应用",
             actionLabel = "本次允许",
-            duration = SnackbarDuration.Long,
+            duration = Snackbar2s,
         )
         if (result == SnackbarResult.ActionPerformed) {
             openExternalUrl(context, url) { target ->
@@ -6885,7 +7647,7 @@ fun BrowserScreen(
         val result = snackbarHostState.showSnackbar(
             message = "已拦截网页的下载请求",
             actionLabel = "依然下载",
-            duration = SnackbarDuration.Long,
+            duration = Snackbar2s,
         )
         if (result == SnackbarResult.ActionPerformed) {
             pendingDownload = dl
@@ -6957,9 +7719,18 @@ fun BrowserScreen(
     LaunchedEffect(activeWindowId) {
         activeWindow?.let { win ->
             if (!isSearchFocused) {
-                val query = searchQueryHolder.value
+                // 切换窗口后，搜索结果页要从该窗口自己的网址恢复搜索词，
+                // 不能复用上一个窗口的全局状态，否则会显示成“搜索内容 - 搜索”标题。
+                val windowQuery = searchQueryForResultPage(win.url, searchEngines)
+                if (windowQuery != null) {
+                    searchQueryHolder.value = windowQuery
+                    isSearchResultPage = true
+                } else {
+                    searchQueryHolder.value = ""
+                    isSearchResultPage = false
+                }
                 urlInput = when {
-                    query.isNotBlank() && isSearchResultPage -> TextFieldValue(query)
+                    windowQuery != null -> TextFieldValue(windowQuery)
                     isHomeUrl(win.url) || win.url.isBlank() -> TextFieldValue("")
                     headerTextMode == 1 && win.title.isNotBlank() -> TextFieldValue(win.title)
                     else -> TextFieldValue(win.url)
@@ -6982,7 +7753,7 @@ fun BrowserScreen(
         val result = snackbarHostState.showSnackbar(
             message = "是否保存该密码？",
             actionLabel = "保存",
-            duration = SnackbarDuration.Long,
+            duration = Snackbar2s,
         )
         if (result == SnackbarResult.ActionPerformed) {
             val newEntry = PasswordEntry(
@@ -6994,7 +7765,7 @@ fun BrowserScreen(
             scope.launch {
                 snackbarHostState.showSnackbar(
                     message = "密码已保存",
-                    duration = SnackbarDuration.Short,
+                    duration = Snackbar2s,
                 )
             }
         }
@@ -7319,11 +8090,13 @@ fun BrowserScreen(
         7 -> "downloads"
         8 -> "translate"
         9 -> "sniff"
+        10 -> "ai_chat"
         else -> null
     }
 
     val isAnyHomePage = showNewTabPage || isAtHomePage()
     val effectiveDynamicTool: String? = when {
+        baseTool == "ai_chat" -> "ai_chat"
         dynamicToolSuggestEnabled && (hasActiveDownloads || hasActiveMoteDownloads) -> "downloads"
         dynamicToolSuggestEnabled && videoResourceCount > 1 -> "sniff"
         dynamicToolSuggestEnabled && videoResourceCount == 1 -> "play_in_player"
@@ -7406,7 +8179,7 @@ fun BrowserScreen(
                     scope.launch {
                         snackbarHostState.showSnackbar(
                             message = "未嗅探到视频资源，请稍后再试",
-                            duration = SnackbarDuration.Short,
+                            duration = Snackbar2s,
                         )
                     }
                 }
@@ -7414,6 +8187,10 @@ fun BrowserScreen(
             "downloads" -> {
                 clearSearchFocus()
                 onOpenDownloads()
+            }
+            "ai_chat" -> {
+                clearSearchFocus()
+                AiChatLaunchRequest.pending = true
             }
         }
     }
@@ -7490,235 +8267,106 @@ fun BrowserScreen(
 
             val fusedLeading: @Composable () -> Unit = {
                 if (fusedDualPane) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isSearchFocused) {
-                            // 聚焦搜索时收起返回/动态工具，只留搜索栏左侧的扫码入口
-                            if (scanModuleEnabled) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .clickable {
-                                            clearSearchFocus()
-                                            onOpenScanner()
-                                        },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = MiuixIcons.Scan,
-                                        contentDescription = "扫一扫",
-                                        tint = titleChrome.contentColor,
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                }
-                            }
-                        } else {
-                            val tint = titleChrome.contentColor
-                            val backEnabled = canNavigateBack()
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .clickable(enabled = backEnabled) { performNavigateBack() },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = MiuixIcons.ChevronBackward,
-                                    contentDescription = "后退",
-                                    tint = if (backEnabled) tint else tint.copy(alpha = 0.3f),
-                                    modifier = Modifier.size(22.dp),
-                                )
-                            }
-                            fusedDynamicTool?.let { tool ->
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .clickable { runDynamicToolAction(tool.id) },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Icon(
-                                        imageVector = tool.icon,
-                                        contentDescription = tool.title,
-                                        tint = tint,
-                                        modifier = Modifier.size(22.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    FusedHeaderLeading(
+                        focused = isSearchFocused,
+                        scanEnabled = scanModuleEnabled,
+                        tint = titleChrome.contentColor,
+                        backEnabled = canNavigateBack(),
+                        onBack = { performNavigateBack() },
+                        tool = fusedDynamicTool,
+                        onTool = { runDynamicToolAction(it) },
+                        onScan = {
+                            clearSearchFocus()
+                            onOpenScanner()
+                        },
+                    )
                 }
             }
 
             val fusedTrailing: @Composable () -> Unit = {
-                // 聚焦搜索时右侧图标全部让位给建议列表
-                if (fusedDualPane && !isSearchFocused) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { showWindowSheet = true },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            WindowManagerIcon(
-                                count = windows.size,
-                                tint = titleChrome.contentColor,
-                                pulseTrigger = windowIconPulse,
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .clickable { showToolSheet = true },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = MiuixIcons.GridView,
-                                contentDescription = "工具栏",
-                                tint = titleChrome.contentColor,
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
+                if (fusedDualPane) {
+                    FusedHeaderTrailing(
+                        visible = !isSearchFocused,
+                        tint = titleChrome.contentColor,
+                        windowCount = windows.size,
+                        pulseTrigger = windowIconPulse,
+                        onOpenWindows = { showWindowSheet = true },
+                        onOpenTools = { showToolSheet = true },
+                    )
                 }
             }
 
             val browserHeaderInput: @Composable () -> Unit = {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val faviconWindowState = rememberUpdatedState(activeWindow)
-                    // 融合式双栏下不显示网页图标，给搜索栏腾宽度
-                    if (!fusedDualPane) {
-                    Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(RoundedCornerShape(5.dp))
-                                        .pointerInput(Unit) {
-                                            detectTapGestures(
-                                                onTap = {
-                                                    val w = faviconWindowState.value
-                                                    val u = w?.url.orEmpty()
-                                                    if (u.isNotBlank() && u != "about:blank") {
-                                                        showSecuritySheet = !showSecuritySheet
-                                                    }
-                                                },
-                                            )
-                                        },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    FaviconOrFallback(
-                                        favicon = activeWindow?.favicon,
-                                        size = 22.dp,
-                                        fallbackTint = titleChrome.contentColor,
+                BrowserHeaderInputRow(
+                    fusedDualPane = fusedDualPane,
+                    activeWindow = activeWindow,
+                    titleChrome = titleChrome,
+                    urlInput = urlInput,
+                    onValueChange = { urlInput = it },
+                    onSearch = {
+                        loadUrlInActive(urlInput.text)
+                        focusManager.clearFocus()
+                        searchBarExpanded = false
+                    },
+                    expanded = searchBarExpanded,
+                    onExpandedChange = { searchBarExpanded = it },
+                    onFocusChanged = { focused ->
+                        isSearchFocused = focused
+                        if (focused) {
+                            showSecuritySheet = false
+                            // 无论标题栏平时显示网页标题还是网址，点进输入框后都切到完整网址，
+                            // 方便长按全选、复制或修改链接。
+                            activeWindow?.let { win ->
+                                val url = win.url
+                                if (url.isNotBlank() && !isHomeUrl(url)) {
+                                    urlInput = TextFieldValue(
+                                        text = url,
+                                        selection = TextRange(url.length),
                                     )
                                 }
-                                Spacer(Modifier.width(8.dp))
-                    }
-
-                                MoteUrlInputField(
-                                    value = urlInput,
-                                    onValueChange = { urlInput = it },
-                                    onSearch = {
-                                        loadUrlInActive(urlInput.text)
-                                        focusManager.clearFocus()
-                                        searchBarExpanded = false
-                                    },
-                                    expanded = searchBarExpanded,
-                                    onExpandedChange = { searchBarExpanded = it },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .onFocusChanged { focusState: FocusState ->
-                                            isSearchFocused = focusState.isFocused
-                                            if (focusState.isFocused) {
-                                                showSecuritySheet = false
-                                                activeWindow?.let { win ->
-                                                    // 空白保持空白；显示标题/搜索词等非空内容时，
-                                                    // 一律换成当前网址再全选（标题会异步刷新，不能靠字符串比较）
-                                                    val target =
-                                                        if (urlInput.text.isBlank()) ""
-                                                        else win.url.ifBlank { urlInput.text }
-                                                    if (target.isNotEmpty()) {
-                                                        // 聚焦时整体选中，并唤起文本工具栏
-                                                        // 光标置于末尾：全选会被 TextField 的点击定位立刻取消，
-                                                        // 表现为选中态闪一下就没了
-                                                        urlInput = TextFieldValue(target)
-                                                    }
-                                                }
-                                            } else {
-                                                searchBarExpanded = false
-                                                activeWindow?.let { win ->
-                                                    if (urlInput.text.isBlank() &&
-                                                        !isHomeUrl(win.url)
-                                                    ) {
-                                                        urlInput = if (
-                                                            headerTextMode == 1 &&
-                                                            win.title.isNotBlank() &&
-                                                            win.title != "无标题"
-                                                        ) {
-                                                            TextFieldValue(win.title)
-                                                        } else {
-                                                            TextFieldValue(win.url)
-                                                        }
-                                                    } else if (
-                                                        headerTextMode == 1 &&
-                                                        urlInput.text == win.url &&
-                                                        win.title.isNotBlank() &&
-                                                        win.title != "无标题"
-                                                    ) {
-                                                        // 聚焦时把标题换成了地址，未编辑就失焦则还原标题
-                                                        urlInput = TextFieldValue(win.title)
-                                                    }
-                                                }
-                                            }
-                                        },
-                                    // 融合式双栏下不用占位提示，空内容时保持纯净
-                                    label = if (fusedDualPane) "" else "请输入关键词或网址",
-                                    // 沉浸式页面下标题栏可能是黑底，搜索框内的文字与图标
-                                    // 必须跟随标题栏内容色，否则仍是主题的深色
-                                    contentColor = titleChrome.contentColor,
-                                    // 搜索图标与标题栏其它图标同色，再压到 20% 不透明度
-                                    leadingIconTint = titleChrome.contentColor.copy(alpha = 0.2f),
-                                    // 点击瞬间就把显示内容换成当前网址：聚焦回调里改文本会被
-                                    // BasicTextField 的点击定位覆盖，导致“点了没反应”
-                                )
-
-                                AnimatedVisibility(
-                                    visible = scanModuleEnabled && !isSearchFocused && !fusedDualPane,
-                                    enter = expandHorizontally(
-                                        animationSpec = tween(durationMillis = 220),
-                                        expandFrom = Alignment.Start,
-                                    ) + fadeIn(tween(durationMillis = 160)),
-                                    exit = shrinkHorizontally(
-                                        animationSpec = tween(durationMillis = 220),
-                                        shrinkTowards = Alignment.Start,
-                                    ) + fadeOut(tween(durationMillis = 160)),
+                            }
+                        } else {
+                            searchBarExpanded = false
+                            activeWindow?.let { win ->
+                                if (urlInput.text.isBlank() &&
+                                    !isHomeUrl(win.url)
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
+                                    urlInput = if (
+                                        headerTextMode == 1 &&
+                                        win.title.isNotBlank() &&
+                                        win.title != "无标题"
                                     ) {
-                                        Spacer(Modifier.width(4.dp))
-                                        MiuixCircleIconButton(
-                                            onClick = {
-                                                clearSearchFocus()
-                                                onOpenScanner()
-                                            },
-                                            size = 32.dp,
-                                        ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Scan,
-                                                contentDescription = "扫一扫",
-                                                tint = titleChrome.contentColor,
-                                                modifier = Modifier.size(25.dp),
-                                            )
-                                        }
+                                        TextFieldValue(win.title)
+                                    } else {
+                                        TextFieldValue(win.url)
                                     }
+                                } else if (
+                                    headerTextMode == 1 &&
+                                    urlInput.text == win.url &&
+                                    win.title.isNotBlank() &&
+                                    win.title != "无标题"
+                                ) {
+                                    urlInput = TextFieldValue(win.title)
                                 }
                             }
                         }
+                    },
+                    label = if (fusedDualPane) "" else "请输入关键词或网址",
+                    scanModuleEnabled = scanModuleEnabled,
+                    searchFocused = isSearchFocused,
+                    onScan = {
+                        clearSearchFocus()
+                        onOpenScanner()
+                    },
+                    onFaviconClick = {
+                        val u = activeWindow?.url.orEmpty()
+                        if (u.isNotBlank() && u != "about:blank") {
+                            showSecuritySheet = !showSecuritySheet
+                        }
+                    },
+                )
+            }
+
             val browserHeaderCancel: @Composable () -> Unit = {
                 Text(
                                 text = "取消",
@@ -7761,236 +8409,42 @@ fun BrowserScreen(
                             )
             }
             val browserHeaderExpanded: @Composable ColumnScope.() -> Unit = {
-                        var clipboardUrl by remember { mutableStateOf<String?>(null) }
-                        LaunchedEffect(isSearchFocused) {
-                            clipboardUrl = if (isSearchFocused) {
-                                withContext(Dispatchers.IO) { readClipboardUrl(context, prefs) }
-                            } else null
+                BrowserHeaderExpandedContent(
+                    focused = isSearchFocused,
+                    inputText = urlInput.text,
+                    headerAtBottom = headerAtBottom,
+                    contentAnimAnchor = contentAnimAnchor,
+                    titleChrome = titleChrome,
+                    suggestions = currentSuggestions,
+                    forceHideHistory = forceHideHistory,
+                    historyEnabled = historyModuleEnabled,
+                    searchHistory = searchHistory,
+                    incognito = activeWindow?.incognito == true,
+                    context = context,
+                    prefs = prefs,
+                    onInputChange = { urlInput = it },
+                    onPick = { item ->
+                        urlInput = TextFieldValue(item)
+                        loadUrlInActive(item, forceSearch = true)
+                        clearSearchFocus()
+                    },
+                    onClearHistory = {
+                        searchBarExpanded = false
+                        clearSearchFocus()
+                        scope.launch {
+                            delay(220)
+                            showClearSearchHistoryDialog = true
                         }
-                        val clipUrl = clipboardUrl
-                        val clipboardJumpSuggestion: @Composable () -> Unit = {
-                        AnimatedVisibility(
-                            visible = isSearchFocused && urlInput.text.isBlank() && clipUrl != null,
-                            enter = expandVertically(
-                                animationSpec = tween(220),
-                                expandFrom = contentAnimAnchor,
-                            ) + fadeIn(tween(160)),
-                            exit = shrinkVertically(
-                                animationSpec = tween(200),
-                                shrinkTowards = contentAnimAnchor,
-                            ) + fadeOut(tween(120)),
-                        ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                                        .clickable {
-                                            clipUrl?.let {
-                                                urlInput = TextFieldValue(it)
-                                                loadUrlInActive(it)
-                                                clearSearchFocus()
-                                            }
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        imageVector = MiuixIcons.Link,
-                                        contentDescription = null,
-                                        tint = titleChrome.secondaryContentColor,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "复制的链接",
-                                            fontSize = 14.sp,
-                                            color = titleChrome.contentColor,
-                                        )
-                                        Text(
-                                            text = clipUrl.orEmpty(),
-                                            fontSize = 12.sp,
-                                            color = titleChrome.secondaryContentColor,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
-                            }
+                    },
+                    onRemoveHistory = { idx ->
+                        if (idx in searchHistory.indices) {
+                            searchHistory.removeAt(idx)
+                            saveSearchHistory()
                         }
-                        }
-                        // 顶部标题栏：跳转建议在上，搜索历史在下避让
-                        // 底部标题栏：跳转建议贴近输入框（最后渲染）
-                        if (!headerAtBottom) clipboardJumpSuggestion()
-                        AnimatedVisibility(
-                            visible = isSearchFocused && urlInput.text.isNotBlank() && currentSuggestions.isNotEmpty(),
-                            enter = expandVertically(
-                                animationSpec = tween(220),
-                                expandFrom = contentAnimAnchor,
-                            ) + fadeIn(tween(160)),
-                            exit = shrinkVertically(
-                                animationSpec = tween(200),
-                                shrinkTowards = contentAnimAnchor,
-                            ) + fadeOut(tween(120)),
-                        ) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 320.dp)
-                                    .animateContentSize(),
-                            ) {
-                                items(
-                                    count = currentSuggestions.size,
-                                    key = { idx -> "suggest_${currentSuggestions[idx]}" },
-                                ) { idx ->
-                                    val item = currentSuggestions[idx]
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .animateItem(fadeOutSpec = null)
-                                            .clickable {
-                                                urlInput = TextFieldValue(item)
-                                                loadUrlInActive(item, forceSearch = true)
-                                                clearSearchFocus()
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Icon(
-                                            imageVector = MiuixIcons.Search,
-                                            contentDescription = null,
-                                            tint = titleChrome.secondaryContentColor,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                        Text(
-                                            text = item,
-                                            fontSize = 14.sp,
-                                            color = titleChrome.contentColor,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        AnimatedVisibility(
-                            visible = !forceHideHistory &&
-                                    historyModuleEnabled &&
-                                    searchHistory.isNotEmpty() &&
-                                    urlInput.text.isBlank() &&
-                                    activeWindow?.incognito != true,
-                            enter = expandVertically(
-                                animationSpec = tween(220),
-                                expandFrom = contentAnimAnchor,
-                            ) + fadeIn(tween(160)),
-                            exit = shrinkVertically(
-                                animationSpec = tween(200),
-                                shrinkTowards = contentAnimAnchor,
-                            ) + fadeOut(tween(120)),
-                        ) {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 320.dp)
-                                    .animateContentSize(),
-                            ) {
-                                item(key = "search_history_header") {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = "搜索历史",
-                                            fontSize = 12.sp,
-                                            color = titleChrome.secondaryContentColor,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Text(
-                                            text = "清空",
-                                            fontSize = 12.sp,
-                                            color = titleChrome.accentColor,
-                                            modifier = Modifier.clickable(
-                                                interactionSource = null,
-                                                indication = null,
-                                            ) {
-                                                searchBarExpanded = false
-                                                clearSearchFocus()
-                                                scope.launch {
-                                                    delay(220)
-                                                    showClearSearchHistoryDialog = true
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
-                                items(
-                                    count = searchHistory.size,
-                                    key = { idx -> "search_his_${searchHistory[idx]}" },
-                                ) { idx ->
-                                    val item = searchHistory[idx]
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .animateItem(
-                                                fadeOutSpec = null,
-                                            )
-                                            .clickable {
-                                                urlInput = TextFieldValue(item)
-                                                loadUrlInActive(item, forceSearch = true)
-                                                clearSearchFocus()
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Icon(
-                                            imageVector = MiuixIcons.Recent,
-                                            contentDescription = null,
-                                            tint = titleChrome.secondaryContentColor,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                        Spacer(Modifier.width(12.dp))
-                                        Text(
-                                            text = item,
-                                            fontSize = 14.sp,
-                                            color = titleChrome.contentColor,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .clip(CircleShape)
-                                                .clickable(
-                                                    interactionSource = null,
-                                                    indication = null,
-                                                ) {
-                                                    if (idx in searchHistory.indices) {
-                                                        searchHistory.removeAt(idx)
-                                                        saveSearchHistory()
-                                                    }
-                                                },
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            Icon(
-                                                imageVector = MiuixIcons.Close,
-                                                contentDescription = "删除",
-                                                tint = titleChrome.secondaryContentColor,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if (headerAtBottom) clipboardJumpSuggestion()
+                    },
+                )
             }
+
             val browserHeaderEngine: @Composable () -> Unit = {
                 val currentEngineIndex = prefs.getInt("default_search_engine", 0)
                     .coerceIn(0, searchEngines.lastIndex)
@@ -8151,6 +8605,10 @@ fun BrowserScreen(
                                 val startY = downCh.position.y
                                 val w = size.width.toFloat()
                                 if (w <= 0f) continue
+                                // 只在屏幕左右边缘识别滑动返回/前进，避免把网页输入框里
+                                // 拖动光标的普通横向手势当成页面切换而吞掉。
+                                val edgeZone = with(density) { 28.dp.toPx() }
+                                if (startX > edgeZone && startX < w - edgeZone) continue
 
                                 val canBack = canNavigateBack()
                                 val canForward = canNavigateForward()
@@ -8446,6 +8904,20 @@ fun BrowserScreen(
                     )
                 }
 
+                // 沉浸式页面 + 融合双栏在顶部时，底部导航条区域跟随网页底部色，
+                // 避免网页与小白条之间露出一条主题 surface 色。
+                if (bottomImmersiveActive && fusedDualPane && !headerAtBottom &&
+                    !isFullscreen && htmlFullscreenView == null && !showNewTabPage
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(webViewNavBarPad)
+                            .background(bottomChrome.backgroundColor),
+                    )
+                }
+
                 if (currentProgress in 1..99 || smoothProgress < 0.999f) {
                     BoxWithConstraints(
                         modifier = Modifier
@@ -8714,7 +9186,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "已开始下载 Mote $version，可在下载管理中查看",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                             isPendingDownloading = false
                         }
@@ -8965,12 +9437,17 @@ fun BrowserScreen(
                             label = "dynamicToolIcon",
                         ) { tool ->
                             if (tool != null) {
-                                Icon(
-                                    imageVector = tool.icon,
-                                    contentDescription = tool.title,
-                                    tint = if (dynamicToolEnabled) onSurface else onSurface.copy(alpha = 0.3f),
-                                    modifier = Modifier.size(24.dp),
-                                )
+                                if (tool.customIcon != null) {
+                                    tool.customIcon(dynamicToolEnabled)
+                                } else {
+                                    Icon(
+                                        imageVector = tool.icon,
+                                        contentDescription = tool.title,
+                                        tint = if (dynamicToolEnabled) onSurface
+                                        else onSurface.copy(alpha = 0.3f),
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             } else {
                                 Spacer(Modifier.size(24.dp))
                             }
@@ -9243,7 +9720,7 @@ fun BrowserScreen(
                                                     } else {
                                                         snackbarHostState.showSnackbar(
                                                             message = "以图搜图失败，请稍后重试",
-                                                            duration = SnackbarDuration.Short,
+                                                            duration = Snackbar2s,
                                                         )
                                                     }
                                                 }
@@ -9467,7 +9944,7 @@ fun BrowserScreen(
                     }
 
                     scope.launch {
-                        snackbarHostState.showSnackbar(message = "已添加到书签", duration = SnackbarDuration.Short)
+                        snackbarHostState.showSnackbar(message = "已添加到书签", duration = Snackbar2s)
                     }
                 }
             }
@@ -9480,7 +9957,7 @@ fun BrowserScreen(
                     bookmarks.removeAt(existingIndex)
                     saveBookmarks()
                     scope.launch {
-                        snackbarHostState.showSnackbar(message = "已删除书签", duration = SnackbarDuration.Short)
+                        snackbarHostState.showSnackbar(message = "已删除书签", duration = Snackbar2s)
                     }
                 }
             }
@@ -9534,6 +10011,7 @@ fun BrowserScreen(
                 }
                 "refresh" -> id?.let { webViewMap[it]?.reload() }
                 "settings" -> onOpenSettings()
+                "ai_chat" -> AiChatLaunchRequest.pending = true
                 "history" -> {
                     scope.launch {
                         delay(280)
@@ -9586,7 +10064,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "分享失败：${e.message}",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     }
@@ -9618,7 +10096,7 @@ fun BrowserScreen(
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     message = "当前页面无法保存",
-                                    duration = SnackbarDuration.Short,
+                                    duration = Snackbar2s,
                                 )
                             }
                         }
@@ -9645,7 +10123,7 @@ fun BrowserScreen(
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "打印失败：${e.message}",
-                                        duration = SnackbarDuration.Short,
+                                        duration = Snackbar2s,
                                     )
                                 }
                             }
@@ -9682,7 +10160,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "语音引擎正在初始化，请稍后再试",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                         return@let
@@ -9695,7 +10173,7 @@ fun BrowserScreen(
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "未找到可朗读的文字",
-                                        duration = SnackbarDuration.Short,
+                                        duration = Snackbar2s,
                                     )
                                 }
                                 return@evaluateJavascript
@@ -9728,19 +10206,11 @@ fun BrowserScreen(
         (networkSniffedResources + sniffedResources).distinctBy { it.url }
     }
 
-    var showAllSniffResources by remember {
-        mutableStateOf(
-            try {
-                prefs.getBoolean("web_sniff_show_all", false)
-            } catch (_: Exception) { false }
-        )
-    }
-
     SniffSheet(
         show = showSniffSheet,
         isSniffing = isSniffing,
         resources = mergedSniffed,
-        showAllResources = showAllSniffResources,
+        pageKey = (activeWindowId ?: "") + "|" + (activeWindow?.url ?: ""),
         onOpen = { res ->
             showSniffSheet = false
             if (res.category == SniffCategory.VIDEO) {
@@ -9773,10 +10243,6 @@ fun BrowserScreen(
             )
             showSniffSheet = false
             showDownloadDialog = true
-        },
-        onToggleShowAll = { enabled ->
-            showAllSniffResources = enabled
-            prefs.edit().putBoolean("web_sniff_show_all", enabled).apply()
         },
         onDismiss = { showSniffSheet = false },
     )
@@ -9843,7 +10309,7 @@ fun BrowserScreen(
             scope.launch {
                 snackbarHostState.showSnackbar(
                     message = "已删除 ${toRemove.size} 条历史",
-                    duration = SnackbarDuration.Short,
+                    duration = Snackbar2s,
                 )
             }
         },
@@ -9899,7 +10365,7 @@ fun BrowserScreen(
             scope.launch {
                 snackbarHostState.showSnackbar(
                     message = "已删除 ${toRemove.size} 项",
-                    duration = SnackbarDuration.Short,
+                    duration = Snackbar2s,
                 )
             }
         },
@@ -10029,7 +10495,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "搜索历史已清空",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     },
@@ -10077,7 +10543,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "历史记录已清空",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     },
@@ -10126,7 +10592,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "书签已清空",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     },
@@ -10288,7 +10754,7 @@ fun BrowserScreen(
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "请输入网址",
-                                        duration = SnackbarDuration.Short,
+                                        duration = Snackbar2s,
                                     )
                                 }
                                 return@Button
@@ -10314,7 +10780,7 @@ fun BrowserScreen(
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "书签已保存",
-                                        duration = SnackbarDuration.Short,
+                                        duration = Snackbar2s,
                                     )
                                 }
                             }
@@ -10330,7 +10796,7 @@ fun BrowserScreen(
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     message = "请输入网址",
-                                    duration = SnackbarDuration.Short,
+                                    duration = Snackbar2s,
                                 )
                             }
                             return@Button
@@ -10347,7 +10813,7 @@ fun BrowserScreen(
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     message = "书签已更新",
-                                    duration = SnackbarDuration.Short,
+                                    duration = Snackbar2s,
                                 )
                             }
                         } else {
@@ -10362,7 +10828,7 @@ fun BrowserScreen(
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     message = "书签已添加",
-                                    duration = SnackbarDuration.Short,
+                                    duration = Snackbar2s,
                                 )
                             }
 
@@ -10465,7 +10931,7 @@ fun BrowserScreen(
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     message = "请输入文件夹名称",
-                                    duration = SnackbarDuration.Short,
+                                    duration = Snackbar2s,
                                 )
                             }
                             return@Button
@@ -10484,7 +10950,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "文件夹已创建",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                             delay(220)
                             if (addFolderFromAddBookmark) {
@@ -10555,7 +11021,7 @@ fun BrowserScreen(
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "已删除",
-                                duration = SnackbarDuration.Short,
+                                duration = Snackbar2s,
                             )
                         }
                     },
@@ -10603,7 +11069,7 @@ fun BrowserScreen(
                                 scope.launch {
                                     snackbarHostState.showSnackbar(
                                         message = "已移动 $moved 项",
-                                        duration = SnackbarDuration.Short,
+                                        duration = Snackbar2s,
                                     )
                                 }
                             }
@@ -11458,15 +11924,18 @@ private fun WebViewLayer(
 
                                 // 沉浸式页面：探测网页主题色（页面加载完成 / SPA 路由变化时刷新）
                                 try {
+                                    val pageNight = windows
+                                        .firstOrNull { it.id == id }
+                                        ?.nightMode == true
                                     webViewMap[id]?.evaluateJavascript(
-                                        buildPageThemeColorScript(isDarkUi)
+                                        buildPageThemeColorScript(isDarkUi || pageNight)
                                     ) { raw ->
                                         val currentUrl = windows
                                             .firstOrNull { it.id == id }
                                             ?.url
                                         if (currentUrl == url) {
                                             val (topColor, bottomColor) =
-                                                parsePageThemeColors(raw)
+                                                parsePageThemeColors(raw, pageNight)
                                             onUpdateWindow(id) {
                                                 it.themeColor = topColor
                                                 it.bottomThemeColor = bottomColor
@@ -13326,13 +13795,68 @@ private fun SniffSheet(
     show: Boolean,
     isSniffing: Boolean,
     resources: List<SniffedResource>,
-    showAllResources: Boolean,
+    pageKey: String,
     onOpen: (SniffedResource) -> Unit,
     onDownload: (SniffedResource) -> Unit,
-    onToggleShowAll: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
+    var showAllResources by remember {
+        mutableStateOf(
+            try {
+                prefs.getBoolean("web_sniff_show_all", false)
+            } catch (_: Exception) { false }
+        )
+    }
+
+    fun setShowAllResources(enabled: Boolean) {
+        showAllResources = enabled
+        prefs.edit().putBoolean("web_sniff_show_all", enabled).apply()
+    }
     var filter by remember { mutableStateOf<SniffCategory?>(null) }
+    // 缩略图状态按页面隔离：切换网页时重建状态并取消上一页仍在进行的取帧任务
+    val videoThumbs = remember(pageKey) { mutableStateMapOf<String, Bitmap>() }
+    val videoFailed = remember(pageKey) { mutableStateMapOf<String, Boolean>() }
+    val thumbInFlight = remember(pageKey) { mutableSetOf<String>() }
+    val thumbScope = remember(pageKey) {
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    }
+    DisposableEffect(thumbScope) {
+        onDispose { thumbScope.cancel() }
+    }
+    val thumbSemaphore = remember { Semaphore(3) }
+
+    LaunchedEffect(pageKey, resources, show) {
+        if (!show) return@LaunchedEffect
+        resources
+            .filter {
+                it.category == SniffCategory.VIDEO &&
+                    videoThumbs[it.url] == null &&
+                    videoFailed[it.url] != true
+            }
+            .map { it.url }
+            .distinct()
+            .forEach { url ->
+                if (thumbInFlight.add(url)) {
+                    thumbScope.launch {
+                        try {
+                            thumbSemaphore.withPermit {
+                                val bitmap = withContext(Dispatchers.IO) {
+                                    loadSniffVideoFrame(url)
+                                }
+                                if (bitmap != null) videoThumbs[url] = bitmap
+                                else videoFailed[url] = true
+                            }
+                        } finally {
+                            thumbInFlight.remove(url)
+                        }
+                    }
+                }
+            }
+    }
 
     LaunchedEffect(show) {
         if (!show) {
@@ -13340,9 +13864,29 @@ private fun SniffSheet(
         }
     }
 
-    val importantResources = remember(resources, showAllResources) {
-        if (showAllResources) resources
-        else resources.filter { isImportantResource(it) }
+    // 视频无论是否打开“显示所有资源”，都必须先有缩略图才外显；
+    // 图片/文件等其他资源只在“显示所有资源”打开时显示。
+    val importantResources = resources.filter { res ->
+        val videoReady = res.category != SniffCategory.VIDEO ||
+            videoThumbs.containsKey(res.url)
+        videoReady && (
+            showAllResources ||
+                res.category == SniffCategory.VIDEO ||
+                res.category == SniffCategory.AUDIO
+            )
+    }
+    val videoPending = resources.any {
+        it.category == SniffCategory.VIDEO &&
+            videoThumbs[it.url] == null &&
+            videoFailed[it.url] != true
+    }
+
+    LaunchedEffect(showAllResources) {
+        if (!showAllResources && filter != null &&
+            filter != SniffCategory.VIDEO && filter != SniffCategory.AUDIO
+        ) {
+            filter = null
+        }
     }
 
     val availableCategories = remember(importantResources) {
@@ -13382,7 +13926,7 @@ private fun SniffSheet(
                     DropdownItem(
                         text = if (showAllResources) "✓ 显示所有资源" else "显示所有资源",
                         selected = showAllResources,
-                        onClick = { onToggleShowAll(!showAllResources) },
+                        onClick = { setShowAllResources(!showAllResources) },
                     ),
                 ),
             ),
@@ -13431,6 +13975,20 @@ private fun SniffSheet(
                         ) {
                             Text(
                                 text = "正在嗅探资源…",
+                                fontSize = 14.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            )
+                        }
+                    }
+                    videoPending && importantResources.isEmpty() -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "正在加载视频缩略图…",
                                 fontSize = 14.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             )
@@ -13511,19 +14069,31 @@ private fun SniffSheet(
                                                 .background(MiuixTheme.colorScheme.secondaryContainer),
                                             contentAlignment = Alignment.Center,
                                         ) {
-                                            if (cat == SniffCategory.IMAGE || (cat == SniffCategory.VIDEO && (res.url.contains(".mp4") || res.url.contains(".webm")))) {
-                                                SniffThumbnail(
-                                                    url = res.url,
-                                                    fallbackIcon = sniffIconFor(cat),
-                                                    category = cat
-                                                )
-                                            } else {
-                                                Icon(
-                                                    imageVector = sniffIconFor(cat),
-                                                    contentDescription = null,
-                                                    tint = MiuixTheme.colorScheme.onSurface,
-                                                    modifier = Modifier.size(18.dp),
-                                                )
+                                            val thumb = videoThumbs[res.url]
+                                            when {
+                                                cat == SniffCategory.VIDEO && thumb != null -> {
+                                                    Image(
+                                                        bitmap = thumb.asImageBitmap(),
+                                                        contentDescription = null,
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentScale = ContentScale.Crop,
+                                                    )
+                                                }
+                                                cat == SniffCategory.IMAGE -> {
+                                                    SniffThumbnail(
+                                                        url = res.url,
+                                                        fallbackIcon = sniffIconFor(cat),
+                                                        category = cat,
+                                                    )
+                                                }
+                                                else -> {
+                                                    Icon(
+                                                        imageVector = sniffIconFor(cat),
+                                                        contentDescription = null,
+                                                        tint = MiuixTheme.colorScheme.onSurface,
+                                                        modifier = Modifier.size(18.dp),
+                                                    )
+                                                }
                                             }
                                         }
 
@@ -15288,6 +15858,15 @@ private fun BrowserToolSheet(
 
     LaunchedEffect(show) {
         if (show) {
+            // 工具菜单排序/启用状态可能在设置页里改过；每次打开都重新读取，
+            // 否则 remember 的旧顺序要杀掉进程重启才生效。
+            val disabledNow = toolMenuDisabledIds(prefs).toSet()
+            val latest = allToolMenuIds(prefs)
+                .filter { it !in disabledNow }
+                .mapNotNull { id -> allTools.find { it.id == id } }
+            if (state.tools.map { it.id } != latest.map { it.id }) {
+                state.tools = latest
+            }
             state.setActive("fullscreen", isFullscreen)
             state.setActive("night_mode", isNightMode)
             state.setActive("incognito", isIncognito)
@@ -15325,12 +15904,18 @@ private fun BrowserToolSheet(
                         isNewTabPage = isNewTabPage,
                         onToolClick = { toolId ->
                             val tool = allTools.find { it.id == toolId }
-                            val active = if (tool?.isToggle == true) {
-                                state.toggleActive(toolId)
+                            val specialAction = tool?.specialAction
+                            if (specialAction != null) {
+                                specialAction(context)
+                                onDismiss()
                             } else {
-                                false
+                                val active = if (tool?.isToggle == true) {
+                                    state.toggleActive(toolId)
+                                } else {
+                                    false
+                                }
+                                onToolAction(toolId, active)
                             }
-                            onToolAction(toolId, active)
                         },
                     )
                 }
@@ -16476,6 +17061,37 @@ private fun decodeJsString(raw: String?): String {
 // ============================================================
 // 资源嗅探缩略图加载组件
 // ============================================================
+
+private fun loadSniffVideoFrame(url: String): Bitmap? {
+    if (!url.startsWith("http")) return null
+    val lower = url.lowercase()
+    // MediaMetadataRetriever 对 mp4/webm 最稳定；其它格式无法取帧时按“无缩略图”过滤
+    if (!(lower.contains(".mp4") || lower.contains(".webm"))) return null
+    return try {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(url, emptyMap())
+            val frame = retriever.getFrameAtTime(
+                0,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+            )
+            frame?.let {
+                val targetWidth = 72
+                val ratio = targetWidth.toFloat() / it.width
+                Bitmap.createScaledBitmap(
+                    it,
+                    targetWidth,
+                    (it.height * ratio).toInt().coerceAtLeast(1),
+                    true,
+                )
+            }
+        } finally {
+            runCatching { retriever.release() }
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
 
 @Composable
 private fun SniffThumbnail(

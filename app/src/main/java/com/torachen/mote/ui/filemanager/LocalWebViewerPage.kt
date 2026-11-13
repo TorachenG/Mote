@@ -101,12 +101,42 @@ internal fun LocalWebViewerPage(
                 @Suppress("DEPRECATION")
                 settings.forceDark = android.webkit.WebSettings.FORCE_DARK_OFF
             }
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    // 有些本地 HTML 只给 body 设了背景图，图片加载失败或 body 背景
+                    // 透明时会露出查看器的灰色底；如果文字本身是浅色，补白底反而
+                    // 会变成白字白底。这里按文字亮度选择深/浅兜底色，只在 html 和
+                    // body 都没有实际背景色时生效，不覆盖页面自己的配色。
+                    view?.evaluateJavascript(
+                        "(function(){" +
+                            "var he=document.documentElement;" +
+                            "var be=document.body;" +
+                            "var h=getComputedStyle(he);" +
+                            "var b=be?getComputedStyle(be):null;" +
+                            "function clearBg(c){return !c||c==='transparent'||c==='rgba(0, 0, 0, 0)';}" +
+                            "if(clearBg(h.backgroundColor)&&(!b||clearBg(b.backgroundColor))){" +
+                            "var fg=(b&&b.color)||h.color||'rgb(0,0,0)';" +
+                            "var m=fg.match(/\\d+/g);" +
+                            "var r=m?+m[0]:0,g=m?+m[1]:0,bl=m?+m[2]:0;" +
+                            "var lum=(0.2126*r+0.7152*g+0.0722*bl)/255;" +
+                            "he.style.backgroundColor=lum>0.6?'#111':'#fff';" +
+                            "}" +
+                            "})();",
+                        null,
+                    )
+                }
+            }
 
-            // 用 FileProvider 的 content:// 加载，和「返回浏览器打开」走同一条路径：
-            // file:// 下 WebView 对页面内联/相对资源的加载规则不同，容易出现白屏或样式丢失
-            val target = request.browserUrl.ifBlank {
-                Uri.fromFile(File(request.path)).toString()
+            // 本地文件优先用 file:// 加载：content:// 只能取到单个文件，
+            // HTML 里的相对路径 CSS/图片/脚本会 404，导致背景图消失、白字不可读。
+            val localFile = File(request.path)
+            val target = if (localFile.isFile) {
+                Uri.fromFile(localFile).toString()
+            } else {
+                request.browserUrl.ifBlank {
+                    Uri.fromFile(localFile).toString()
+                }
             }
             loadUrl(target)
         }

@@ -498,6 +498,7 @@ private fun MiuixIconTile(
             contentDescription = option.label,
             modifier = Modifier
                 .size(64.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .border(0.5.dp, Color(0x26000000), RoundedCornerShape(14.dp)),
         )
     }
@@ -548,6 +549,7 @@ private fun MaterialIconTile(
             contentDescription = option.label,
             modifier = Modifier
                 .size(64.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .border(0.5.dp, Color(0x26000000), RoundedCornerShape(14.dp)),
         )
     }

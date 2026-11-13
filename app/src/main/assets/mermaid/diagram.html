@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  #container {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 2px;
+  }
+  #container svg {
+    display: block;
+    margin: 0 auto;
+    height: auto !important;
+  }
+  .error {
+    color: #d9534f;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-width: 100%;
+    padding: 8px;
+  }
+  .hint {
+    color: #999999;
+    font-size: 12px;
+    padding: 12px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div id="container"><div class="hint">正在渲染图表…</div></div>
+<script src="mermaid.min.js"></script>
+<script>
+(function () {
+  var source = __SOURCE_JSON__;
+  var dark = __DARK__;
+  var container = document.getElementById('container');
+  var lastHeight = -1;
+
+  function report() {
+    try {
+      var height = Math.ceil(container.getBoundingClientRect().height);
+      var svg = container.querySelector('svg');
+      if (svg) {
+        height = Math.max(height, Math.ceil(svg.getBoundingClientRect().height));
+      }
+      height = Math.max(height, 26);
+      if (height !== lastHeight) {
+        lastHeight = height;
+        if (window.MermaidBridge && MermaidBridge.onRendered) {
+          MermaidBridge.onRendered(height);
+        }
+      }
+    } catch (e) {
+      // 高度上报失败时保持占位高度即可
+    }
+  }
+
+  function clearMermaidArtifacts() {
+    try {
+      var children = document.body.children;
+      for (var i = children.length - 1; i >= 0; i--) {
+        if (children[i] !== container) {
+          children[i].parentNode.removeChild(children[i]);
+        }
+      }
+    } catch (e) { }
+  }
+
+  // Mermaid 的 useMaxWidth 会保留图表的自然宽度；比屏幕宽时按容器宽度缩小，
+  // 比屏幕窄时保持自然尺寸，避免把小图放大成一张巨图。
+  function fitDiagram() {
+    var svg = container.querySelector('svg');
+    if (!svg) return;
+    var natural = parseFloat(svg.getAttribute('data-natural-width') || '');
+    if (!isFinite(natural) || natural <= 0) {
+      natural = parseFloat(svg.style.maxWidth) || 0;
+      if (!isFinite(natural) || natural <= 0) {
+        natural = svg.getBoundingClientRect().width;
+      }
+      if (natural > 0) {
+        svg.setAttribute('data-natural-width', String(natural));
+      }
+    }
+    var available = Math.max(0, (container.clientWidth || 0) - 4);
+    if (natural > 0 && available > 0 && natural > available) {
+      svg.style.maxWidth = available + 'px';
+    } else if (natural > 0) {
+      svg.style.maxWidth = natural + 'px';
+    }
+  }
+
+  function showError(message) {
+    // mermaid 解析失败时会往 body 里插一张默认的报错插画，先清掉它。
+    clearMermaidArtifacts();
+    container.innerHTML = '';
+    var box = document.createElement('div');
+    box.className = 'error';
+    box.textContent = '图表渲染失败：' + message;
+    container.appendChild(box);
+    report();
+  }
+
+  if (!window.mermaid) {
+    showError('离线脚本未加载');
+    return;
+  }
+
+  try {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: dark ? 'dark' : 'default',
+      fontFamily: '-apple-system, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+      flowchart: { useMaxWidth: true },
+      sequence: { useMaxWidth: true },
+      gantt: { useMaxWidth: true },
+      journey: { useMaxWidth: true },
+      class: { useMaxWidth: true },
+      state: { useMaxWidth: true },
+      er: { useMaxWidth: true },
+      pie: { useMaxWidth: true },
+      mindmap: { useMaxWidth: true },
+      timeline: { useMaxWidth: true },
+      quadrantChart: { useMaxWidth: true }
+    });
+  } catch (error) {
+    showError(error && error.message ? error.message : String(error));
+    return;
+  }
+
+  mermaid.render('mermaid-graph-' + Date.now(), source).then(function (result) {
+    container.innerHTML = result.svg;
+    fitDiagram();
+    if (result.bindFunctions) {
+      try { result.bindFunctions(container); } catch (e) { }
+    }
+    setTimeout(function () { fitDiagram(); report(); }, 40);
+  }).catch(function (error) {
+    showError(error && error.message ? error.message : String(error));
+  });
+
+  window.addEventListener('resize', function () {
+    setTimeout(function () { fitDiagram(); report(); }, 80);
+  });
+  setTimeout(report, 500);
+  setTimeout(report, 1200);
+})();
+</script>
+</body>
+</html>

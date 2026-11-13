@@ -298,7 +298,7 @@ private const val KEY_LAYOUT_TOOL = "web_dynamic_tool"
 private const val KEY_LAYOUT_TOOL_SUGGEST = "web_dynamic_tool_suggest"
 private const val KEY_FUSED_DUAL_PANE = "web_fused_dual_pane"
 private val LAYOUT_TOOL_OPTIONS = listOf(
-    "关闭", "主页", "刷新", "全屏", "添加书签", "书签列表", "历史记录", "下载管理", "网页翻译", "资源嗅探"
+    "关闭", "主页", "刷新", "全屏", "添加书签", "书签列表", "历史记录", "下载管理", "网页翻译", "资源嗅探", "Mote AI"
 )
 
 private val TAB_TITLES = listOf("通用", "浏览器", "新标签页")
@@ -383,8 +383,14 @@ fun SettingsLayoutPage(
     val initialTabFromArgs = remember {
         SettingsLayoutNavArgs.initialTab.also { SettingsLayoutNavArgs.initialTab = 0 }
     }
-    // 用 rememberSaveable：切换界面风格会触发配置变化，普通 remember 会丢失当前标签页
-    var selectedTab by rememberSaveable { mutableIntStateOf(initialTabFromArgs) }
+    // 用 rememberSaveable：切换界面风格会触发配置变化，普通 remember 会丢失当前标签页；
+    // currentTab 兜底，确保页面被重建时仍回到刚才的标签，而不是浏览器页。
+    var selectedTab by rememberSaveable {
+        mutableIntStateOf(
+            if (initialTabFromArgs != 0) initialTabFromArgs
+            else SettingsLayoutNavArgs.currentTab
+        )
+    }
 
     // ---------------- 通用页：界面风格 ----------------
     var uiStyleIndex by remember {
@@ -666,7 +672,10 @@ fun SettingsLayoutPage(
             newTabState = newTabState,
             actions = actions,
             selectedTab = selectedTab,
-            onTabChange = { selectedTab = it },
+            onTabChange = {
+                            selectedTab = it
+                            SettingsLayoutNavArgs.currentTab = it
+                        },
             onOpenToolMenu = onOpenToolMenu,
         )
         UiMode.Material -> SettingsLayoutMaterial(
@@ -674,7 +683,10 @@ fun SettingsLayoutPage(
             newTabState = newTabState,
             actions = actions,
             selectedTab = selectedTab,
-            onTabChange = { selectedTab = it },
+            onTabChange = {
+                            selectedTab = it
+                            SettingsLayoutNavArgs.currentTab = it
+                        },
             onOpenToolMenu = onOpenToolMenu,
         )
     }

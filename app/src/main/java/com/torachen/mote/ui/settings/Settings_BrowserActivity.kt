@@ -638,7 +638,7 @@ private fun SettingsWebMiuix(
                                             top.yukonga.miuix.kmp.basic.Text(
                                                 text = UaStore.previewName(uaContext),
                                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                                fontSize = 14.sp,
+                                                style = MiuixTheme.textStyles.body2,
                                             )
                                         },
                                         onClick = onOpenUaSettings,

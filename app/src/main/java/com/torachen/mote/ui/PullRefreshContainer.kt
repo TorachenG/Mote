@@ -138,14 +138,16 @@ internal fun PullRefreshContainer(
             content()
         }
 
-        if (pullDistance > 0f || isRefreshing) {
-            // 从 0 平滑放大，最大尺寸比之前小一点；同时随下拉距离轻微下移
-            val rawScale = if (isRefreshing) 1f else indicatorProgress
-            val indicatorScale by animateFloatAsState(
-                targetValue = rawScale * 0.85f,
-                animationSpec = tween(durationMillis = 180),
-                label = "indicatorScale",
-            )
+        // 从 0 平滑放大；刷新结束时缩回 0 再移除
+        val rawScale = if (isRefreshing) 1f else indicatorProgress
+        val indicatorScale by animateFloatAsState(
+            targetValue = rawScale * 0.85f,
+            animationSpec = tween(durationMillis = 180),
+            label = "indicatorScale",
+        )
+        val showIndicator =
+            pullDistance > 0f || isRefreshing || indicatorScale > 0.001f
+        if (showIndicator) {
             val indicatorShift = animatedOffset * 0.35f
             val indicatorColor = if (indicatorProgress >= 1f) {
                 if (isMaterial) MaterialTheme.colorScheme.primary else MiuixTheme.colorScheme.primary

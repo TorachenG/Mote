@@ -31,7 +31,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.captionBar
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.torachen.mote.R
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -129,6 +133,7 @@ import top.yukonga.miuix.kmp.icon.extended.Home
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.Lock
+import top.yukonga.miuix.kmp.icon.extended.MindMap
 import top.yukonga.miuix.kmp.icon.extended.Months
 import top.yukonga.miuix.kmp.icon.extended.Photos
 import top.yukonga.miuix.kmp.icon.extended.Report
@@ -154,6 +159,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Info
@@ -179,6 +185,8 @@ data class SettingsItem(
     val route: String,
     val iconInnerSize: Dp = DEFAULT_ICON_INNER_SIZE,
     val iconBgColor: Color? = null,
+    /** 非空时优先显示图片图标（如 Mote 的 logo），否则显示 [icon] */
+    val imageRes: Int? = null,
 )
 
 data class SettingsSection(
@@ -243,8 +251,24 @@ private fun SettingsIcon(
     icon: ImageVector,
     innerSize: Dp,
     bgColor: Color? = null,
+    imageRes: Int? = null,
     modifier: Modifier = Modifier,
 ) {
+    if (imageRes != null) {
+        Box(
+            modifier = modifier
+                .size(ICON_CONTAINER_SIZE)
+                .clip(RoundedCornerShape(ICON_CORNER_RADIUS)),
+        ) {
+            Image(
+                painter = painterResource(imageRes),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
     Box(
         modifier = modifier
             .size(ICON_CONTAINER_SIZE)
@@ -269,6 +293,7 @@ private val settingsSections = listOf(
     SettingsSection(
         title = "常规",
         items = listOf(
+            SettingsItem("AI 设置", MiuixIcons.MindMap, "settings_ai", MEDIUM_ICON_INNER_SIZE, Color(0xFF7767F9), imageRes = R.mipmap.mote_logo),
             SettingsItem("主页设置", MiuixIcons.Home, "settings_home", SMALL_ICON_INNER_SIZE),
             SettingsItem("搜索设置", MiuixIcons.Search, "settings_search", SMALL_ICON_INNER_SIZE),
             SettingsItem("网页浏览设置", MiuixIcons.Months, "settings_web"),
@@ -309,7 +334,7 @@ private val settingsSections = listOf(
 // ============================================================
 
 private val PINYIN_TABLE: Map<Char, String> = run {
-    val data = "主zhu页ye设she置zhi搜sou索suo网wang浏liu览lan应ying用yong图tu标biao题ti界jie面mian安an全quan中zhong心xin通tong知zhi权quan限xian法fa律lv信xin息xi关guan于yu打da开kai新xin签qian自zi定ding义yi上shang次ci退tui出chu时shi的de询xun问wen恢hui复fu默mo认ren引yin擎qing切qie换huan栏lan快kuai捷jie输shu入ru扫sao一yi模mo块kuai历li史shi文wen字zi大da小xiao强qiang制zhi启qi缩suo放fang比bi例li夜ye间jian式shi电dian脑nao无wu屏ping视shi频pin播bo器qi顶ding部bu下xia拉la刷shua左zuo右you滑hua动dong后hou前qian进jin工gong具ju最zui侧ce建jian议yi痕hen记ji住zhu表biao单dan数shu据ju接jie受shou窗chuang口kou清qing空kong拦lan截jie广guang告gao跟gen踪zong防fang护hu调diao整zheng提ti示shi读du取qu手shou机ji存cun储chu相xiang录lu位wei或huo写xie剪jian贴tie板ban户hu协xie议yi隐yin私si政zheng策ce源yuan代dai码ma许xu可ke第di三san方fang体ti验yan改gai进jin计ji划hua检jian查cha更geng新xin来lai深shen色se系xi统tong壁bi纸zhi彩cai风feng格ge准zhun控kong件jian背bei景jing重chong选xuan择ze片pian横heng幅fu内nei容rong常chang规gui找zhao到dao白bai名ming单dan基ji本ben均jun衡heng推tui荐jian严yan格ge材cai质zhi颜yan暗an角jiao滤lv镜jing密mi管guan理li器qi导dao入ru出chu联lian反fan馈kui用yong户hu开kai放fang网wang址zhi自zi动dong"
+    val data = "主zhu页ye设she置zhi搜sou索suo网wang浏liu览lan应ying用yong图tu标biao题ti界jie面mian安an全quan中zhong心xin通tong知zhi权quan限xian法fa律lv信xin息xi关guan于yu打da开kai新xin签qian自zi定ding义yi上shang次ci退tui出chu时shi的de询xun问wen恢hui复fu默mo认ren引yin擎qing切qie换huan栏lan快kuai捷jie输shu入ru扫sao一yi模mo块kuai历li史shi文wen字zi大da小xiao强qiang制zhi启qi缩suo放fang比bi例li夜ye间jian式shi电dian脑nao无wu屏ping视shi频pin播bo器qi顶ding部bu下xia拉la刷shua左zuo右you滑hua动dong后hou前qian进jin工gong具ju最zui侧ce建jian议yi痕hen记ji住zhu表biao单dan数shu据ju接jie受shou窗chuang口kou清qing空kong拦lan截jie广guang告gao跟gen踪zong防fang护hu调diao整zheng提ti示shi读du取qu手shou机ji存cun储chu相xiang录lu位wei或huo写xie剪jian贴tie板ban户hu协xie议yi隐yin私si政zheng策ce源yuan代dai码ma许xu可ke第di三san方fang体ti验yan改gai进jin计ji划hua检jian查cha更geng新xin来lai深shen色se系xi统tong壁bi纸zhi彩cai风feng格ge准zhun控kong件jian背bei景jing重chong选xuan择ze片pian横heng幅fu内nei容rong常chang规gui找zhao到dao白bai名ming单dan基ji本ben均jun衡heng推tui荐jian严yan格ge材cai质zhi颜yan暗an角jiao滤lv镜jing密mi管guan理li器qi导dao入ru出chu联lian反fan馈kui用yong户hu开kai放fang网wang址zhi自zi动dong词ci思si轮lun对dui话hua觉jue发fa送song符fu助zhu服fu务wu流liu显xian考kao过guo程cheng"
     val map = HashMap<Char, String>()
     var i = 0
     while (i < data.length) {
@@ -645,9 +670,13 @@ internal fun findSettingsItemByRoute(route: String): SettingsItem? {
 
 internal fun lookupPageIcon(route: String): ImageVector? =
     findSettingsItemByRoute(route)?.icon
+        ?: if (route in AI_SETTINGS_ROUTES) MiuixIcons.MindMap else null
 
 internal fun lookupPageIconColor(route: String): Color? =
     findSettingsItemByRoute(route)?.iconBgColor
+        ?: if (route in AI_SETTINGS_ROUTES) Color(0xFF7767F9) else null
+
+private val AI_SETTINGS_ROUTES = setOf("settings_ai", "ai_providers", "ai_provider_edit")
 
 // ============================================================
 // ★ Material 图标反查（圆润风格）
@@ -655,6 +684,9 @@ internal fun lookupPageIconColor(route: String): Color? =
 
 private fun materialIconFor(title: String): ImageVector = when (title) {
     "同步" -> Icons.Rounded.Cloud
+    "Mote AI" -> Icons.Rounded.AutoAwesome
+    "AI 助手" -> Icons.Rounded.AutoAwesome
+    "AI 设置" -> Icons.Rounded.AutoAwesome
     "主页设置" -> Icons.Rounded.Home
     "搜索设置" -> Icons.Rounded.Search
     "网页浏览设置" -> Icons.Rounded.Language
@@ -677,7 +709,23 @@ private fun M3SettingsIcon(
     icon: ImageVector,
     containerColor: Color,
     contentColor: Color,
+    imageRes: Int? = null,
 ) {
+    if (imageRes != null) {
+        Box(
+            modifier = Modifier
+                .size(ICON_CONTAINER_SIZE)
+                .clip(RoundedCornerShape(ICON_CORNER_RADIUS)),
+        ) {
+            Image(
+                painter = painterResource(imageRes),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        return
+    }
     Box(
         modifier = Modifier
             .size(ICON_CONTAINER_SIZE)
@@ -1217,6 +1265,7 @@ private fun SettingsMainPageMiuix(
                                                             icon = item.icon,
                                                             innerSize = item.iconInnerSize,
                                                             bgColor = item.iconBgColor,
+                                                            imageRes = item.imageRes,
                                                         )
                                                     }
                                                 },
@@ -1747,6 +1796,7 @@ private fun SettingsMainPageMaterial(
                                                         icon = materialIconFor(item.title),
                                                         containerColor = iconContainerColor,
                                                         contentColor = iconContentColor,
+                                                        imageRes = item.imageRes,
                                                     )
                                                 },
                                                 onClick = { onItemClick(item.route) },

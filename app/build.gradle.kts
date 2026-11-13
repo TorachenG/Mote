@@ -138,8 +138,8 @@ android {
         applicationId = "com.torachen.mote"
         minSdk = 24
         targetSdk = 37
-        versionCode = 24
-        versionName = "0.3.3"
+        versionCode = 25
+        versionName = "0.3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -205,7 +205,12 @@ android {
 
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
     compilerOptions {
-        freeCompilerArgs.add("-opt-in=androidx.media3.common.util.UnstableApi")
+        freeCompilerArgs.addAll(
+            "-opt-in=androidx.media3.common.util.UnstableApi",
+            "-Xno-param-assertions",
+            "-Xno-call-assertions",
+            "-Xno-receiver-assertions",
+        )
     }
 }
 

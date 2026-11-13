@@ -135,6 +135,7 @@ internal val OSS_COMPONENTS: List<LegalComponent> = listOf(
     LegalComponent("Kotlin Coroutines", "", "Apache-2.0"),
     LegalComponent("MiuiX for Compose Multiplatform", "0.9.4", "Apache-2.0"),
     LegalComponent("Material Kolor", "5.0.1", "MIT"),
+    LegalComponent("Mermaid", "10.9.1", "MIT"),
 )
 
 /**

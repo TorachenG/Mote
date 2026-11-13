@@ -1999,7 +1999,11 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
     val surface = MiuixTheme.colorScheme.surface
 
     val version = SecurityStateHolder.whitelistVersion
-    val sites = remember(version) { SecurityStateHolder.getManagedSites() }
+    val sites = remember(version) {
+        (SecurityStateHolder.getManagedSites() + WebPermissionStore.siteHosts(context))
+            .distinct()
+            .sorted()
+    }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -2218,7 +2222,11 @@ private fun WebSiteManagerPageMaterial(onBack: () -> Unit, onOpenSite: (String) 
         0.10f,
     )
     val version = SecurityStateHolder.whitelistVersion
-    val sites = remember(version) { SecurityStateHolder.getManagedSites() }
+    val sites = remember(version) {
+        (SecurityStateHolder.getManagedSites() + WebPermissionStore.siteHosts(context))
+            .distinct()
+            .sorted()
+    }
 
     var selecting by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
@@ -2800,14 +2808,38 @@ internal object WebPermissionStore {
         prefs(context).edit().putString(key(kind), mode).apply()
     }
 
-    private fun siteKey(context: Context, host: String, kind: String) =
-        "web_site_perm_${host}_${kind}"
+    private fun siteKey(context: Context, host: String, kind: String): String {
+        val base = getBaseDomain(host).ifBlank { host }
+        return "web_site_perm_${base}_${kind}"
+    }
 
     fun siteMode(context: Context, host: String, kind: String): String? =
         prefs(context).getString(siteKey(context, host, kind), null)
 
     fun setSiteMode(context: Context, host: String, kind: String, mode: String) {
         prefs(context).edit().putString(siteKey(context, host, kind), mode).apply()
+        // 单独改过网页权限的网站也要进入“网页管理”列表
+        if (host.isNotBlank()) SecurityStateHolder.addManagedSite(host)
+    }
+
+    /** 已设置过任意站点级网页权限的 host（兼容旧数据，用于网页管理列表）。 */
+    fun siteHosts(context: Context): List<String> {
+        val kinds = listOf(
+            CAMERA, MICROPHONE, LOCATION, AUTOPLAY, CLIPBOARD,
+            POPUP_WINDOW, DIALOG, VIDEO_AUTOPLAY, EXTERNAL_APP,
+        )
+        val result = mutableSetOf<String>()
+        prefs(context).all.keys.forEach { key ->
+            if (!key.startsWith("web_site_perm_")) return@forEach
+            val rest = key.removePrefix("web_site_perm_")
+            val kind = kinds.firstOrNull { rest.endsWith("_$it") } ?: return@forEach
+            val host = rest.removeSuffix("_$kind")
+            if (host.isNotBlank()) {
+                val base = getBaseDomain(host)
+                if (base.isNotBlank()) result.add(base)
+            }
+        }
+        return result.toList()
     }
 
     /** 生效模式：受管站点优先，否则全局 */
