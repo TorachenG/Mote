@@ -275,3 +275,18 @@ footer a:hover{color:#6b7480;border-bottom-color:rgba(107,116,128,.6)}
     transition: none !important;
   }
 }
+
+/* nav social icons */
+.nav-social{display:inline-flex;align-items:center;gap:4px}
+.nav-icon{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;
+  color:var(--nav);transition:color .18s,background .18s,transform .18s}
+.nav-icon:hover{color:#4b5563;background:rgba(90,110,140,.12);transform:translateY(-1px)}
+.nav-icon:active{transform:scale(.94)}
+.nav-icon svg{display:block}
+@media (prefers-color-scheme: dark){
+  .nav-icon:hover{color:#e6e9ee;background:rgba(255,255,255,.08)}
+}
+@media (max-width:760px){
+  .nav-social{gap:2px}
+  .nav-icon{width:22px;height:22px}
+}
