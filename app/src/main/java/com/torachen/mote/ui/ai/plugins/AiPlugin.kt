@@ -29,7 +29,6 @@ internal data class AiPlugin(
     val name: String,
     val version: String,
     val description: String = "",
-    val icon: String = "🔌",
     val author: String = "",
     val permissions: Set<AiPluginPermission> = emptySet(),
     val prompt: String = "",
@@ -64,7 +63,6 @@ internal object AiPluginCodec {
         put("name", plugin.name)
         put("version", plugin.version)
         put("description", plugin.description)
-        put("icon", plugin.icon)
         put("author", plugin.author)
         put("permissions", JSONArray(plugin.permissions.map { it.wire }))
         put("prompt", plugin.prompt)
@@ -141,7 +139,6 @@ internal object AiPluginCodec {
             name = name.take(80),
             version = version.take(32),
             description = obj.optString("description").take(1_000),
-            icon = obj.optString("icon").ifBlank { "🔌" }.take(8),
             author = obj.optString("author").take(80),
             permissions = permissions,
             prompt = obj.optString("prompt").take(8_000),

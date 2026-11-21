@@ -14,7 +14,6 @@ class AiPresetCodecTest {
         val preset = AiAgentPreset(
             id = "preset_1",
             name = "Research",
-            icon = "🔎",
             description = "desc",
             systemPrompt = "prompt",
             providerId = "p1",

@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
@@ -115,7 +117,7 @@ fun AiTasksPage(
             }
         },
     ) {
-        SmallTitle("自动化任务")
+        Spacer(Modifier.height(12.dp))
         if (!exactAllowed) {
             Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                 BasicComponent(
@@ -293,8 +295,12 @@ fun AiTaskEditPage(onBack: () -> Unit, onRuns: (String) -> Unit) {
         onBack = onBack,
     ) {
         SmallTitle("任务")
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(top = 12.dp, bottom = 12.dp),
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 TaskField("名称", name, { name = it }, "例如 每天早上总结新闻")
                 TaskField(
                     "指令",
@@ -307,7 +313,7 @@ fun AiTaskEditPage(onBack: () -> Unit, onRuns: (String) -> Unit) {
                 WindowDropdownPreference(
                     title = "Agent 预设",
                     summary = presets.firstOrNull { it.id == presetId }?.name ?: "选择预设",
-                    items = presets.map { "${it.icon} ${it.name}" },
+                    items = presets.map { it.name },
                     selectedIndex = presets.indexOfFirst { it.id == presetId }.coerceAtLeast(0),
                     onSelectedIndexChange = { index ->
                         presets.getOrNull(index)?.let { presetId = it.id }
@@ -318,7 +324,7 @@ fun AiTaskEditPage(onBack: () -> Unit, onRuns: (String) -> Unit) {
 
         SmallTitle("触发方式")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 WindowDropdownPreference(
                     title = "触发",
                     summary = triggerType,
@@ -369,22 +375,20 @@ fun AiTaskEditPage(onBack: () -> Unit, onRuns: (String) -> Unit) {
                         ) { Text("打开通知使用权设置") }
                     }
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("启用", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("完成通知", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
-                    Switch(checked = notifyOnFinish, onCheckedChange = { notifyOnFinish = it })
-                }
+                SwitchPreference(
+                    checked = enabled,
+                    onCheckedChange = { enabled = it },
+                    title = "启用",
+                    summary = "关闭后保留任务，但不再触发",
+                    insideMargin = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
+                )
+                SwitchPreference(
+                    checked = notifyOnFinish,
+                    onCheckedChange = { notifyOnFinish = it },
+                    title = "完成通知",
+                    summary = "运行完成或失败时发送通知",
+                    insideMargin = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
+                )
                 TaskField("失败重试上限（0-5，保存后可在运行记录里手动重试）", "$retryMax", {
                     retryMax = it.toIntOrNull()?.coerceIn(0, 5) ?: 0
                 }, "0")
@@ -511,7 +515,7 @@ fun AiTaskRunsPage(onBack: () -> Unit) {
         pageRoute = "ai_task_runs",
         onBack = onBack,
     ) {
-        SmallTitle("运行记录")
+        Spacer(Modifier.height(12.dp))
         if (runs.isEmpty()) {
             Card(modifier = Modifier.padding(horizontal = 12.dp)) {
                 Text(
@@ -616,7 +620,7 @@ private fun TaskField(
         value = value,
         onValueChange = onValueChange,
         label = label.ifBlank { placeholder },
-        useLabelAsPlaceholder = label.isBlank() && placeholder.isNotBlank(),
+        useLabelAsPlaceholder = true,
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 4,
         modifier = Modifier.fillMaxWidth().heightIn(min = minHeight),

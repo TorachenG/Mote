@@ -37,10 +37,18 @@ internal object AiPresetStore {
                 changed = true
             } else {
                 val existing = presets[index]
-                val legacy = LEGACY_NAMES[builtIn.id].orEmpty()
-                if (existing.builtIn && existing.name in legacy) {
-                    presets[index] = existing.copy(name = builtIn.name)
-                    changed = true
+                if (existing.builtIn) {
+                    var updated = existing
+                    if (existing.name in LEGACY_NAMES[builtIn.id].orEmpty()) {
+                        updated = updated.copy(name = builtIn.name)
+                    }
+                    if (existing.description in LEGACY_DESCRIPTIONS[builtIn.id].orEmpty()) {
+                        updated = updated.copy(description = builtIn.description)
+                    }
+                    if (updated != existing) {
+                        presets[index] = updated
+                        changed = true
+                    }
                 }
             }
         }
@@ -128,19 +136,25 @@ internal object AiPresetStore {
         "builtin_minimal" to setOf("极简"),
     )
 
+    private val LEGACY_DESCRIPTIONS: Map<String, Set<String>> = mapOf(
+        DEFAULT_ID to setOf("跟随全局模型、提示词与权限"),
+        "builtin_research" to setOf("联网搜索、读取网页，适合资料整理与事实核查"),
+        "builtin_phone" to setOf("读屏、点击、输入和打开应用；敏感应用会自动拦截"),
+        "builtin_coding" to setOf("查资料、读文档、生成 Office 文件；不自动操作手机"),
+        "builtin_minimal" to setOf("不调用工具，只做纯文本问答，响应最快"),
+    )
+
     private val BUILT_INS: List<AiAgentPreset> = listOf(
         AiAgentPreset(
             id = DEFAULT_ID,
             name = "默认",
-            icon = "🤖",
-            description = "跟随全局模型、提示词与权限",
+            description = "跟随全局 AI 设置",
             builtIn = true,
         ),
         AiAgentPreset(
             id = "builtin_research",
             name = "研究",
-            icon = "🔎",
-            description = "联网搜索、读取网页，适合资料整理与事实核查",
+            description = "搜索、读网页、整理资料",
             systemPrompt = "你是研究助手。先搜索再回答，区分事实、推测与来源；" +
                     "引用网页时保留可追溯链接，不要编造来源。",
             reasoning = AiReasoningLevel.High,
@@ -155,8 +169,7 @@ internal object AiPresetStore {
         AiAgentPreset(
             id = "builtin_phone",
             name = "手机",
-            icon = "📱",
-            description = "读屏、点击、输入和打开应用；敏感应用会自动拦截",
+            description = "读屏并操作手机应用",
             systemPrompt = "你是手机操作助手。每次操作前先读屏，动作后等待并重新确认界面；" +
                     "遇到登录、验证码、支付、密码必须停下让用户本人完成。",
             reasoning = AiReasoningLevel.Standard,
@@ -172,8 +185,7 @@ internal object AiPresetStore {
         AiAgentPreset(
             id = "builtin_coding",
             name = "编程",
-            icon = "💻",
-            description = "查资料、读文档、生成 Office 文件；不自动操作手机",
+            description = "写代码、查文档、生成文件",
             systemPrompt = "你是严谨的软件工程助手。给出可运行的代码、关键参数和注意事项；" +
                     "不确定的 API 先搜索或读取文档，不要编造。",
             reasoning = AiReasoningLevel.High,
@@ -189,8 +201,7 @@ internal object AiPresetStore {
         AiAgentPreset(
             id = "builtin_minimal",
             name = "纯聊天",
-            icon = "⚡",
-            description = "不调用工具，只做纯文本问答，响应最快",
+            description = "纯聊天，不调用工具",
             reasoning = AiReasoningLevel.Off,
             allowedTools = emptySet(),
             mcpServerIds = emptySet(),

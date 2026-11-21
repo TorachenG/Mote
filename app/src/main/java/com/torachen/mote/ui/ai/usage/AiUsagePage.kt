@@ -95,8 +95,11 @@ fun AiUsagePage(onBack: () -> Unit) {
         pageRoute = "ai_usage",
         onBack = onBack,
     ) {
-        SmallTitle("统计范围")
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(top = 12.dp, bottom = 12.dp),
+        ) {
             WindowDropdownPreference(
                 title = "统计范围",
                 summary = period.label,
@@ -111,7 +114,7 @@ fun AiUsagePage(onBack: () -> Unit) {
             text = "数据只保存在本机，不上传、不参与云同步；费用为本地估算，provider 账单为准。",
             fontSize = 12.sp,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
 
         SmallTitle("概览")

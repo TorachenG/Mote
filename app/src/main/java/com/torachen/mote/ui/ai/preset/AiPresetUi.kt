@@ -39,6 +39,7 @@ internal fun AiPresetChip() {
             items = presets.map { item ->
                 DropdownItem(
                     text = item.name,
+                    summary = item.description.ifBlank { "跟随全局 AI 设置" },
                     selected = item.id == preset.id,
                     onClick = {
                         if (item.id != preset.id) {
@@ -102,8 +103,7 @@ internal fun AiPresetPickerDialog(
         ) {
             presets.forEach { preset ->
                 BasicComponent(
-                    title = "${preset.icon}  ${preset.name}" +
-                            if (preset.id == defaultId) "   · 默认" else "",
+                    title = preset.name + if (preset.id == defaultId) "  · 默认" else "",
                     summary = preset.description.ifBlank {
                         buildString {
                             append(if (preset.allowedTools == null) "全部内置工具" else "${preset.allowedTools.size} 个工具")

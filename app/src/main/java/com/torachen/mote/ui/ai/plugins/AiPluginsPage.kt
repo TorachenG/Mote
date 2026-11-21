@@ -31,7 +31,6 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -79,17 +78,18 @@ fun AiPluginsPage(onBack: () -> Unit) {
             }
         },
     ) {
-        SmallTitle("插件")
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Text(
-                "插件只支持声明式能力：HTTP 工具、提示词、MCP 配置；不执行第三方 Node/JS 代码。",
-                fontSize = 12.sp,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(14.dp),
-            )
-        }
+        Text(
+            "插件只支持声明式能力：HTTP 工具、提示词、MCP 配置；不执行第三方 Node/JS 代码。",
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
         if (plugins.isEmpty()) {
-            Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 4.dp, bottom = 12.dp),
+            ) {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp),
                     contentAlignment = Alignment.Center,
@@ -98,7 +98,11 @@ fun AiPluginsPage(onBack: () -> Unit) {
                 }
             }
         } else {
-            Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+            Card(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .padding(top = 4.dp, bottom = 12.dp),
+            ) {
                 plugins.forEach { plugin ->
                     SearchableItem(
                         title = plugin.name,
@@ -107,7 +111,7 @@ fun AiPluginsPage(onBack: () -> Unit) {
                         itemKey = "ai_plugin_${plugin.id}",
                     ) {
                         BasicComponent(
-                            title = "${plugin.icon}  ${plugin.name}",
+                            title = plugin.name,
                             summary = "v${plugin.version} · ${plugin.tools.size} 个工具 · " +
                                     plugin.permissions.joinToString("、") { it.label },
                             endActions = {
@@ -177,7 +181,7 @@ fun AiPluginsPage(onBack: () -> Unit) {
         val readme = remember(plugin.id) { AiPluginStore.readme(context, plugin.id) }
         WindowDialog(
             show = true,
-            title = "${plugin.icon} ${plugin.name}",
+            title = plugin.name,
             summary = "v${plugin.version} · ${plugin.author.ifBlank { "未知作者" }}",
             onDismissRequest = { selected = null },
         ) {

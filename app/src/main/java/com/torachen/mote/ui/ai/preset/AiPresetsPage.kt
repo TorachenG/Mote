@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.torachen.mote.ui.SearchableItem
@@ -35,11 +35,11 @@ import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.preference.CheckboxPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
@@ -81,17 +81,17 @@ fun AiPresetsPage(
             }
         },
     ) {
-        SmallTitle("Agent 预设")
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "预设决定一次对话的模型、提示词、可用工具、MCP、文件权限和自动操作。",
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            }
-        }
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        Text(
+            text = "预设决定一次对话的模型、提示词、可用工具、MCP、文件权限和自动操作。",
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(top = 4.dp, bottom = 12.dp),
+        ) {
             presets.forEach { preset ->
                 SearchableItem(
                     title = preset.name,
@@ -100,8 +100,7 @@ fun AiPresetsPage(
                     itemKey = "ai_preset_${preset.id}",
                 ) {
                     BasicComponent(
-                        title = "${preset.icon}  ${preset.name}" +
-                                if (preset.id == defaultId) "   · 默认" else "",
+                        title = preset.name + if (preset.id == defaultId) "  · 默认" else "",
                         summary = preset.description.ifBlank {
                             "${preset.allowedTools?.size ?: "全部"} 个工具 · " +
                                     "${preset.mcpServerIds?.size ?: "全部"} 个 MCP"
@@ -130,7 +129,6 @@ fun AiPresetEditPage(onBack: () -> Unit) {
     val tools = remember { aiBuiltInToolOptions() }
 
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
-    var icon by remember { mutableStateOf(existing?.icon ?: "🤖") }
     var description by remember { mutableStateOf(existing?.description.orEmpty()) }
     var useGlobalPrompt by remember { mutableStateOf(existing?.systemPrompt == null) }
     var prompt by remember { mutableStateOf(existing?.systemPrompt.orEmpty()) }
@@ -159,7 +157,6 @@ fun AiPresetEditPage(onBack: () -> Unit) {
         return AiAgentPreset(
             id = id,
             name = name.trim().ifBlank { "未命名预设" },
-            icon = icon.trim().ifBlank { "🤖" }.take(8),
             description = description.trim().take(500),
             systemPrompt = if (useGlobalPrompt) null else prompt.trim().takeIf { it.isNotBlank() },
             providerId = providerId,
@@ -182,22 +179,24 @@ fun AiPresetEditPage(onBack: () -> Unit) {
         onBack = onBack,
     ) {
         SmallTitle("基本信息")
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(top = 12.dp, bottom = 12.dp),
+        ) {
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 PresetField("名称", name, { name = it }, "例如 研究助手")
-                PresetField("图标（emoji）", icon, { icon = it }, "🤖")
                 PresetField("描述", description, { description = it }, "说明这个预设适合什么任务")
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("使用全局系统提示词", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
-                    Switch(checked = useGlobalPrompt, onCheckedChange = { useGlobalPrompt = it })
-                }
+                SwitchPreference(
+                    checked = useGlobalPrompt,
+                    onCheckedChange = { useGlobalPrompt = it },
+                    title = "使用全局系统提示词",
+                    summary = "关闭后可为这个预设单独编写提示词",
+                    insideMargin = PaddingValues(horizontal = 0.dp, vertical = 6.dp),
+                )
                 if (!useGlobalPrompt) {
                     PresetField(
                         "系统提示词",
@@ -213,7 +212,7 @@ fun AiPresetEditPage(onBack: () -> Unit) {
 
         SmallTitle("模型与推理")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 WindowDropdownPreference(
                     title = "默认服务",
                     summary = provider?.name ?: "跟随当前服务",
@@ -255,7 +254,7 @@ fun AiPresetEditPage(onBack: () -> Unit) {
 
         SmallTitle("能力与权限")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 WindowDropdownPreference(
                     title = "文件权限",
                     summary = filePermission?.label ?: "跟随全局",
@@ -312,44 +311,35 @@ fun AiPresetEditPage(onBack: () -> Unit) {
                         }
                     },
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("允许后台任务使用", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
-                    Switch(checked = backgroundAllowed, onCheckedChange = { backgroundAllowed = it })
-                }
+                SwitchPreference(
+                    checked = backgroundAllowed,
+                    onCheckedChange = { backgroundAllowed = it },
+                    title = "允许后台任务使用",
+                    summary = "允许自动化任务在后台调用这个预设",
+                )
             }
         }
 
         SmallTitle("内置工具")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("使用全部内置工具", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
-                    Switch(checked = useAllTools, onCheckedChange = { useAllTools = it })
-                }
+            Column {
+                SwitchPreference(
+                    checked = useAllTools,
+                    onCheckedChange = { useAllTools = it },
+                    title = "使用全部内置工具",
+                    summary = "关闭后可逐个选择允许调用的工具",
+                )
                 if (!useAllTools) {
                     tools.forEach { (toolName, title) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("$title（$toolName）", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface)
-                            Checkbox(
-                                state = if (toolName in selectedTools) ToggleableState.On else ToggleableState.Off,
-                                onClick = {
-                                    if (toolName in selectedTools) selectedTools.remove(toolName)
-                                    else selectedTools.add(toolName)
-                                },
-                            )
-                        }
+                        CheckboxPreference(
+                            title = title,
+                            summary = toolName,
+                            checked = toolName in selectedTools,
+                            onCheckedChange = { checked ->
+                                if (checked) selectedTools.add(toolName)
+                                else selectedTools.remove(toolName)
+                            },
+                        )
                     }
                 }
             }
@@ -357,42 +347,32 @@ fun AiPresetEditPage(onBack: () -> Unit) {
 
         SmallTitle("MCP 服务")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("使用全部已启用 MCP", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface)
-                    Switch(checked = useAllMcp, onCheckedChange = { useAllMcp = it })
-                }
+            Column {
+                SwitchPreference(
+                    checked = useAllMcp,
+                    onCheckedChange = { useAllMcp = it },
+                    title = "使用全部已启用 MCP",
+                    summary = "关闭后可逐个选择允许使用的 MCP 服务",
+                )
                 if (!useAllMcp) {
                     if (mcpServers.isEmpty()) {
                         Text(
                             "还没有 MCP 服务；先去 AI 设置 → MCP 服务添加。",
                             fontSize = 12.sp,
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         )
                     } else {
                         mcpServers.forEach { server ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    server.displayName,
-                                    fontSize = 13.sp,
-                                    color = MiuixTheme.colorScheme.onSurface,
-                                )
-                                Checkbox(
-                                    state = if (server.id in selectedMcp) ToggleableState.On else ToggleableState.Off,
-                                    onClick = {
-                                        if (server.id in selectedMcp) selectedMcp.remove(server.id)
-                                        else selectedMcp.add(server.id)
-                                    },
-                                )
-                            }
+                            CheckboxPreference(
+                                title = server.displayName,
+                                summary = server.id,
+                                checked = server.id in selectedMcp,
+                                onCheckedChange = { checked ->
+                                    if (checked) selectedMcp.add(server.id)
+                                    else selectedMcp.remove(server.id)
+                                },
+                            )
                         }
                     }
                 }
@@ -508,7 +488,7 @@ private fun PresetField(
         value = value,
         onValueChange = onValueChange,
         label = label.ifBlank { placeholder },
-        useLabelAsPlaceholder = label.isBlank() && placeholder.isNotBlank(),
+        useLabelAsPlaceholder = true,
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 4,
         modifier = Modifier.fillMaxWidth().heightIn(min = minHeight),

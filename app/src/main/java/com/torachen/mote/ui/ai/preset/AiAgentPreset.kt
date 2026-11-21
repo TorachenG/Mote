@@ -14,7 +14,6 @@ import org.json.JSONObject
 internal data class AiAgentPreset(
     val id: String,
     val name: String,
-    val icon: String = "🤖",
     val description: String = "",
     val systemPrompt: String? = null,
     val providerId: String? = null,
@@ -65,7 +64,6 @@ internal object AiPresetCodec {
     fun encode(preset: AiAgentPreset): JSONObject = JSONObject().apply {
         put("id", preset.id)
         put("name", preset.name)
-        put("icon", preset.icon)
         put("description", preset.description)
         preset.systemPrompt?.let { put("systemPrompt", it) }
         preset.providerId?.let { put("providerId", it) }
@@ -102,7 +100,6 @@ internal object AiPresetCodec {
         return AiAgentPreset(
             id = id,
             name = name,
-            icon = obj.optString("icon").ifBlank { "🤖" }.take(8),
             description = obj.optString("description").take(500),
             systemPrompt = obj.optString("systemPrompt").takeIf { it.isNotBlank() },
             providerId = obj.optString("providerId").takeIf { it.isNotBlank() },

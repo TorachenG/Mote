@@ -15,7 +15,6 @@ class AiPluginCodecTest {
             name = "Weather",
             version = "1.0.0",
             description = "desc",
-            icon = "🌤",
             author = "me",
             permissions = setOf(AiPluginPermission.Network, AiPluginPermission.Tools),
             prompt = "prompt",

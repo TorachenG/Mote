@@ -109,7 +109,7 @@ fun McpServersPage(
             }
         },
     ) {
-        SmallTitle("MCP 服务")
+        Spacer(Modifier.height(12.dp))
         if (servers.none { it.transport == McpTransport.Stdio } || McpManager.hasShizuku()) {
             // 没有 stdio server 或已授权时不打扰。
         } else {
@@ -628,7 +628,7 @@ private fun McpField(
         value = value,
         onValueChange = onValueChange,
         label = label.ifBlank { placeholder },
-        useLabelAsPlaceholder = label.isBlank() && placeholder.isNotBlank(),
+        useLabelAsPlaceholder = true,
         enabled = enabled,
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 4,
