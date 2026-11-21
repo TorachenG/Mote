@@ -2,8 +2,6 @@ package com.torachen.mote.ui.ai.mcp
 
 import android.content.pm.PackageManager
 import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,10 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,9 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.platform.LocalContext
@@ -42,6 +34,7 @@ import com.torachen.mote.ui.ai.AiSettingsScaffold
 import com.torachen.mote.ui.ai.security.AiSecretStore
 import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
+import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -50,6 +43,7 @@ import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
@@ -115,6 +109,7 @@ fun McpServersPage(
             }
         },
     ) {
+        SmallTitle("MCP 服务")
         if (servers.none { it.transport == McpTransport.Stdio } || McpManager.hasShizuku()) {
             // 没有 stdio server 或已授权时不打扰。
         } else {
@@ -168,7 +163,6 @@ fun McpServersPage(
                 }
             }
         } else {
-            SmallTitle("已配置")
             Card(
                 modifier = Modifier
                     .padding(horizontal = 12.dp)
@@ -197,11 +191,9 @@ fun McpServersPage(
                                 }
                             },
                             startAction = {
-                                Box(
-                                    modifier = Modifier
-                                        .padding(end = 10.dp)
-                                        .size(10.dp)
-                                        .background(statusColor(status), CircleShape),
+                                Badge(
+                                    containerColor = statusColor(status),
+                                    modifier = Modifier.padding(end = 10.dp),
                                 )
                             },
                             endActions = {
@@ -632,41 +624,18 @@ private fun McpField(
     secret: Boolean = false,
     enabled: Boolean = true,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    MiuixTheme.colorScheme.secondaryContainer,
-                    RoundedCornerShape(10.dp),
-                )
-                .padding(horizontal = 10.dp, vertical = 9.dp),
-        ) {
-            if (value.isEmpty() && placeholder.isNotEmpty()) {
-                Text(
-                    placeholder,
-                    fontSize = 13.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            }
-            if (enabled) {
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(
-                        fontSize = 14.sp,
-                        color = MiuixTheme.colorScheme.onSurface,
-                    ),
-                    singleLine = singleLine,
-                    visualTransformation = if (secret) PasswordVisualTransformation()
-                    else VisualTransformation.None,
-                    cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
-                )
-            }
-        }
-    }
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label.ifBlank { placeholder },
+        useLabelAsPlaceholder = label.isBlank() && placeholder.isNotBlank(),
+        enabled = enabled,
+        singleLine = singleLine,
+        minLines = if (singleLine) 1 else 4,
+        visualTransformation = if (secret) PasswordVisualTransformation()
+        else VisualTransformation.None,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 private fun parseEnv(text: String): Map<String, String> = buildMap {

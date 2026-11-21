@@ -2446,6 +2446,8 @@ private fun NewTabPageMiuix(
                                         Icon(
                                             imageVector = MiuixIcons.ChevronBackward,
                                             contentDescription = null,
+                                            tint = if (canPrev) MiuixTheme.colorScheme.onSurface
+                                            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                             modifier = modifier
                                         )
                                     },
@@ -2466,6 +2468,8 @@ private fun NewTabPageMiuix(
                                         Icon(
                                             imageVector = MiuixIcons.ChevronForward,
                                             contentDescription = null,
+                                            tint = if (canNext) MiuixTheme.colorScheme.onSurface
+                                            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                                             modifier = modifier
                                         )
                                     },

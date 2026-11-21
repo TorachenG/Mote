@@ -95,24 +95,24 @@ fun AiUsagePage(onBack: () -> Unit) {
         pageRoute = "ai_usage",
         onBack = onBack,
     ) {
+        SmallTitle("统计范围")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                WindowDropdownPreference(
-                    title = "统计范围",
-                    summary = period.label,
-                    items = UsagePeriod.entries.map { it.label },
-                    selectedIndex = UsagePeriod.entries.indexOf(period),
-                    onSelectedIndexChange = { index ->
-                        period = UsagePeriod.entries.getOrElse(index) { UsagePeriod.Today }
-                    },
-                )
-                Text(
-                    text = "数据只保存在本机，不上传、不参与云同步；费用为本地估算，provider 账单为准。",
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            }
+            WindowDropdownPreference(
+                title = "统计范围",
+                summary = period.label,
+                items = UsagePeriod.entries.map { it.label },
+                selectedIndex = UsagePeriod.entries.indexOf(period),
+                onSelectedIndexChange = { index ->
+                    period = UsagePeriod.entries.getOrElse(index) { UsagePeriod.Today }
+                },
+            )
         }
+        Text(
+            text = "数据只保存在本机，不上传、不参与云同步；费用为本地估算，provider 账单为准。",
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
 
         SmallTitle("概览")
         Row(

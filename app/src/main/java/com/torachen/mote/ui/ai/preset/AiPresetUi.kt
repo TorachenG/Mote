@@ -1,7 +1,5 @@
 package com.torachen.mote.ui.ai.preset
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,13 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,46 +20,56 @@ import androidx.compose.ui.unit.sp
 import com.torachen.mote.ui.ai.AiChatStore
 import com.torachen.mote.ui.ai.AiConversationSettings
 import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.DropdownEntry
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.menu.WindowIconCascadingDropdownMenu
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 
-/** 输入栏上方的预设 chip；点击切换当前会话预设。 */
+/** 输入栏上方的预设 chip；点击直接弹下拉菜单切换当前会话预设。 */
 @Composable
 internal fun AiPresetChip() {
     val context = LocalContext.current
     val conversationId = AiChatStore.activeConversationId
     val preset = AiConversationSettings.presetFor(conversationId) ?: return
-    var showPicker by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier
-            .height(36.dp)
-            .background(MiuixTheme.colorScheme.surfaceContainer, RoundedCornerShape(16.dp))
-            .clickable { showPicker = true }
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MiuixText(
-            text = "${preset.icon} ${preset.name}",
-            fontSize = 13.sp,
-            color = MiuixTheme.colorScheme.onSurface,
-            maxLines = 1,
-        )
-    }
-
-    if (showPicker) {
-        AiPresetPickerDialog(
-            show = true,
-            title = "切换 Agent 预设",
-            subtitle = "只影响当前对话；切换后会清空本对话的模型/权限覆盖。",
-            onDismiss = { showPicker = false },
-            onSelect = { id ->
-                showPicker = false
-                AiConversationSettings.setPreset(context, conversationId, id)
+    val presets = AiPresetStore.all(context)
+    val entries = listOf(
+        DropdownEntry(
+            items = presets.map { item ->
+                DropdownItem(
+                    text = item.name,
+                    selected = item.id == preset.id,
+                    onClick = {
+                        if (item.id != preset.id) {
+                            AiConversationSettings.setPreset(context, conversationId, item.id)
+                        }
+                    },
+                )
             },
-        )
-    }
+        ),
+    )
+
+    WindowIconCascadingDropdownMenu(
+        entries = entries,
+        backgroundColor = MiuixTheme.colorScheme.surfaceContainer,
+        cornerRadius = 16.dp,
+        minHeight = 36.dp,
+        minWidth = 0.dp,
+        content = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.height(36.dp).padding(horizontal = 12.dp),
+            ) {
+                MiuixText(
+                    text = preset.name,
+                    fontSize = 13.sp,
+                    color = MiuixTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                )
+            }
+        },
+    )
 }
 
 /** 新建对话时选择预设。 */

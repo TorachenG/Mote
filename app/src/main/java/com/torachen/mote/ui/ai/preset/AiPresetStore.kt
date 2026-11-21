@@ -28,13 +28,25 @@ internal object AiPresetStore {
         )
         presets.clear()
         presets.addAll(stored)
-        // 版本升级新增的内置预设自动补齐；已存在的用户修改不覆盖。
+        var changed = stored.isEmpty()
+        // 版本升级新增的内置预设自动补齐；旧版内置名称做一次轻量迁移。
         BUILT_INS.forEach { builtIn ->
-            if (presets.none { it.id == builtIn.id }) presets.add(builtIn)
+            val index = presets.indexOfFirst { it.id == builtIn.id }
+            if (index < 0) {
+                presets.add(builtIn)
+                changed = true
+            } else {
+                val existing = presets[index]
+                val legacy = LEGACY_NAMES[builtIn.id].orEmpty()
+                if (existing.builtIn && existing.name in legacy) {
+                    presets[index] = existing.copy(name = builtIn.name)
+                    changed = true
+                }
+            }
         }
         defaultIdValue = storedDefault?.takeIf { id -> presets.any { it.id == id } }
             ?: DEFAULT_ID
-        if (stored.isEmpty()) persistLocked(context)
+        if (changed) persistLocked(context)
     }
 
     fun all(context: Context): List<AiAgentPreset> = synchronized(lock) {
@@ -110,10 +122,16 @@ internal object AiPresetStore {
             AiPresetCodec.encodeList(presets.toList(), defaultIdValue),
         )
 
+    private val LEGACY_NAMES: Map<String, Set<String>> = mapOf(
+        DEFAULT_ID to setOf("通用"),
+        "builtin_phone" to setOf("手机助手"),
+        "builtin_minimal" to setOf("极简"),
+    )
+
     private val BUILT_INS: List<AiAgentPreset> = listOf(
         AiAgentPreset(
             id = DEFAULT_ID,
-            name = "通用",
+            name = "默认",
             icon = "🤖",
             description = "跟随全局模型、提示词与权限",
             builtIn = true,
@@ -136,7 +154,7 @@ internal object AiPresetStore {
         ),
         AiAgentPreset(
             id = "builtin_phone",
-            name = "手机助手",
+            name = "手机",
             icon = "📱",
             description = "读屏、点击、输入和打开应用；敏感应用会自动拦截",
             systemPrompt = "你是手机操作助手。每次操作前先读屏，动作后等待并重新确认界面；" +
@@ -170,7 +188,7 @@ internal object AiPresetStore {
         ),
         AiAgentPreset(
             id = "builtin_minimal",
-            name = "极简",
+            name = "纯聊天",
             icon = "⚡",
             description = "不调用工具，只做纯文本问答，响应最快",
             reasoning = AiReasoningLevel.Off,

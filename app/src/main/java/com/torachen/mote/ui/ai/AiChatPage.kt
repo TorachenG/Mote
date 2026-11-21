@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
 import android.net.Uri
+import android.speech.SpeechRecognizer
 import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.provider.Settings as AndroidSettings
@@ -33,6 +34,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -59,6 +61,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -78,6 +81,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -85,6 +90,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -192,6 +198,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val CHAT_TOP_BAR_FALLBACK_HEIGHT = 72.dp
 private val ChatEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
@@ -354,6 +361,9 @@ private fun AiChatContent(
     var input by remember {
         mutableStateOf(AiDraftStore.get(context, AiChatStore.activeConversationId))
     }
+    val voiceAvailable = remember {
+        runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false)
+    }
     val attachments = remember { mutableStateListOf<AiAttachment>() }
     val draftAttachments = remember { mutableStateMapOf<String, List<AiAttachment>>() }
     var draftAttachmentConversation by remember {
@@ -365,6 +375,7 @@ private fun AiChatContent(
     var followBottom by remember { mutableStateOf(true) }
     var programmaticScroll by remember { mutableStateOf(false) }
     var showSidebar by remember { mutableStateOf(false) }
+    var sidebarDrag by remember { mutableFloatStateOf(0f) }
     var showPresetPicker by remember { mutableStateOf(false) }
     var sourceSheetSources by remember { mutableStateOf<List<AiSource>>(emptyList()) }
     var sourceSheetIndex by remember { mutableStateOf<Int?>(null) }
@@ -849,6 +860,7 @@ private fun AiChatContent(
                 onRetryFailedFiles = { retryFailedFiles() },
                 streaming = AiChatStore.streaming,
                 configured = configured,
+                voiceAvailable = voiceAvailable,
                 voiceListening = AiVoiceInput.listening,
                 voiceLevel = AiVoiceInput.level,
                 voicePartial = AiVoiceInput.partialText,
@@ -865,6 +877,30 @@ private fun AiChatContent(
                 },
             )
 
+            if (!showSidebar) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .width(22.dp)
+                        .pointerInput(Unit) {
+                            var dragged = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { change, amount ->
+                                    if (amount > 0f) {
+                                        dragged += amount
+                                        change.consume()
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (dragged > 32.dp.toPx()) showSidebar = true
+                                    dragged = 0f
+                                },
+                                onDragCancel = { dragged = 0f },
+                            )
+                        },
+                )
+            }
             AnimatedVisibility(
                 visible = showSidebar,
                 enter = fadeIn(tween(180)),
@@ -879,25 +915,45 @@ private fun AiChatContent(
             }
             AnimatedVisibility(
                 visible = showSidebar,
-                modifier = Modifier.align(Alignment.CenterStart),
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .offset { IntOffset(sidebarDrag.roundToInt(), 0) },
                 enter = slideInHorizontally(tween(260)) { -it } + fadeIn(tween(180)),
                 exit = slideOutHorizontally(tween(220)) { -it } + fadeOut(tween(140)),
             ) {
-                AiConversationSidebar(
-                    conversations = AiChatStore.conversations,
-                    activeId = AiChatStore.activeConversationId,
-                    backCardAlpha = backCardAlpha,
-                    onSelect = { id ->
-                        AiChatStore.switchConversation(id)
-                        showSidebar = false
+                Box(
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { change, amount ->
+                                val next = (sidebarDrag + amount)
+                                    .coerceIn(-280.dp.toPx(), 0f)
+                                if (next < 0f) change.consume()
+                                sidebarDrag = next
+                            },
+                            onDragEnd = {
+                                if (sidebarDrag < -80.dp.toPx()) showSidebar = false
+                                sidebarDrag = 0f
+                            },
+                            onDragCancel = { sidebarDrag = 0f },
+                        )
                     },
-                    onNew = {
-                        createNewConversation()
-                        showSidebar = false
-                        followBottom = true
-                    },
-                    onClose = { showSidebar = false },
-                )
+                ) {
+                    AiConversationSidebar(
+                        conversations = AiChatStore.conversations,
+                        activeId = AiChatStore.activeConversationId,
+                        backCardAlpha = backCardAlpha,
+                        onSelect = { id ->
+                            AiChatStore.switchConversation(id)
+                            showSidebar = false
+                        },
+                        onNew = {
+                            createNewConversation()
+                            showSidebar = false
+                            followBottom = true
+                        },
+                        onClose = { showSidebar = false },
+                    )
+                }
             }
         }
         AiFileEditConfirmDialog()
@@ -3095,6 +3151,7 @@ private fun AiChatInputBar(
     onRetryFailedFiles: () -> Unit,
     streaming: Boolean,
     configured: Boolean,
+    voiceAvailable: Boolean,
     voiceListening: Boolean,
     voiceLevel: Float,
     voicePartial: String,
@@ -3186,21 +3243,30 @@ private fun AiChatInputBar(
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onVoice) {
-                Icon(
-                    imageVector = MiuixIcons.AppRecording,
-                    contentDescription = if (voiceListening) "停止语音输入" else "语音输入",
-                    tint = if (voiceListening) {
-                        MiuixTheme.colorScheme.primary
-                    } else {
-                        MiuixTheme.colorScheme.onSurface
-                    },
-                    modifier = Modifier.size(22.dp),
-                )
+            if (voiceAvailable) {
+                IconButton(onClick = onVoice) {
+                    Icon(
+                        imageVector = MiuixIcons.AppRecording,
+                        contentDescription = if (voiceListening) "停止语音输入" else "语音输入",
+                        tint = if (voiceListening) {
+                            MiuixTheme.colorScheme.primary
+                        } else {
+                            MiuixTheme.colorScheme.onSurface
+                        },
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             }
-            IconButton(
-                onClick = onAttach,
-                enabled = attachments.size < 3 && !readingFile,
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(MiuixTheme.colorScheme.secondaryContainer)
+                    .clickable(
+                        enabled = attachments.size < 3 && !readingFile,
+                        onClick = onAttach,
+                    ),
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = MiuixIcons.Folder,
@@ -3210,7 +3276,7 @@ private fun AiChatInputBar(
                     } else {
                         MiuixTheme.colorScheme.disabledOnSurface
                     },
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(20.dp),
                 )
             }
             TextField(

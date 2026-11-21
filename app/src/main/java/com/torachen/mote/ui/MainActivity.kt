@@ -183,6 +183,7 @@ import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
@@ -6110,14 +6111,15 @@ private fun BottomBarLongPressMenu(
             )
             val toolItems = menuTools.map { tool ->
                 val isActive = tool.id in activeToolIds
+                val unavailable = isNewTabPage && tool.id in disabledInNewTab
                 DropdownItem(
                     text = tool.title,
-                    enabled = !(isNewTabPage && tool.id in disabledInNewTab),
+                    enabled = !unavailable,
                     icon = { modifier ->
-                        val iconTint = if (tool.isToggle && isActive) {
-                            MiuixTheme.colorScheme.primary
-                        } else {
-                            MiuixTheme.colorScheme.onSurface
+                        val iconTint = when {
+                            unavailable -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            tool.isToggle && isActive -> MiuixTheme.colorScheme.primary
+                            else -> MiuixTheme.colorScheme.onSurface
                         }
                         if (tool.customIcon != null) {
                             Box(modifier, contentAlignment = Alignment.Center) {
@@ -16910,7 +16912,9 @@ private fun ToolGrid(
 @Composable
 internal fun ToolGridItem(tool: ToolDef, isActive: Boolean, isEnabled: Boolean = true) {
     if (tool.customItem != null) {
-        tool.customItem(isActive)
+        Box(modifier = Modifier.alpha(if (isEnabled) 1f else 0.3f)) {
+            tool.customItem(isActive)
+        }
         return
     }
 

@@ -37,7 +37,7 @@ internal object AiVoiceInput {
         listening = true
         partialText = ""
         level = 0f
-        val speech = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+        val speech = SpeechRecognizer.createSpeechRecognizer(context)
         recognizer = speech
         speech.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = Unit

@@ -79,6 +79,7 @@ fun AiPluginsPage(onBack: () -> Unit) {
             }
         },
     ) {
+        SmallTitle("插件")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
             Text(
                 "插件只支持声明式能力：HTTP 工具、提示词、MCP 配置；不执行第三方 Node/JS 代码。",
@@ -97,7 +98,6 @@ fun AiPluginsPage(onBack: () -> Unit) {
                 }
             }
         } else {
-            SmallTitle("已安装")
             Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
                 plugins.forEach { plugin ->
                     SearchableItem(
