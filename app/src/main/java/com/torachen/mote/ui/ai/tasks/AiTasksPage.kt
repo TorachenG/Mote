@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.torachen.mote.ui.SearchableItem
+import com.torachen.mote.ui.ai.AiAddCapsule
 import com.torachen.mote.ui.ai.AiSettingsScaffold
 import com.torachen.mote.ui.ai.preset.AiPresetStore
 import com.torachen.mote.ui.ai.tasks.AiTaskRunStatus
@@ -100,21 +101,13 @@ fun AiTasksPage(
         pageRoute = "ai_tasks",
         onBack = onBack,
         floatingBottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Button(
-                    onClick = {
-                        AiTaskNav.create()
-                        onEdit()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary,
-                        contentColor = MiuixTheme.colorScheme.onPrimary,
-                    ),
-                ) { Text("新建任务") }
-            }
+            AiAddCapsule(
+                contentDescription = "添加自动化任务",
+                onClick = {
+                    AiTaskNav.create()
+                    onEdit()
+                },
+            )
         },
     ) {
         Spacer(Modifier.height(12.dp))

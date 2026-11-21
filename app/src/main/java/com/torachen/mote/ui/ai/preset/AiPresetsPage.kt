@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.torachen.mote.ui.SearchableItem
+import com.torachen.mote.ui.ai.AiAddCapsule
 import com.torachen.mote.ui.ai.AiFilePermission
 import com.torachen.mote.ui.ai.AiProviderStore
 import com.torachen.mote.ui.ai.AiReasoningLevel
@@ -64,21 +65,13 @@ fun AiPresetsPage(
         pageRoute = "ai_presets",
         onBack = onBack,
         floatingBottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Button(
-                    onClick = {
-                        AiPresetNav.create()
-                        onEdit()
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary,
-                        contentColor = MiuixTheme.colorScheme.onPrimary,
-                    ),
-                ) { Text("新建预设") }
-            }
+            AiAddCapsule(
+                contentDescription = "添加 Agent 预设",
+                onClick = {
+                    AiPresetNav.create()
+                    onEdit()
+                },
+            )
         },
     ) {
         Text(

@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.torachen.mote.ui.SearchableItem
+import com.torachen.mote.ui.ai.AiAddCapsule
 import com.torachen.mote.ui.ai.AiSettingsScaffold
 import com.torachen.mote.ui.ai.security.AiSecretStore
 import kotlinx.coroutines.launch
@@ -90,23 +91,13 @@ fun McpServersPage(
         pageRoute = "ai_mcp_servers",
         onBack = onBack,
         floatingBottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Button(
-                    onClick = {
-                        McpServerNav.new()
-                        onEdit(null)
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary,
-                        contentColor = MiuixTheme.colorScheme.onPrimary,
-                    ),
-                ) { Text("添加 MCP 服务") }
-            }
+            AiAddCapsule(
+                contentDescription = "添加 MCP 服务",
+                onClick = {
+                    McpServerNav.new()
+                    onEdit(null)
+                },
+            )
         },
     ) {
         Spacer(Modifier.height(12.dp))

@@ -11,9 +11,12 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.captionBar
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,7 +40,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.luminance
@@ -48,8 +55,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurDefaults
 import top.yukonga.miuix.kmp.blur.ProgressiveBlur
@@ -340,6 +351,44 @@ private fun AiSettingsScaffoldInner(
             Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 floatingBottomBar()
             }
+        }
+    }
+}
+
+/** 与「脚本」「AI 服务」页一致的底部悬浮胶囊添加按钮。 */
+@Composable
+internal fun AiAddCapsule(
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .padding(
+                bottom = WindowInsets.navigationBars
+                    .asPaddingValues()
+                    .calculateBottomPadding() + 24.dp,
+            )
+            .padding(horizontal = 24.dp)
+            .height(56.dp)
+            .graphicsLayer {
+                shape = RoundedCornerShape(28.dp)
+                shadowElevation = 24.dp.toPx()
+                ambientShadowColor = Color.Black.copy(alpha = 0.35f)
+                spotShadowColor = Color.Transparent
+            }
+            .clip(RoundedCornerShape(28.dp))
+            .background(MiuixTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(
+                imageVector = MiuixIcons.Add,
+                contentDescription = contentDescription,
+                tint = MiuixTheme.colorScheme.onSurface,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }

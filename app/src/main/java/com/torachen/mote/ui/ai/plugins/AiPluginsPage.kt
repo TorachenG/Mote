@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.torachen.mote.ui.SearchableItem
+import com.torachen.mote.ui.ai.AiAddCapsule
 import com.torachen.mote.ui.ai.AiSettingsScaffold
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
@@ -64,18 +65,12 @@ fun AiPluginsPage(onBack: () -> Unit) {
         pageRoute = "ai_plugins",
         onBack = onBack,
         floatingBottomBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                Button(
-                    onClick = { installLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
-                    colors = ButtonDefaults.buttonColors(
-                        color = MiuixTheme.colorScheme.primary,
-                        contentColor = MiuixTheme.colorScheme.onPrimary,
-                    ),
-                ) { Text("安装插件（ZIP）") }
-            }
+            AiAddCapsule(
+                contentDescription = "安装插件",
+                onClick = {
+                    installLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                },
+            )
         },
     ) {
         Text(

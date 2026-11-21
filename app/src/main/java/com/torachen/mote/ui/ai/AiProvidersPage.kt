@@ -109,7 +109,10 @@ fun AiProvidersPage(
         pageRoute = "ai_providers",
         onBack = onBack,
         floatingBottomBar = {
-            AiAddServiceCapsule(onClick = { showAddSheet = true })
+            AiAddCapsule(
+                contentDescription = "添加 AI 服务",
+                onClick = { showAddSheet = true },
+            )
         },
     ) {
         if (providers.isEmpty()) {
@@ -202,41 +205,6 @@ private fun AiServicesEmptyPlaceholder() {
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
-        }
-    }
-}
-
-/** 与「脚本」页一致的底部悬浮胶囊工具栏：只有一个添加按钮。 */
-@Composable
-private fun AiAddServiceCapsule(onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .padding(
-                bottom = WindowInsets.navigationBars
-                    .asPaddingValues()
-                    .calculateBottomPadding() + 24.dp,
-            )
-            .padding(horizontal = 24.dp)
-            .height(56.dp)
-            .graphicsLayer {
-                shape = RoundedCornerShape(28.dp)
-                shadowElevation = 24.dp.toPx()
-                ambientShadowColor = Color.Black.copy(alpha = 0.35f)
-                spotShadowColor = Color.Transparent
-            }
-            .clip(RoundedCornerShape(28.dp))
-            .background(MiuixTheme.colorScheme.surfaceContainer)
-            .padding(horizontal = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onClick) {
-            Icon(
-                imageVector = MiuixIcons.Add,
-                contentDescription = "添加 AI 服务",
-                tint = MiuixTheme.colorScheme.onSurface,
-                modifier = Modifier.size(22.dp),
-            )
         }
     }
 }
