@@ -655,6 +655,14 @@ object AiChatStore {
     private var saveJob: Job? = null
     private var persistPending = false
     private var activeCall: okhttp3.Call? = null
+    private val indexWriteLock = Any()
+
+    /**
+     * 对话切换/新建/删除时递增。旧的 600ms 落盘任务即使已经进入 IO，
+     * 也不能再把旧 activeConversationId 写回索引，否则下次进入会“随机”回到历史对话。
+     */
+    @Volatile
+    private var indexEpoch = 0
 
     val messages = mutableStateListOf<AiUiMessage>()
     val conversations = mutableStateListOf<AiConversationMeta>()
@@ -739,7 +747,10 @@ object AiChatStore {
 
         val index = AiConversationIndex.load(context)
         if (index != null && index.conversations.isNotEmpty()) {
-            conversations.addAll(index.conversations.sortedByDescending { it.updatedAt })
+            // 旧版本用毫秒时间戳生成 id，快速新建时可能产生重复 id；这里按 id 去重。
+            conversations.addAll(
+                index.conversations.distinctBy { it.id }.sortedByDescending { it.updatedAt },
+            )
             activeConversationId = index.activeId
                 ?.takeIf { id -> conversations.any { it.id == id } }
                 ?: conversations.firstOrNull()?.id
@@ -787,9 +798,11 @@ object AiChatStore {
 
     /** 导入备份后重新从磁盘加载会话索引和当前会话。 */
     fun reloadFromDisk(context: Context) {
+        val previousActive = activeConversationId
         saveJob?.cancel()
         persistPending = false
         loaded = false
+        indexEpoch++
         messages.clear()
         allMessages.clear()
         conversations.clear()
@@ -797,6 +810,12 @@ object AiChatStore {
         rootMessageId = null
         nextId = 1L
         ensureLoaded(context)
+        // 同步/导入重载不能把用户当前正在看的新对话随机切回历史对话。
+        if (previousActive != null && conversations.any { it.id == previousActive }) {
+            activeConversationId = previousActive
+            loadConversation(context, previousActive)
+            AiConversationSettings.ensureDefaults(context, previousActive)
+        }
     }
 
     fun continueReply(messageId: Long) {
@@ -918,7 +937,9 @@ object AiChatStore {
         // 每次新建都生成独立 conversationId。即使当前对话还没有消息，也不能复用，
         // 否则两个“新对话”的输入框会共用同一份内容。
         saveCurrentNow()
-        val id = "conv_" + System.currentTimeMillis().toString(36)
+        indexEpoch++
+        // 毫秒时间戳在快速连点/重建时可能碰撞，碰撞会让两个对话共用一个文件。
+        val id = "conv_" + java.util.UUID.randomUUID().toString().replace("-", "").take(12)
         conversations.add(0, AiConversationMeta(id, "新对话", System.currentTimeMillis()))
         activeConversationId = id
         messages.clear()
@@ -936,6 +957,7 @@ object AiChatStore {
         if (streaming) stop()
         saveCurrentNow()
         val context = appContext ?: return
+        indexEpoch++
         activeConversationId = id
         loadConversation(context, id)
         notice = null
@@ -946,6 +968,7 @@ object AiChatStore {
     fun clearAllConversations() {
         if (streaming) stop()
         saveJob?.cancel()
+        indexEpoch++
         val context = appContext ?: return
         conversations.forEach { meta ->
             AiConversationStore.delete(context, meta.id)
@@ -969,6 +992,7 @@ object AiChatStore {
         if (ids.isEmpty()) return
         if (streaming && activeConversationId in ids) stop()
         saveJob?.cancel()
+        indexEpoch++
         val context = appContext ?: return
         ids.forEach { id ->
             AiConversationStore.delete(context, id)
@@ -1481,6 +1505,7 @@ object AiChatStore {
     private fun persist() {
         val context = appContext ?: return
         val id = activeConversationId ?: return
+        val epoch = indexEpoch
         updateCurrentMeta()
         // 流式生成时 persist 会被高频调用：用节流而不是取消重排，
         // 否则持续输出时永远等不到 600ms 的落盘窗口。
@@ -1490,11 +1515,17 @@ object AiChatStore {
         }
         saveJob = scope.launch {
             delay(600L)
+            if (epoch != indexEpoch) return@launch
             val snapshot = snapshotMessages()
             val conversationMetas = conversations.toList()
             withContext(Dispatchers.IO) {
                 AiConversationStore.save(context, id, snapshot, rootMessageId)
-                AiConversationIndex.save(context, id, conversationMetas)
+                synchronized(indexWriteLock) {
+                    // 旧任务不能覆盖新对话的 active id。
+                    if (epoch == indexEpoch) {
+                        AiConversationIndex.save(context, id, conversationMetas)
+                    }
+                }
             }
             if (persistPending) {
                 persistPending = false
@@ -1511,14 +1542,18 @@ object AiChatStore {
         updateCurrentMeta()
         runCatching {
             AiConversationStore.save(context, id, snapshotMessages(), rootMessageId)
-            AiConversationIndex.save(context, activeConversationId, conversations.toList())
+            synchronized(indexWriteLock) {
+                AiConversationIndex.save(context, activeConversationId, conversations.toList())
+            }
         }
     }
 
     private fun saveIndex() {
         val context = appContext ?: return
         runCatching {
-            AiConversationIndex.save(context, activeConversationId, conversations.toList())
+            synchronized(indexWriteLock) {
+                AiConversationIndex.save(context, activeConversationId, conversations.toList())
+            }
         }
     }
 }

@@ -418,9 +418,13 @@ internal object MoteCloudSyncManager {
         runOnMainBlocking { runCatching { AiChatStore.prepareForImport() } }
         val old = AiConversationIndex.load(context)?.conversations.orEmpty()
         val newIds = entries.map { it.id }.toSet()
+        val currentActive = AiChatStore.activeConversationId
         old.forEach { meta -> if (meta.id !in newIds) AiConversationStore.delete(context, meta.id) }
         entries.forEach { entry -> AiConversationStore.writeRaw(context, entry.id, entry.raw) }
-        val active = old.firstOrNull { it.id in newIds }?.id ?: entries.first().id
+        // 优先保留用户当前对话；云端覆盖不能主动把 active 切到列表里的历史对话。
+        val active = currentActive?.takeIf { it in newIds }
+            ?: old.firstOrNull { it.id in newIds }?.id
+            ?: entries.first().id
         AiConversationIndex.save(
             context,
             active,
