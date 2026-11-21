@@ -11,6 +11,7 @@ import android.content.Intent
 import android.animation.ValueAnimator
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -20,6 +21,7 @@ import android.graphics.PixelFormat
 import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.graphics.drawable.Drawable
@@ -33,6 +35,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
@@ -117,6 +120,9 @@ class AiFloatingBubbleService : Service() {
     private var closeParams: WindowManager.LayoutParams? = null
     private var closeShown = false
     private var glowView: View? = null
+    private var agentStatusView: TextView? = null
+    private var agentStatusAnimator: ValueAnimator? = null
+    private var agentStatusGeneration = 0
     private var snapAnimator: ValueAnimator? = null
     private var isTemporary = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -348,6 +354,7 @@ class AiFloatingBubbleService : Service() {
             bubbleStatusView?.text = agentStatusText
             animateBubble(bar = true)
             showAgentGlow()
+            showAgentStatus()
         } else {
             animateBubble(bar = false) {
                 bubbleDotsView?.visibility = View.GONE
@@ -356,12 +363,17 @@ class AiFloatingBubbleService : Service() {
                 updateBubbleIcon()
             }
             hideAgentGlow()
+            hideAgentStatus()
         }
     }
 
     private fun updateAgentStatus(text: String) {
         bubbleStatusView?.text = text
-        if (agentBusy) animateBubble(bar = true)
+        if (agentBusy) {
+            animateBubble(bar = true)
+            showAgentStatus()
+            animateAgentStatusText(text)
+        }
     }
 
     /** 悬浮球与长条之间平滑变形；长条左侧保留原来的三点加载。 */
@@ -522,6 +534,123 @@ class AiFloatingBubbleService : Service() {
             .start()
     }
 
+    /** 屏幕底部居中的当前动作文字；每次换文案做一次“模糊 0→峰值→换字→0”。 */
+    private fun showAgentStatus() {
+        agentStatusView?.let {
+            it.visibility = View.VISIBLE
+            return
+        }
+        val textView = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            includeFontPadding = false
+            setPadding(dp(24), dp(16), dp(24), dp(64))
+            setShadowLayer(
+                dp(8).toFloat(),
+                0f,
+                dp(2).toFloat(),
+                Color.argb(170, 0, 0, 0),
+            )
+            text = agentStatusText
+            alpha = 0f
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        }
+        runCatching {
+            windowManager.addView(textView, params)
+            agentStatusView = textView
+            textView.animate().alpha(1f).setDuration(180L).start()
+        }
+    }
+
+    private fun hideAgentStatus() {
+        agentStatusGeneration++
+        agentStatusAnimator?.cancel()
+        agentStatusAnimator = null
+        val view = agentStatusView ?: return
+        agentStatusView = null
+        view.animate().cancel()
+        view.animate().alpha(0f).setDuration(140L)
+            .withEndAction { runCatching { windowManager.removeView(view) } }
+            .start()
+    }
+
+    private fun animateAgentStatusText(text: String) {
+        val view = agentStatusView ?: return
+        if (view.text.toString() == text) return
+        agentStatusAnimator?.cancel()
+        val generation = ++agentStatusGeneration
+        val maxBlur = dp(18).toFloat()
+        val upFraction = 0.42f
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 380L
+            interpolator = LinearInterpolator()
+            addUpdateListener { animation ->
+                if (generation != agentStatusGeneration) return@addUpdateListener
+                val fraction = animation.animatedFraction
+                val blur = if (fraction <= upFraction) {
+                    maxBlur * (fraction / upFraction)
+                } else {
+                    maxBlur * ((1f - fraction) / (1f - upFraction))
+                }
+                applyAgentStatusBlur(view, blur)
+                if (fraction >= upFraction && view.text.toString() != text) {
+                    view.text = text
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (generation != agentStatusGeneration) return
+                    if (agentStatusView === view) {
+                        view.text = text
+                        applyAgentStatusBlur(view, 0f)
+                    }
+                    agentStatusAnimator = null
+                }
+            })
+        }
+        agentStatusAnimator = animator
+        animator.start()
+    }
+
+    private fun applyAgentStatusBlur(view: TextView, radius: Float) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            view.setRenderEffect(
+                if (radius <= 0.1f) {
+                    null
+                } else {
+                    RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP)
+                },
+            )
+        } else {
+            view.paint.maskFilter = if (radius <= 0.1f) {
+                null
+            } else {
+                BlurMaskFilter(radius, BlurMaskFilter.Blur.NORMAL)
+            }
+            view.invalidate()
+        }
+    }
+
     private fun showCloseTarget(show: Boolean) {
         val view = closeView ?: return
         if (show) {
@@ -641,6 +770,13 @@ class AiFloatingBubbleService : Service() {
         snapAnimator = null
         bubbleMorphAnimator?.cancel()
         bubbleMorphAnimator = null
+        agentStatusGeneration++
+        agentStatusAnimator?.cancel()
+        agentStatusAnimator = null
+        agentStatusView?.let { view ->
+            runCatching { windowManager.removeView(view) }
+        }
+        agentStatusView = null
         hideAgentGlow()
         touchEffectView?.let { view ->
             runCatching { windowManager.removeView(view) }
@@ -756,10 +892,11 @@ private class AgentGlowView(context: android.content.Context) : View(context) {
         }
     }.getOrDefault(42f * density)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 6f * density
+        style = Paint.Style.FILL
     }
     private val rect = RectF()
+    private val innerRect = RectF()
+    private val path = Path()
     private val colors = intArrayOf(
         Color.parseColor("#3482FF"),
         Color.parseColor("#9B5CFF"),
@@ -783,20 +920,34 @@ private class AgentGlowView(context: android.content.Context) : View(context) {
         ).apply { setLocalMatrix(matrix) }
         paint.shader = shader
 
-        // 由外向内多层描边：外层宽而淡，内层窄而亮，形成向屏幕内部渐隐的流光。
-        val layers = listOf(
-            22f * density to 24,
-            15f * density to 58,
-            9f * density to 120,
-            4.5f * density to 235,
-        )
-        layers.forEach { (stroke, alpha) ->
-            paint.strokeWidth = stroke
-            paint.alpha = alpha
-            val inset = stroke / 2f
-            rect.set(inset, inset, width - inset, height - inset)
-            val radius = (cornerRadius - inset).coerceAtLeast(0f)
-            canvas.drawRoundRect(rect, radius, radius, paint)
+        // 用 72 个连续同心圆角环带把 alpha 从屏幕边缘的 0 渐升到内侧的 255。
+        // 不是 3~4 层粗描边；环带之间不重叠，alpha 按 smoothstep 连续变化。
+        val band = 24f * density
+        val steps = 72
+        val stepWidth = band / steps
+        path.fillType = Path.FillType.EVEN_ODD
+        for (index in 0 until steps) {
+            val t = (index + 0.5f) / steps
+            val smooth = t * t * (3f - 2f * t)
+            paint.alpha = (smooth * 255f).toInt().coerceIn(0, 255)
+            val outer = index * stepWidth
+            val inner = outer + stepWidth
+            rect.set(outer, outer, width - outer, height - outer)
+            innerRect.set(inner, inner, width - inner, height - inner)
+            path.reset()
+            path.addRoundRect(
+                rect,
+                (cornerRadius - outer).coerceAtLeast(0f),
+                (cornerRadius - outer).coerceAtLeast(0f),
+                Path.Direction.CW,
+            )
+            path.addRoundRect(
+                innerRect,
+                (cornerRadius - inner).coerceAtLeast(0f),
+                (cornerRadius - inner).coerceAtLeast(0f),
+                Path.Direction.CCW,
+            )
+            canvas.drawPath(path, paint)
         }
         postInvalidateOnAnimation()
     }
