@@ -139,7 +139,15 @@ private val TOP_BAR_FALLBACK_HEIGHT = 128.dp
 private val SmoothEase = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
 internal const val KEY_SAVED_PASSWORDS = "saved_passwords_v1"
+internal const val KEY_PASSWORD_SAVE_PROMPT = "password_save_prompt_enabled"
+internal const val KEY_PASSWORD_AUTOFILL = "password_autofill_enabled"
 private const val KEY_UX_IMPROVEMENT = "ux_improvement_enabled"
+
+internal fun passwordSavePromptEnabled(prefs: SharedPreferences): Boolean =
+    prefs.getBoolean(KEY_PASSWORD_SAVE_PROMPT, true)
+
+internal fun passwordAutofillEnabled(prefs: SharedPreferences): Boolean =
+    prefs.getBoolean(KEY_PASSWORD_AUTOFILL, true)
 
 // ============================================================
 // 数据模型 & 持久化
@@ -331,7 +339,7 @@ internal fun exportPasswordCsv(context: Context, uri: Uri, entries: List<Passwor
 }
 
 // ============================================================
-// 个人信息页
+// 密码与个人信息页
 // ============================================================
 
 @Composable
@@ -468,7 +476,7 @@ private fun SettingsPersonalInfoMiuix(
                                 SearchableItem(
                                     title = "密码管理器",
                                     pageRoute = "settings_personal_info",
-                                    pageTitle = "个人信息",
+                                    pageTitle = "密码与个人信息",
                                     itemKey = "settings_personal_info_password_manager",
                                 ) {
                                     ArrowPreference(
@@ -488,7 +496,7 @@ private fun SettingsPersonalInfoMiuix(
                                 SearchableItem(
                                     title = "加入“用户体验改进计划”",
                                     pageRoute = "settings_personal_info",
-                                    pageTitle = "个人信息",
+                                    pageTitle = "密码与个人信息",
                                     itemKey = "settings_personal_info_ux_improvement_toggle",
                                 ) {
                                     SwitchPreference(
@@ -505,7 +513,7 @@ private fun SettingsPersonalInfoMiuix(
                                 SearchableItem(
                                     title = "查看用户体验改进计划",
                                     pageRoute = "settings_personal_info",
-                                    pageTitle = "个人信息",
+                                    pageTitle = "密码与个人信息",
                                     itemKey = "settings_personal_info_ux_improvement_view",
                                 ) {
                                     ArrowPreference(
@@ -577,8 +585,8 @@ private fun SettingsPersonalInfoMiuix(
                     }
             ) {
                 TopAppBar(
-                    title = "个人信息",
-                    largeTitle = "个人信息",
+                    title = "密码与个人信息",
+                    largeTitle = "密码与个人信息",
                     scrollBehavior = scrollBehavior,
                     color = Color.Transparent,
                     defaultWindowInsetsPadding = false,
@@ -627,7 +635,7 @@ private fun SettingsPersonalInfoMaterial(
             contentWindowInsets = WindowInsets.navigationBars.union(WindowInsets.captionBar),
             topBar = {
                 M3TopAppBar(
-                    title = { M3Text("个人信息") },
+                    title = { M3Text("密码与个人信息") },
                     navigationIcon = {
                         M3IconButton(onClick = onBack) {
                             M3Icon(
@@ -783,6 +791,9 @@ private fun PasswordManagerPageMiuix(onBack: () -> Unit) {
             addAll(loadSavedPasswords(prefs))
         }
     }
+
+    var savePromptEnabled by remember { mutableStateOf(passwordSavePromptEnabled(prefs)) }
+    var autofillEnabled by remember { mutableStateOf(passwordAutofillEnabled(prefs)) }
 
     var isMultiSelectMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<String>() }
@@ -940,6 +951,38 @@ private fun PasswordManagerPageMiuix(onBack: () -> Unit) {
                                     .padding(horizontal = 12.dp)
                                     .padding(bottom = 12.dp),
                             ) {
+                                SearchableItem(
+                                    title = "提示保存密码",
+                                    pageRoute = "settings_password_manager",
+                                    pageTitle = "密码管理器",
+                                    itemKey = "settings_password_manager_save_prompt",
+                                ) {
+                                    SwitchPreference(
+                                        title = "提示保存密码",
+                                        summary = "在网页中提交账号密码时提示保存",
+                                        checked = savePromptEnabled,
+                                        onCheckedChange = { checked ->
+                                            savePromptEnabled = checked
+                                            prefs.edit().putBoolean(KEY_PASSWORD_SAVE_PROMPT, checked).apply()
+                                        },
+                                    )
+                                }
+                                SearchableItem(
+                                    title = "自动填充密码",
+                                    pageRoute = "settings_password_manager",
+                                    pageTitle = "密码管理器",
+                                    itemKey = "settings_password_manager_autofill",
+                                ) {
+                                    SwitchPreference(
+                                        title = "自动填充密码",
+                                        summary = "打开登录页面时自动填充已保存的账号密码",
+                                        checked = autofillEnabled,
+                                        onCheckedChange = { checked ->
+                                            autofillEnabled = checked
+                                            prefs.edit().putBoolean(KEY_PASSWORD_AUTOFILL, checked).apply()
+                                        },
+                                    )
+                                }
                                 SearchableItem(
                                     title = "导入密码",
                                     pageRoute = "settings_password_manager",
@@ -1478,6 +1521,9 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
         }
     }
 
+    var savePromptEnabled by remember { mutableStateOf(passwordSavePromptEnabled(prefs)) }
+    var autofillEnabled by remember { mutableStateOf(passwordAutofillEnabled(prefs)) }
+
     var isMultiSelectMode by remember { mutableStateOf(false) }
     val selectedIds = remember { mutableStateListOf<String>() }
 
@@ -1655,6 +1701,28 @@ private fun PasswordManagerPageMaterial(onBack: () -> Unit) {
                             MoteSegmentedColumn(
                                 color = M3MaterialTheme.colorScheme.surface,
                                 content = listOf(
+                                    {
+                                        M3SegmentSwitchItem(
+                                            title = "提示保存密码",
+                                            summary = "在网页中提交账号密码时提示保存",
+                                            checked = savePromptEnabled,
+                                            onCheckedChange = { checked ->
+                                                savePromptEnabled = checked
+                                                prefs.edit().putBoolean(KEY_PASSWORD_SAVE_PROMPT, checked).apply()
+                                            },
+                                        )
+                                    },
+                                    {
+                                        M3SegmentSwitchItem(
+                                            title = "自动填充密码",
+                                            summary = "打开登录页面时自动填充已保存的账号密码",
+                                            checked = autofillEnabled,
+                                            onCheckedChange = { checked ->
+                                                autofillEnabled = checked
+                                                prefs.edit().putBoolean(KEY_PASSWORD_AUTOFILL, checked).apply()
+                                            },
+                                        )
+                                    },
                                     {
                                         M3SegmentItem(
                                             headline = { M3Text("导入密码") },

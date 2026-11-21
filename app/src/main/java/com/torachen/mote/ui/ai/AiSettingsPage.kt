@@ -4,6 +4,9 @@ package com.torachen.mote.ui.ai
 
 import android.widget.Toast
 import android.provider.Settings as AndroidSettings
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +41,16 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.torachen.mote.service.MoteAccessibilityService
+import com.torachen.mote.MoteAutoSync
 import com.torachen.mote.ui.SearchableItem
+import com.torachen.mote.ui.ai.mcp.McpStore
+import com.torachen.mote.ui.ai.preset.AiPresetStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -76,6 +89,11 @@ private val AI_FILE_LIMIT_OPTIONS = listOf(
 fun AiSettingsPage(
     onBack: () -> Unit,
     onOpenProviders: () -> Unit,
+    onOpenMcp: () -> Unit,
+    onOpenPresets: () -> Unit,
+    onOpenUsage: () -> Unit,
+    onOpenTasks: () -> Unit,
+    onOpenPlugins: () -> Unit,
 ) {
     val context = LocalContext.current
     AiProviderStore.ensureLoaded(context)
@@ -84,6 +102,36 @@ fun AiSettingsPage(
 
     var showPromptDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    var showImportConfirm by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip"),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = runCatching {
+                AiChatStore.flush()
+                withContext(Dispatchers.IO) { AiChatArchive.export(context, uri) }
+            }
+            Toast.makeText(
+                context,
+                result.fold(
+                    { count -> if (count > 0) "已导出 $count 个对话" else "暂无对话可导出" },
+                    { error -> "导出失败：${error.message ?: "未知错误"}" },
+                ),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            pendingImportUri = uri
+            showImportConfirm = true
+        }
+    }
 
     var permissionTick by remember { mutableIntStateOf(0) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -103,6 +151,10 @@ fun AiSettingsPage(
 
     val provider = AiProviderStore.active
     val conversationCount = AiChatStore.conversations.size
+    val mcpCount = McpStore.all(context).size
+    val presetCount = AiPresetStore.all(context).size
+    val taskCount = com.torachen.mote.ui.ai.tasks.AiTaskStore.all(context).size
+    val pluginCount = com.torachen.mote.ui.ai.plugins.AiPluginStore.all(context).size
     val promptSummary = if (AiSettings.systemPrompt == AiSettings.DEFAULT_SYSTEM_PROMPT) {
         "默认"
     } else {
@@ -251,6 +303,35 @@ fun AiSettingsPage(
                     },
                 )
             }
+            SearchableItem(
+                title = "导出对话备份",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_export",
+            ) {
+                ArrowPreference(
+                    title = "导出对话备份",
+                    summary = "打包全部对话和分支，不含 API Key 与设置",
+                    onClick = {
+                        val name = "Mote_AI_对话_" +
+                                SimpleDateFormat("yyyyMMdd_HHmm", Locale.getDefault())
+                                    .format(Date()) + ".zip"
+                        exportLauncher.launch(name)
+                    },
+                )
+            }
+            SearchableItem(
+                title = "导入对话备份",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_import",
+            ) {
+                ArrowPreference(
+                    title = "导入对话备份",
+                    summary = "先校验备份，通过后替换当前全部对话",
+                    onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) },
+                )
+            }
         }
 
         SmallTitle("能力")
@@ -304,6 +385,75 @@ fun AiSettingsPage(
                     }
                 },
             )
+        }
+
+        SmallTitle("扩展")
+
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 12.dp),
+        ) {
+            SearchableItem(
+                title = "MCP 服务",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_mcp",
+            ) {
+                ArrowPreference(
+                    title = "MCP 服务",
+                    summary = if (mcpCount == 0) "未配置" else "$mcpCount 个服务",
+                    onClick = onOpenMcp,
+                )
+            }
+            SearchableItem(
+                title = "Agent 预设",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_presets",
+            ) {
+                ArrowPreference(
+                    title = "Agent 预设",
+                    summary = "$presetCount 个预设 · 新建对话时选择",
+                    onClick = onOpenPresets,
+                )
+            }
+            SearchableItem(
+                title = "插件",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_plugins",
+            ) {
+                ArrowPreference(
+                    title = "插件",
+                    summary = if (pluginCount == 0) "未安装" else "$pluginCount 个插件",
+                    onClick = onOpenPlugins,
+                )
+            }
+            SearchableItem(
+                title = "自动化任务",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_tasks",
+            ) {
+                ArrowPreference(
+                    title = "自动化任务",
+                    summary = if (taskCount == 0) "未创建" else "$taskCount 个任务",
+                    onClick = onOpenTasks,
+                )
+            }
+            SearchableItem(
+                title = "用量统计",
+                pageRoute = "settings_ai",
+                pageTitle = "AI 设置",
+                itemKey = "settings_ai_usage",
+            ) {
+                ArrowPreference(
+                    title = "用量统计",
+                    summary = "请求数、token、费用趋势；仅本机保存",
+                    onClick = onOpenUsage,
+                )
+            }
         }
 
         SmallTitle("文件")
@@ -378,6 +528,69 @@ fun AiSettingsPage(
                     contentColor = Color.White,
                 ),
             ) { Text("清空") }
+        }
+    }
+
+    WindowDialog(
+        show = showImportConfirm,
+        title = "导入对话备份",
+        summary = "导入会替换当前全部对话、分支和草稿，无法撤销。API Key 和设置不会改变。",
+        onDismissRequest = {
+            showImportConfirm = false
+            pendingImportUri = null
+        },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(
+                onClick = {
+                    showImportConfirm = false
+                    pendingImportUri = null
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    color = MiuixTheme.colorScheme.secondaryContainer,
+                    contentColor = MiuixTheme.colorScheme.onSurface,
+                ),
+            ) { Text("取消") }
+            Button(
+                onClick = {
+                    val uri = pendingImportUri
+                    showImportConfirm = false
+                    pendingImportUri = null
+                    if (uri == null) return@Button
+                    AiChatStore.prepareForImport()
+                    scope.launch {
+                        val result = runCatching {
+                            withContext(Dispatchers.IO) { AiChatArchive.import(context, uri) }
+                        }
+                        result.onSuccess { count ->
+                            AiChatStore.reloadFromDisk(context)
+                            runCatching { MoteAutoSync.requestSync(context) }
+                            Toast.makeText(
+                                context,
+                                "已导入 $count 个对话",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }.onFailure { error ->
+                            Toast.makeText(
+                                context,
+                                "导入失败：${error.message ?: "未知错误"}",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
+                    }
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(
+                    color = MiuixTheme.colorScheme.primary,
+                    contentColor = Color.White,
+                ),
+            ) { Text("导入并替换") }
         }
     }
 }

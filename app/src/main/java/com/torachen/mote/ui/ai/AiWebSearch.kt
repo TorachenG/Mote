@@ -40,6 +40,7 @@ internal object AiWebSearch {
         val title: String,
         val url: String,
         val snippet: String,
+        val publishedAt: String? = null,
     )
 
     data class Page(
@@ -120,6 +121,7 @@ internal object AiWebSearch {
                     title = stripTags(unescapeEntities(tagValue(block, "title"))),
                     url = link,
                     snippet = stripTags(unescapeEntities(tagValue(block, "description"))),
+                    publishedAt = tagValue(block, "pubDate").trim().takeIf { it.isNotBlank() },
                 )
             }
             .take(MAX_RESULTS)
@@ -192,6 +194,7 @@ internal object AiWebSearch {
                     title = hit.title.take(200),
                     url = hit.url.take(2048),
                     snippet = hit.snippet.replace(Regex("\\s+"), " ").trim().take(400),
+                    publishedAt = hit.publishedAt,
                 ),
             )
             if (result.size >= limit) return result

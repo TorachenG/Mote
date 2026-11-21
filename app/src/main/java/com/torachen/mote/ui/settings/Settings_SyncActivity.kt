@@ -4,6 +4,8 @@ package com.torachen.mote.ui
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.widget.Toast
 import androidx.compose.animation.core.CubicBezierEasing
@@ -94,6 +96,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
@@ -104,6 +107,15 @@ import top.yukonga.miuix.kmp.basic.DropdownEntry
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.preference.WindowDropdownPreference
 import com.torachen.mote.MoteAutoSync
+import com.torachen.mote.ui.ai.AiChatStore
+import com.torachen.mote.ui.ai.AiConversationIndex
+import com.torachen.mote.ui.ai.AiConversationMeta
+import com.torachen.mote.ui.ai.AiConversationStore
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
@@ -130,7 +142,6 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 import top.yukonga.miuix.kmp.window.WindowCascadingListPopup
 import top.yukonga.miuix.kmp.window.WindowDialog
-import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.SecureRandom
@@ -175,6 +186,9 @@ internal object MoteCloudSyncManager {
     const val CAT_QUICK_URLS = "quick_urls"
     const val CAT_SETTINGS = "settings"
     const val CAT_PASSWORDS = "passwords"
+    const val CAT_AI_CHATS = "ai_chats"
+
+    const val KEY_AI_CHATS = "ai_chats_v1"
 
     data class WebDavConfig(val url: String, val user: String, val pass: String)
     data class SyncData(val lastModified: Long, val payload: JSONObject)
@@ -313,6 +327,110 @@ internal object MoteCloudSyncManager {
         }
     }
 
+    private fun runOnMainBlocking(timeoutMs: Long = 2_500L, block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+            return
+        }
+        val latch = CountDownLatch(1)
+        Handler(Looper.getMainLooper()).post {
+            try {
+                block()
+            } finally {
+                latch.countDown()
+            }
+        }
+        runCatching { latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS) }
+    }
+
+    private fun encodeAiJson(raw: String): String {
+        val out = ByteArrayOutputStream()
+        GZIPOutputStream(out).use { it.write(raw.toByteArray(Charsets.UTF_8)) }
+        return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+    }
+
+    private fun decodeAiJson(raw: String): String? = runCatching {
+        val bytes = Base64.decode(raw, Base64.NO_WRAP)
+        GZIPInputStream(ByteArrayInputStream(bytes)).use { input ->
+            input.readBytes().toString(Charsets.UTF_8)
+        }
+    }.getOrNull()
+
+    /** AI 对话按会话文件保存，这里打包成可加密的 JSON 数组。 */
+    private fun buildAiChatsBundle(): JSONArray? {
+        val context = MoteAppContextHolder.appContext ?: return null
+        runOnMainBlocking { runCatching { AiChatStore.flush() } }
+        val index = AiConversationIndex.load(context) ?: return null
+        val array = JSONArray()
+        index.conversations.forEach { meta ->
+            val raw = AiConversationStore.raw(context, meta.id) ?: return@forEach
+            if (runCatching { JSONObject(raw).has("messages") }.getOrDefault(false)) {
+                array.put(
+                    JSONObject().apply {
+                        put("id", meta.id)
+                        put("title", meta.title.take(200))
+                        put("updatedAt", meta.updatedAt)
+                        put("gz", true)
+                        put("json", encodeAiJson(raw))
+                    },
+                )
+            }
+        }
+        return array
+    }
+
+    /** 云端 AI 对话覆盖本地：先停掉生成/待落盘，再写文件和索引。 */
+    private fun applyAiChats(raw: String) {
+        val context = MoteAppContextHolder.appContext ?: return
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return
+        if (array.length() == 0) {
+            // 合并结果为空表示两端的会话都已被删除，需要同步清空本地记录。
+            runOnMainBlocking { runCatching { AiChatStore.prepareForImport() } }
+            AiConversationIndex.load(context)?.conversations.orEmpty().forEach { meta ->
+                AiConversationStore.delete(context, meta.id)
+            }
+            AiConversationIndex.save(context, null, emptyList())
+            Handler(Looper.getMainLooper()).post {
+                runCatching { AiChatStore.reloadFromDisk(context) }
+            }
+            return
+        }
+        data class Entry(val id: String, val title: String, val updatedAt: Long, val raw: String)
+        val entries = buildList {
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val id = obj.optString("id").trim().takeIf { it.isNotBlank() } ?: continue
+                val rawValue = obj.optString("json")
+                val json = if (obj.optBoolean("gz", false)) decodeAiJson(rawValue) else rawValue
+                if (json.isNullOrBlank()) continue
+                if (!runCatching { JSONObject(json).has("messages") }.getOrDefault(false)) continue
+                add(
+                    Entry(
+                        id = id,
+                        title = obj.optString("title").ifBlank { "新对话" }.take(200),
+                        updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
+                        raw = json,
+                    ),
+                )
+            }
+        }
+        if (entries.isEmpty()) return
+        runOnMainBlocking { runCatching { AiChatStore.prepareForImport() } }
+        val old = AiConversationIndex.load(context)?.conversations.orEmpty()
+        val newIds = entries.map { it.id }.toSet()
+        old.forEach { meta -> if (meta.id !in newIds) AiConversationStore.delete(context, meta.id) }
+        entries.forEach { entry -> AiConversationStore.writeRaw(context, entry.id, entry.raw) }
+        val active = old.firstOrNull { it.id in newIds }?.id ?: entries.first().id
+        AiConversationIndex.save(
+            context,
+            active,
+            entries.map { AiConversationMeta(it.id, it.title, it.updatedAt) },
+        )
+        Handler(Looper.getMainLooper()).post {
+            runCatching { AiChatStore.reloadFromDisk(context) }
+        }
+    }
+
     fun buildLocalData(prefs: SharedPreferences): JSONObject {
         val root = JSONObject()
         root.put("fallback_key", getLocalPass(prefs))
@@ -322,6 +440,9 @@ internal object MoteCloudSyncManager {
         if (prefs.getBoolean("sync_cat_$CAT_SEARCH_HISTORY", false)) root.put("search_history", prefs.getString("search_history", ""))
         if (prefs.getBoolean("sync_cat_$CAT_QUICK_URLS", true)) root.put("home_quick_urls", prefs.getString("home_quick_urls", "[]"))
         if (prefs.getBoolean("sync_cat_$CAT_PASSWORDS", false)) root.put("saved_passwords_v1", prefs.getString("saved_passwords_v1", "[]"))
+        if (prefs.getBoolean("sync_cat_$CAT_AI_CHATS", true)) {
+            buildAiChatsBundle()?.let { root.put(KEY_AI_CHATS, it.toString()) }
+        }
 
         if (prefs.getBoolean("sync_cat_$CAT_SETTINGS", true)) {
             val settings = JSONObject()
@@ -332,7 +453,11 @@ internal object MoteCloudSyncManager {
                 "app_icon_id", "about_last_check_time", "web_saved_zooms_v2", "mote_download_tasks_v1",
                 "cloudbase_access_token", "cloudbase_refresh_token", "cloudbase_user_id",
                 "sync_e2ee_enabled", "sync_fallback_pass", "sync_e2ee_derived_key",
-                "sync_snapshot_v1"
+                "sync_snapshot_v1",
+                // 密钥/本地扩展配置不参与云同步：Key 在 AndroidKeyStore，
+                // MCP/插件/任务/用量属于本机执行状态，跨设备同步会带来权限与重复执行风险。
+                "ai_providers", "mote_secrets", "ai_mcp_servers", "ai_mcp_tool_policies",
+                "ai_presets", "ai_plugins", "ai_plugin_config", "ai_tasks", "ai_usage"
             )
             val types = JSONObject()
             for ((k, v) in prefs.all) {
@@ -381,6 +506,9 @@ internal object MoteCloudSyncManager {
         if (prefs.getBoolean("sync_cat_$CAT_SEARCH_HISTORY", false) && data.has("search_history")) editor.putString("search_history", data.getString("search_history"))
         if (prefs.getBoolean("sync_cat_$CAT_QUICK_URLS", true) && data.has("home_quick_urls")) editor.putString("home_quick_urls", data.getString("home_quick_urls"))
         if (prefs.getBoolean("sync_cat_$CAT_PASSWORDS", false) && data.has("saved_passwords_v1")) editor.putString("saved_passwords_v1", data.getString("saved_passwords_v1"))
+        if (prefs.getBoolean("sync_cat_$CAT_AI_CHATS", true) && data.has(KEY_AI_CHATS)) {
+            applyAiChats(data.optString(KEY_AI_CHATS))
+        }
 
         if (prefs.getBoolean("sync_cat_$CAT_SETTINGS", true) && data.has("settings")) {
             val settings = data.getJSONObject("settings")
@@ -632,6 +760,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
     var catQuickUrls by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", true)) }
     var catSettings by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", true)) }
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
+    var catAiChats by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_AI_CHATS}", true)) }
     var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var showE2eeDialog by remember { mutableStateOf(false) }
     var syncFrequencyIndex by remember {
@@ -687,6 +816,7 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", catQuickUrls)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", catSettings)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", catPasswords)
+            .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_AI_CHATS}", catAiChats)
             .putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, e2eeEnabled)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_URL, webDavUrl)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_USER, webDavUser)
@@ -1014,6 +1144,13 @@ private fun SettingsSyncMiuix(onBack: () -> Unit, onOpenBrowserSync: () -> Unit)
                                             Checkbox(state = if (catPasswords) ToggleableState.On else ToggleableState.Off, onClick = { catPasswords = !catPasswords })
                                         }
                                     )
+                                    BasicComponent(
+                                        title = "AI 对话记录",
+                                        onClick = { catAiChats = !catAiChats },
+                                        endActions = {
+                                            Checkbox(state = if (catAiChats) ToggleableState.On else ToggleableState.Off, onClick = { catAiChats = !catAiChats })
+                                        }
+                                    )
                                 }
                             }
 
@@ -1333,6 +1470,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
     var catQuickUrls by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", true)) }
     var catSettings by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", true)) }
     var catPasswords by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", false)) }
+    var catAiChats by remember { mutableStateOf(prefs.getBoolean("sync_cat_${MoteCloudSyncManager.CAT_AI_CHATS}", true)) }
     var e2eeEnabled by remember { mutableStateOf(prefs.getBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, false)) }
     var showE2eeDialog by remember { mutableStateOf(false) }
     var syncFrequencyIndex by remember {
@@ -1371,6 +1509,7 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_QUICK_URLS}", catQuickUrls)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_SETTINGS}", catSettings)
             .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_PASSWORDS}", catPasswords)
+            .putBoolean("sync_cat_${MoteCloudSyncManager.CAT_AI_CHATS}", catAiChats)
             .putBoolean(MoteCloudSyncManager.KEY_E2EE_ENABLED, e2eeEnabled)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_URL, webDavUrl)
             .putString(MoteCloudSyncManager.KEY_WEBDAV_USER, webDavUser)
@@ -1740,6 +1879,13 @@ private fun SettingsSyncMaterial(onBack: () -> Unit, onOpenBrowserSync: () -> Un
                                                 headline = { M3Text("保存的密码", style = M3MaterialTheme.typography.bodyLarge) },
                                                 trailing = { androidx.compose.material3.Checkbox(checked = catPasswords, onCheckedChange = { catPasswords = it }) },
                                                 onClick = { catPasswords = !catPasswords }
+                                            )
+                                        },
+                                        {
+                                            M3SegmentItem(
+                                                headline = { M3Text("AI 对话记录", style = M3MaterialTheme.typography.bodyLarge) },
+                                                trailing = { androidx.compose.material3.Checkbox(checked = catAiChats, onCheckedChange = { catAiChats = it }) },
+                                                onClick = { catAiChats = !catAiChats }
                                             )
                                         }
                                     )

@@ -7,12 +7,19 @@ import android.content.SharedPreferences
 import android.os.Environment
 import android.os.SystemClock
 import android.widget.Toast
+import com.torachen.mote.ui.ai.mcp.AiToolApproval
+import com.torachen.mote.ui.ai.preset.AiPresetResolver
+import com.torachen.mote.ui.ai.preset.AiPresetStore
+import com.torachen.mote.ui.ai.usage.AiUsageRecorder
+import com.torachen.mote.ui.ai.security.AiProviderSecretMigrator
+import com.torachen.mote.ui.ai.security.AiSecretStore
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.torachen.mote.MoteAutoSync
 import com.torachen.mote.service.MoteAccessibilityService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,10 +69,13 @@ object AiProviderStore {
     fun ensureLoaded(context: Context) {
         if (loaded) return
         loaded = true
+        // 先把旧版明文 Key 迁到 Keystore；失败时仍可走 decodeProviders 的明文回退，
+        // 保证升级后本次仍能正常请求，下次启动继续重试迁移。
+        AiProviderSecretMigrator.migrate(context)
         val prefs = aiPrefs(context)
         providers.clear()
         providers.addAll(
-            decodeProviders(prefs.getString(KEY_PROVIDERS, null)).map { provider ->
+            decodeProviders(context, prefs.getString(KEY_PROVIDERS, null)).map { provider ->
                 val missingModel = provider.model.isBlank() || provider.model !in provider.models
                 val legacyDeepSeekName = provider.presetId == "deepseek" &&
                         provider.model == "deepseek-chat" &&
@@ -90,13 +100,24 @@ object AiProviderStore {
     /** 新增或更新一个服务；默认同时设为当前服务。 */
     fun upsert(context: Context, config: AiProviderConfig, makeActive: Boolean = true) {
         val index = providers.indexOfFirst { it.id == config.id }
+        val existing = providers.getOrNull(index)
+        val ref = config.keyRef
+            ?: existing?.keyRef
+            ?: "provider:${config.id}:apiKey"
+        // 编辑服务时表单可能只提交了非密钥字段；密钥为空时保留已经保存的 Key。
+        val effectiveKey = config.apiKey.ifBlank { existing?.apiKey.orEmpty() }
+        val secured = effectiveKey.isBlank() || AiSecretStore.put(context, ref, effectiveKey)
+        val stored = config.copy(
+            apiKey = effectiveKey,
+            keyRef = if (secured) ref else config.keyRef,
+        )
         if (index >= 0) {
-            providers[index] = config
+            providers[index] = stored
         } else {
-            providers.add(config)
+            providers.add(stored)
         }
         if (makeActive || activeId == null) {
-            activeId = config.id
+            activeId = stored.id
         }
         persist(context)
         AiFloatingBubbleService.refreshIcon()
@@ -105,7 +126,8 @@ object AiProviderStore {
     fun remove(context: Context, id: String) {
         val index = providers.indexOfFirst { it.id == id }
         if (index < 0) return
-        providers.removeAt(index)
+        val removed = providers.removeAt(index)
+        removed.keyRef?.let { AiSecretStore.delete(context, it) }
         if (activeId == id) {
             activeId = providers.firstOrNull()?.id
         }
@@ -123,6 +145,21 @@ object AiProviderStore {
     fun newCustomId(): String = "custom_" + System.currentTimeMillis().toString(36)
 
     private fun persist(context: Context) {
+        // 兜底：任何没有 ref 的旧对象，在第一次写入时补一个 Keystore ref。
+        // 如果 Keystore 不可用，宁可不写配置，也不把明文 Key 落盘。
+        var canPersist = true
+        providers.indices.forEach { index ->
+            val provider = providers[index]
+            if (provider.keyRef.isNullOrBlank() && provider.apiKey.isNotBlank()) {
+                val ref = "provider:${provider.id}:apiKey"
+                if (AiSecretStore.put(context, ref, provider.apiKey)) {
+                    providers[index] = provider.copy(keyRef = ref)
+                } else {
+                    canPersist = false
+                }
+            }
+        }
+        if (!canPersist) return
         aiPrefs(context).edit()
             .putString(KEY_PROVIDERS, encodeProviders(providers))
             .putString(KEY_ACTIVE_PROVIDER, activeId.orEmpty())
@@ -139,7 +176,8 @@ object AiProviderStore {
                     put("name", provider.name)
                     put("protocol", provider.protocol.name)
                     put("baseUrl", provider.baseUrl)
-                    put("apiKey", provider.apiKey)
+                    // 永远不写 apiKey；只写 Keystore 引用。
+                    provider.keyRef?.takeIf { it.isNotBlank() }?.let { put("apiKeyRef", it) }
                     put("model", provider.model)
                     put("supportsVision", provider.supportsVision)
                     put("supportsReasoning", provider.supportsReasoning)
@@ -172,7 +210,7 @@ object AiProviderStore {
         return array.toString()
     }
 
-    private fun decodeProviders(raw: String?): List<AiProviderConfig> {
+    private fun decodeProviders(context: Context, raw: String?): List<AiProviderConfig> {
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching {
             val array = JSONArray(raw)
@@ -181,6 +219,10 @@ object AiProviderStore {
                     val obj = array.optJSONObject(index) ?: continue
                     val id = obj.optString("id").takeIf { it.isNotBlank() } ?: continue
                     val presetId = obj.optString("presetId").takeIf { it.isNotBlank() }
+                    val keyRef = obj.optString("apiKeyRef").takeIf { it.isNotBlank() }
+                    // 迁移未完成或 Keystore 失效时，回退到旧明文字段，避免升级后服务直接不可用。
+                    val apiKey = keyRef?.let { AiSecretStore.get(context, it) }
+                        ?: obj.optString("apiKey")
                     val preset = AiPresets.byId(presetId)
                     val protocol = runCatching {
                         AiProtocol.valueOf(obj.optString("protocol"))
@@ -220,7 +262,7 @@ object AiProviderStore {
                             name = obj.optString("name").ifBlank { preset?.name ?: "AI 服务" },
                             protocol = protocol,
                             baseUrl = obj.optString("baseUrl").ifBlank { preset?.baseUrl.orEmpty() },
-                            apiKey = obj.optString("apiKey"),
+                            apiKey = apiKey,
                             model = obj.optString("model"),
                             models = models,
                             supportsVision = obj.optBoolean("supportsVision", preset?.supportsVision == true),
@@ -230,6 +272,7 @@ object AiProviderStore {
                             ),
                             modelAliases = aliases,
                             modelSpecs = specs,
+                            keyRef = keyRef,
                         ),
                     )
                 }
@@ -475,6 +518,11 @@ class AiUiMessage(
     initialReasoningDone: Boolean = initialReasoning.isNotBlank(),
     initialSteps: List<AiAgentStep> = emptyList(),
     initialGeneratedFiles: List<AiGeneratedFile> = emptyList(),
+    initialSources: List<AiSource> = emptyList(),
+    var parentId: Long? = null,
+    initialSelectedChildId: Long? = null,
+    initialContinuable: Boolean = false,
+    initialErrorAction: AiErrorAction? = null,
 ) {
     var content by mutableStateOf(initialContent)
     var reasoning by mutableStateOf(initialReasoning)
@@ -488,6 +536,10 @@ class AiUiMessage(
         private set
     var streaming by mutableStateOf(false)
     var error by mutableStateOf(initialError)
+    var errorAction by mutableStateOf(initialErrorAction)
+
+    /** 被用户停止或达到输出上限后，可以基于当前正文继续生成。 */
+    var continuable by mutableStateOf(initialContinuable)
 
     /** 思考区里的工具动作时间线（正在搜索 / 正在打开 / 正在滑动…）。 */
     val steps = mutableStateListOf<AiAgentStep>().apply { addAll(initialSteps) }
@@ -495,6 +547,28 @@ class AiUiMessage(
     /** 这条回答生成的文件，汇总显示在对话底部。 */
     val generatedFiles = mutableStateListOf<AiGeneratedFile>().apply {
         addAll(initialGeneratedFiles)
+    }
+
+    /** 联网来源：正文引用角标 [citation:N] 的编号与这里一一对应。 */
+    val sources = mutableStateListOf<AiSource>().apply { addAll(initialSources) }
+
+    var selectedChildId by mutableStateOf(initialSelectedChildId)
+
+    fun mergeSources(items: List<AiSource>) {
+        items.forEach { source ->
+            val index = sources.indexOfFirst { it.url == source.url }
+            if (index >= 0) {
+                val old = sources[index]
+                sources[index] = old.copy(
+                    title = source.title.ifBlank { old.title },
+                    snippet = source.snippet.ifBlank { old.snippet },
+                    siteName = source.siteName.ifBlank { old.siteName },
+                    publishedAt = source.publishedAt ?: old.publishedAt,
+                )
+            } else {
+                sources.add(source)
+            }
+        }
     }
 
     val isUser: Boolean get() = role == "user"
@@ -572,8 +646,6 @@ data class AiConversationMeta(
 
 object AiChatStore {
 
-    private const val MAX_RESTORED_MESSAGES = 80
-
     private var loaded = false
     private var nextId = 1L
     private var appContext: Context? = null
@@ -581,13 +653,75 @@ object AiChatStore {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var runningJob: Job? = null
     private var saveJob: Job? = null
+    private var persistPending = false
     private var activeCall: okhttp3.Call? = null
 
     val messages = mutableStateListOf<AiUiMessage>()
     val conversations = mutableStateListOf<AiConversationMeta>()
 
+    /** 当前会话的完整消息树（含未选中的分支）；messages 只是当前选中的路径。 */
+    private val allMessages = mutableStateListOf<AiUiMessage>()
+
+    var rootMessageId by mutableStateOf<Long?>(null)
+        private set
+
     var activeConversationId by mutableStateOf<String?>(null)
         private set
+
+    /** 同一父节点下的兄弟版本，供消息气泡下方的 1/N 切换器使用。 */
+    data class AiVersionInfo(val ids: List<Long>, val index: Int)
+
+    fun versionInfo(messageId: Long): AiVersionInfo? {
+        val ids = aiVersionIds(allMessages, messageId)
+        if (ids.size <= 1) return null
+        val index = ids.indexOf(messageId)
+        if (index < 0) return null
+        return AiVersionInfo(ids, index)
+    }
+
+    fun switchVersion(messageId: Long) {
+        if (streaming) return
+        val message = allMessages.firstOrNull { it.id == messageId } ?: return
+        val parentId = message.parentId
+        if (parentId == null) {
+            rootMessageId = messageId
+        } else {
+            val parent = allMessages.firstOrNull { it.id == parentId } ?: return
+            parent.selectedChildId = messageId
+        }
+        rebuildVisible()
+        persist()
+    }
+
+    private fun rebuildVisible() {
+        messages.clear()
+        messages.addAll(aiVisiblePath(allMessages, rootMessageId))
+    }
+
+    private fun loadConversation(context: Context, id: String) {
+        val loaded = AiConversationStore.load(context, id)
+        allMessages.clear()
+        allMessages.addAll(loaded)
+        val storedRoot = AiConversationStore.loadRoot(context, id)
+        // 旧文件没有 rootMessageId：按线性链迁移，保证老会话还能正常打开。
+        if (storedRoot == null && loaded.size > 1) {
+            var previous: AiUiMessage? = null
+            loaded.forEach { message ->
+                message.parentId = previous?.id
+                previous?.selectedChildId = message.id
+                previous = message
+            }
+            rootMessageId = loaded.firstOrNull()?.id
+        } else {
+            rootMessageId = storedRoot
+                ?.takeIf { root -> loaded.any { it.id == root } }
+                ?: loaded.firstOrNull { it.parentId == null }?.id
+                ?: loaded.firstOrNull()?.id
+        }
+        nextId = (allMessages.maxOfOrNull { it.id } ?: 0L) + 1L
+        rebuildVisible()
+    }
+
 
     var streaming by mutableStateOf(false)
         private set
@@ -625,12 +759,11 @@ object AiChatStore {
             }
         }
         if (activeConversationId != null) {
-            messages.clear()
-            messages.addAll(AiConversationStore.load(context, activeConversationId!!))
+            loadConversation(context, activeConversationId!!)
         }
-        nextId = (messages.maxOfOrNull { it.id } ?: 0L) + 1L
 
         AiDraftStore.ensureLoaded(context)
+        AiPresetStore.ensureLoaded(context)
         AiConversationSettings.ensureLoaded(context)
         AiConversationSettings.ensureDefaultsForAll(context, conversations.map { it.id })
     }
@@ -639,37 +772,154 @@ object AiChatStore {
         notice = null
     }
 
+    /** 导出/备份前把当前内存状态立即落盘。 */
+    fun flush() {
+        saveCurrentNow()
+    }
+
+    /** 导入备份前停止生成并取消待落盘任务，避免旧会话在导入后被写回。 */
+    fun prepareForImport() {
+        if (streaming) stop()
+        saveJob?.cancel()
+        saveJob = null
+        persistPending = false
+    }
+
+    /** 导入备份后重新从磁盘加载会话索引和当前会话。 */
+    fun reloadFromDisk(context: Context) {
+        saveJob?.cancel()
+        persistPending = false
+        loaded = false
+        messages.clear()
+        allMessages.clear()
+        conversations.clear()
+        activeConversationId = null
+        rootMessageId = null
+        nextId = 1L
+        ensureLoaded(context)
+    }
+
+    fun continueReply(messageId: Long) {
+        if (streaming) return
+        val context = appContext ?: return
+        val assistant = messages.firstOrNull { it.id == messageId && !it.isUser } ?: return
+        if (assistant.content.isBlank()) return
+        val conversationId = activeConversationId
+        val provider = AiConversationSettings.providerFor(conversationId) ?: return
+        val permission = AiConversationSettings.permissionFor(conversationId)
+        val reasoningLevel = AiConversationSettings.reasoningFor(conversationId)
+        val history = historyBefore(assistant.id)
+        assistant.continuable = false
+        assistant.error = null
+        startGeneration(
+            context = context,
+            provider = provider,
+            conversationId = conversationId,
+            assistant = assistant,
+            history = history,
+            requestText = "",
+            attachments = emptyList(),
+            userImages = emptyList(),
+            permission = permission,
+            reasoningLevel = reasoningLevel,
+            materializeRequest = history.lastOrNull { it.role == "user" }?.text.orEmpty(),
+            continuePrefix = assistant.content,
+        )
+    }
+
     fun regenerate(assistantId: Long) {
         if (streaming) return
         val context = appContext ?: return
-        val assistantIndex = messages.indexOfFirst { it.id == assistantId && !it.isUser }
-        if (assistantIndex < 0) return
-        val userIndex = messages.subList(0, assistantIndex)
-            .indexOfLast { it.isUser && it.content.isNotBlank() }
-        if (userIndex < 0) return
-        val text = messages[userIndex].content
-        truncateFrom(userIndex)
-        send(context, text, emptyList())
+        val oldAssistant = messages.firstOrNull { it.id == assistantId && !it.isUser } ?: return
+        val user = allMessages.firstOrNull { it.id == oldAssistant.parentId } ?: return
+        val conversationId = activeConversationId
+        val provider = AiConversationSettings.providerFor(conversationId) ?: return
+        val permission = AiConversationSettings.permissionFor(conversationId)
+        val reasoningLevel = AiConversationSettings.reasoningFor(conversationId)
+        val history = historyBefore(user.id)
+
+        val assistant = AiUiMessage(
+            id = nextId++,
+            role = "assistant",
+            parentId = user.id,
+        )
+        user.selectedChildId = assistant.id
+        allMessages.add(assistant)
+        rebuildVisible()
+        startGeneration(
+            context = context,
+            provider = provider,
+            conversationId = conversationId,
+            assistant = assistant,
+            history = history,
+            requestText = buildPromptText(user.content, emptyList(), user.fileContext),
+            attachments = emptyList(),
+            userImages = emptyList(),
+            permission = permission,
+            reasoningLevel = reasoningLevel,
+            materializeRequest = user.content,
+        )
     }
 
     fun editUserMessage(context: Context, messageId: Long, newText: String) {
         if (streaming) return
-        val index = messages.indexOfFirst { it.id == messageId && it.isUser }
-        if (index < 0) return
-        truncateFrom(index)
-        send(context, newText, emptyList())
-    }
+        val oldUser = messages.firstOrNull { it.id == messageId && it.isUser } ?: return
+        val parentId = oldUser.parentId
+        val conversationId = activeConversationId
+        val provider = AiConversationSettings.providerFor(conversationId) ?: return
+        val permission = AiConversationSettings.permissionFor(conversationId)
+        val reasoningLevel = AiConversationSettings.reasoningFor(conversationId)
+        val history = historyBefore(oldUser.id)
+        val trimmed = newText.trim()
+        if (trimmed.isEmpty()) return
 
-    private fun truncateFrom(index: Int) {
-        while (messages.size > index) {
-            messages.removeAt(messages.lastIndex)
+        val newUser = AiUiMessage(
+            id = nextId++,
+            role = "user",
+            initialContent = trimmed,
+            attachments = oldUser.attachments,
+            fileContext = oldUser.fileContext,
+            parentId = parentId,
+        )
+        newUser.usageTokens = estimateTokens(trimmed) + estimateTokens(oldUser.fileContext)
+        newUser.usageEstimated = true
+        val assistant = AiUiMessage(
+            id = nextId++,
+            role = "assistant",
+            parentId = newUser.id,
+        )
+        newUser.selectedChildId = assistant.id
+        if (parentId == null) {
+            rootMessageId = newUser.id
+        } else {
+            allMessages.firstOrNull { it.id == parentId }?.selectedChildId = newUser.id
         }
+        allMessages.add(newUser)
+        allMessages.add(assistant)
+        rebuildVisible()
+        startGeneration(
+            context = context,
+            provider = provider,
+            conversationId = conversationId,
+            assistant = assistant,
+            history = history,
+            requestText = buildPromptText(trimmed, emptyList(), newUser.fileContext),
+            attachments = emptyList(),
+            userImages = emptyList(),
+            permission = permission,
+            reasoningLevel = reasoningLevel,
+            materializeRequest = trimmed,
+        )
     }
 
     /** 新建一个会话；当前已经是空对话时复用，避免堆积空会话。 */
-    fun newConversation() {
+    fun newConversation(presetId: String? = null) {
         if (streaming) stop()
         if (activeConversationId != null && messages.isEmpty()) {
+            val context = appContext
+            if (context != null && presetId != null) {
+                AiConversationSettings.setPreset(context, activeConversationId, presetId)
+            }
             notice = null
             return
         }
@@ -689,9 +939,11 @@ object AiChatStore {
         conversations.add(0, AiConversationMeta(id, "新对话", System.currentTimeMillis()))
         activeConversationId = id
         messages.clear()
+        allMessages.clear()
+        rootMessageId = null
         nextId = 1L
         notice = null
-        appContext?.let { AiConversationSettings.ensureDefaults(it, id) }
+        appContext?.let { AiConversationSettings.ensureDefaults(it, id, presetId) }
         saveIndex()
     }
 
@@ -702,9 +954,7 @@ object AiChatStore {
         saveCurrentNow()
         val context = appContext ?: return
         activeConversationId = id
-        messages.clear()
-        messages.addAll(AiConversationStore.load(context, id))
-        nextId = (messages.maxOfOrNull { it.id } ?: 0L) + 1L
+        loadConversation(context, id)
         notice = null
         AiConversationSettings.ensureDefaults(context, id)
         saveIndex()
@@ -722,11 +972,14 @@ object AiChatStore {
         AiConversationIndex.delete(context)
         conversations.clear()
         messages.clear()
+        allMessages.clear()
+        rootMessageId = null
         activeConversationId = null
         nextId = 1L
         notice = null
         AiConversationSettings.clearAll(context)
         AiDraftStore.clearAll(context)
+        runCatching { MoteAutoSync.requestSync(context) }
     }
 
     fun deleteConversations(ids: Set<String>) {
@@ -743,20 +996,26 @@ object AiChatStore {
         if (activeConversationId in ids) {
             activeConversationId = conversations.firstOrNull()?.id
             messages.clear()
+            allMessages.clear()
+            rootMessageId = null
             if (activeConversationId != null) {
-                messages.addAll(AiConversationStore.load(context, activeConversationId!!))
+                loadConversation(context, activeConversationId!!)
                 AiConversationSettings.ensureDefaults(context, activeConversationId!!)
             }
-            nextId = (messages.maxOfOrNull { it.id } ?: 0L) + 1L
         }
         AiConversationIndex.save(context, activeConversationId, conversations.toList())
+        runCatching { MoteAutoSync.requestSync(context) }
     }
 
     /** 普通对话和自动操作统一用 Markdown 追加错误，保留已生成内容。 */
-    private fun AiUiMessage.appendGenerationError(message: String) {
+    private fun AiUiMessage.appendGenerationError(
+        message: String,
+        action: AiErrorAction = AiErrorAction.None,
+    ) {
         val block = "> **生成出错**：$message"
         content = if (content.isBlank()) block else "$content\n\n$block"
         error = null
+        errorAction = action.takeIf { it != AiErrorAction.None }
     }
 
     fun send(context: Context, text: String, attachments: List<AiAttachment>) {
@@ -767,13 +1026,17 @@ object AiChatStore {
         }
 
         val conversationId = activeConversationId
-        val provider = AiConversationSettings.providerFor(conversationId)
+        val resolved = AiPresetResolver.resolve(context, conversationId)
+        val provider = resolved?.provider ?: AiConversationSettings.providerFor(conversationId)
         if (provider == null || !provider.isConfigured) {
             notice = "还没有可用的 AI 服务，请先在设置中绑定 API Key 与模型"
             return
         }
-        val permission = AiConversationSettings.permissionFor(conversationId)
-        val reasoningLevel = AiConversationSettings.reasoningFor(conversationId)
+        val permission = resolved?.filePermission
+            ?: AiConversationSettings.permissionFor(conversationId)
+        val reasoningLevel = resolved?.reasoning
+            ?: AiConversationSettings.reasoningFor(conversationId)
+        val systemPrompt = resolved?.systemPrompt ?: AiSettings.systemPrompt
 
         val trimmed = text.trim()
         if (trimmed.isEmpty() && attachments.isEmpty()) return
@@ -787,16 +1050,30 @@ object AiChatStore {
         val fileContext = buildFileContext(attachments)
         val requestText = buildPromptText(trimmed, attachments, fileContext)
 
+        val parentMessage = messages.lastOrNull()
         val userMessage = AiUiMessage(
             id = nextId++,
             role = "user",
             initialContent = trimmed,
             attachments = attachments.map { it.meta },
             fileContext = fileContext,
+            parentId = parentMessage?.id,
         )
         userMessage.usageTokens = estimateTokens(trimmed) + estimateTokens(fileContext)
         userMessage.usageEstimated = true
-        val assistant = AiUiMessage(id = nextId++, role = "assistant")
+        val assistant = AiUiMessage(
+            id = nextId++,
+            role = "assistant",
+            parentId = userMessage.id,
+        )
+        userMessage.selectedChildId = assistant.id
+        if (parentMessage == null) {
+            rootMessageId = userMessage.id
+        } else {
+            parentMessage.selectedChildId = userMessage.id
+        }
+        allMessages.add(userMessage)
+        allMessages.add(assistant)
         messages.add(userMessage)
         messages.add(assistant)
         notice = null
@@ -816,6 +1093,8 @@ object AiChatStore {
         var cancelled = false
         streaming = true
         assistant.streaming = true
+        assistant.error = null
+        assistant.errorAction = null
         assistant.startReasoning(startedAt)
 
         // 所有请求都走同一个 Agent 循环：由模型自己判断要不要搜索、打开网页、
@@ -826,7 +1105,7 @@ object AiChatStore {
                 val result = AiAgentRunner.run(
                     context = context,
                     provider = provider,
-                    systemPrompt = AiSettings.systemPrompt + "\n\n" +
+                    systemPrompt = systemPrompt + "\n\n" +
                             reasoningLevel.instruction,
                     history = history,
                     userRequest = requestText,
@@ -837,6 +1116,8 @@ object AiChatStore {
                     onThought = { delta ->
                         assistant.startReasoning(startedAt)
                         assistant.appendReasoning(delta)
+                        // 边生成边落盘：即使渲染层异常退出，重新进入也能恢复已生成内容
+                        persist()
                     },
                     onStep = { step ->
                         assistant.upsertStep(step)
@@ -847,6 +1128,7 @@ object AiChatStore {
                             assistant.finishReasoning(SystemClock.elapsedRealtime() - startedAt)
                         }
                         assistant.content += delta
+                        persist()
                     },
                     onCall = { activeCall = it },
                     onConfirmEdit = { request -> AiFileEditConfirmation.ask(request) },
@@ -857,8 +1139,30 @@ object AiChatStore {
                         assistant.addGeneratedFile(file)
                         persist()
                     },
+                    onSources = { sources ->
+                        assistant.mergeSources(sources)
+                        persist()
+                    },
+                    onApproveTool = { request -> AiToolApproval.ask(context, request) },
+                    deviceControlEnabled = resolved?.deviceControl ?: AiSettings.agentEnabled,
+                    allowedTools = resolved?.allowedTools,
+                    mcpServerIds = resolved?.mcpServerIds,
+                    onRequestUsage = { request ->
+                        AiUsageRecorder.record(
+                            context = context,
+                            request = request,
+                            conversationId = conversationId,
+                            messageId = assistant.id,
+                            presetId = resolved?.presetId,
+                            provider = provider,
+                        )
+                    },
                 )
                 assistant.content = cleanFinalAnswer(result.text)
+                assistant.mergeSources(result.sources)
+                assistant.continuable = result.stopReason
+                    ?.lowercase()
+                    ?.let { it == "max_tokens" || it == "length" } == true
                 val materialized = runCatching {
                     withContext(Dispatchers.IO) {
                         AiDocumentWriter.materialize(
@@ -876,14 +1180,14 @@ object AiChatStore {
                 }
                 throw cancel
             } catch (throwable: Throwable) {
-                assistant.appendGenerationError(aiErrorMessage(throwable))
+                assistant.appendGenerationError(aiErrorMessage(throwable), aiErrorAction(throwable))
             } finally {
                 val endedAt = SystemClock.elapsedRealtime()
                 assistant.finishPendingSteps(cancelled = cancelled)
                 assistant.finishReasoning(endedAt - startedAt)
                 assistant.finishStreaming(endedAt - startedAt)
                 if (assistant.usageTokens <= 0) {
-                    assistant.usageTokens = estimateTokens(AiSettings.systemPrompt) +
+                    assistant.usageTokens = estimateTokens(systemPrompt) +
                             history.sumOf { estimateTokens(it.text) } +
                             estimateTokens(requestText) +
                             assistant.steps.sumOf { estimateTokens(it.title + it.detail) } +
@@ -893,11 +1197,173 @@ object AiChatStore {
                 streaming = false
                 runningJob = null
                 activeCall = null
+                val hadControl = runCatching {
+                    AiFloatingBubbleService.isAgentBusy()
+                }.getOrDefault(false)
                 runCatching {
                     AiFloatingBubbleService.setAgentBusy(false)
-                    AiFloatingController.stopTemporary(context)
+                    if (hadControl) {
+                        // 任务结束后让悬浮球多停留一会儿，方便用户回到 Mote AI
+                        AiFloatingController.stopTemporaryDelayed(context, 6_000L)
+                        Toast.makeText(
+                            context,
+                            if (cancelled) "已停止自动操作" else "自动操作已完成",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        AiFloatingController.stopTemporary(context)
+                    }
                 }
                 persist()
+                runCatching { MoteAutoSync.requestSync(context) }
+            }
+        }
+    }
+
+    private fun startGeneration(
+        context: Context,
+        provider: AiProviderConfig,
+        conversationId: String?,
+        assistant: AiUiMessage,
+        history: List<AiPromptMessage>,
+        requestText: String,
+        attachments: List<AiAttachment>,
+        userImages: List<AiImagePart>,
+        permission: AiFilePermission,
+        reasoningLevel: AiReasoningLevel,
+        materializeRequest: String,
+        continuePrefix: String? = null,
+    ) {
+        val resolved = AiPresetResolver.resolve(context, conversationId)
+        val effectiveProvider = resolved?.provider ?: provider
+        val effectivePermission = resolved?.filePermission ?: permission
+        val effectiveReasoning = resolved?.reasoning ?: reasoningLevel
+        val systemPrompt = resolved?.systemPrompt ?: AiSettings.systemPrompt
+        val startedAt = SystemClock.elapsedRealtime()
+        var cancelled = false
+        streaming = true
+        assistant.streaming = true
+        assistant.error = null
+        assistant.errorAction = null
+        assistant.startReasoning(startedAt)
+
+        runningJob = scope.launch {
+            try {
+                val result = AiAgentRunner.run(
+                    context = context,
+                    provider = effectiveProvider,
+                    systemPrompt = systemPrompt + "\n\n" +
+                            effectiveReasoning.instruction,
+                    history = history,
+                    userRequest = requestText,
+                    userImages = userImages,
+                    files = attachments,
+                    permission = effectivePermission,
+                    reasoning = effectiveReasoning,
+                    prefixAssistant = continuePrefix,
+                    onThought = { delta ->
+                        assistant.startReasoning(startedAt)
+                        assistant.appendReasoning(delta)
+                        persist()
+                    },
+                    onStep = { step ->
+                        assistant.upsertStep(step)
+                        persist()
+                    },
+                    onContent = { delta ->
+                        if (assistant.reasoning.isNotBlank() && !assistant.reasoningDone) {
+                            assistant.finishReasoning(SystemClock.elapsedRealtime() - startedAt)
+                        }
+                        assistant.content += delta
+                        persist()
+                    },
+                    onCall = { activeCall = it },
+                    onConfirmEdit = { request -> AiFileEditConfirmation.ask(request) },
+                    onNotice = { message ->
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                    },
+                    onGeneratedFile = { file ->
+                        assistant.addGeneratedFile(file)
+                        persist()
+                    },
+                    onSources = { sources ->
+                        assistant.mergeSources(sources)
+                        persist()
+                    },
+                    onApproveTool = { request -> AiToolApproval.ask(context, request) },
+                    deviceControlEnabled = resolved?.deviceControl ?: AiSettings.agentEnabled,
+                    allowedTools = resolved?.allowedTools,
+                    mcpServerIds = resolved?.mcpServerIds,
+                    onRequestUsage = { request ->
+                        AiUsageRecorder.record(
+                            context = context,
+                            request = request,
+                            conversationId = conversationId,
+                            messageId = assistant.id,
+                            presetId = resolved?.presetId,
+                            provider = effectiveProvider,
+                        )
+                    },
+                )
+                if (continuePrefix == null) {
+                    assistant.content = cleanFinalAnswer(result.text)
+                }
+                assistant.mergeSources(result.sources)
+                assistant.continuable = result.stopReason
+                    ?.lowercase()
+                    ?.let { it == "max_tokens" || it == "length" } == true
+                val materialized = runCatching {
+                    withContext(Dispatchers.IO) {
+                        AiDocumentWriter.materialize(
+                            context = context,
+                            assistant = assistant,
+                            directRequest = if (result.documentCreated) "" else materializeRequest,
+                        )
+                    }
+                }.getOrNull()
+                materialized?.let { assistant.addGeneratedFile(it) }
+            } catch (cancel: CancellationException) {
+                cancelled = true
+                if (assistant.content.isBlank() && assistant.reasoning.isBlank()) {
+                    assistant.content = "（已停止生成）"
+                }
+                throw cancel
+            } catch (throwable: Throwable) {
+                assistant.appendGenerationError(aiErrorMessage(throwable), aiErrorAction(throwable))
+            } finally {
+                val endedAt = SystemClock.elapsedRealtime()
+                assistant.finishPendingSteps(cancelled = cancelled)
+                assistant.finishReasoning(endedAt - startedAt)
+                assistant.finishStreaming(endedAt - startedAt)
+                if (assistant.usageTokens <= 0) {
+                    assistant.usageTokens = estimateTokens(systemPrompt) +
+                            history.sumOf { estimateTokens(it.text) } +
+                            estimateTokens(requestText) +
+                            assistant.steps.sumOf { estimateTokens(it.title + it.detail) } +
+                            estimateTokens(assistant.reasoning + assistant.content)
+                    assistant.usageEstimated = true
+                }
+                streaming = false
+                runningJob = null
+                activeCall = null
+                val hadControl = runCatching {
+                    AiFloatingBubbleService.isAgentBusy()
+                }.getOrDefault(false)
+                runCatching {
+                    AiFloatingBubbleService.setAgentBusy(false)
+                    if (hadControl) {
+                        AiFloatingController.stopTemporaryDelayed(context, 6_000L)
+                        Toast.makeText(
+                            context,
+                            if (cancelled) "已停止自动操作" else "自动操作已完成",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        AiFloatingController.stopTemporary(context)
+                    }
+                }
+                persist()
+                runCatching { MoteAutoSync.requestSync(context) }
             }
         }
     }
@@ -910,12 +1376,13 @@ object AiChatStore {
         streaming = false
         messages.lastOrNull { !it.isUser && it.streaming }?.let { message ->
             message.finishStreaming(0L)
+            message.continuable = message.content.isNotBlank()
         }
         persist()
     }
 
     private fun buildHistory(): List<AiPromptMessage> {
-        val turns = AiSettings.contextTurns.coerceIn(0, 40)
+        val turns = AiConversationSettings.contextTurnsFor(activeConversationId).coerceIn(0, 40)
         if (messages.isEmpty()) return emptyList()
         val limit = if (turns == 0) 0 else turns * 2
         val source = if (limit <= 0) {
@@ -923,7 +1390,11 @@ object AiChatStore {
         } else {
             messages.takeLast(limit).dropWhile { it.role == "assistant" }
         }
-        return source.mapNotNull { message ->
+        return promptHistory(source)
+    }
+
+    private fun promptHistory(source: List<AiUiMessage>): List<AiPromptMessage> =
+        source.mapNotNull { message ->
             val text = when {
                 message.isUser -> buildString {
                     if (message.fileContext.isNotBlank()) {
@@ -936,6 +1407,20 @@ object AiChatStore {
             }
             if (text.isBlank()) null else AiPromptMessage(message.role, text)
         }
+
+    private fun historyBefore(messageId: Long?): List<AiPromptMessage> {
+        if (messageId == null) return emptyList()
+        val index = messages.indexOfFirst { it.id == messageId }
+        if (index < 0) return emptyList()
+        val before = messages.subList(0, index)
+        val turns = AiConversationSettings.contextTurnsFor(activeConversationId).coerceIn(0, 40)
+        val limit = if (turns == 0) 0 else turns * 2
+        val source = if (limit <= 0) {
+            emptyList()
+        } else {
+            before.takeLast(limit).dropWhile { it.role == "assistant" }
+        }
+        return promptHistory(source)
     }
 
     private fun buildFileContext(attachments: List<AiAttachment>): String {
@@ -987,8 +1472,11 @@ object AiChatStore {
     }
 
     private fun snapshotMessages(): List<SavedMessage> =
-        messages.takeLast(MAX_RESTORED_MESSAGES).map { message ->
+        allMessages.map { message ->
             SavedMessage(
+                id = message.id,
+                parentId = message.parentId,
+                selectedChildId = message.selectedChildId,
                 role = message.role,
                 content = message.content,
                 reasoning = message.reasoning,
@@ -999,8 +1487,11 @@ object AiChatStore {
                 usageTokens = message.usageTokens,
                 usageEstimated = message.usageEstimated,
                 error = message.error,
+                errorAction = message.errorAction,
                 steps = message.steps.toList(),
                 generatedFiles = message.generatedFiles.toList(),
+                sources = message.sources.toList(),
+                continuable = message.continuable,
             )
         }
 
@@ -1008,26 +1499,35 @@ object AiChatStore {
         val context = appContext ?: return
         val id = activeConversationId ?: return
         updateCurrentMeta()
-        val snapshot = snapshotMessages()
-        val conversationMetas = conversations.toList()
-        val active = id
-        saveJob?.cancel()
+        // 流式生成时 persist 会被高频调用：用节流而不是取消重排，
+        // 否则持续输出时永远等不到 600ms 的落盘窗口。
+        if (saveJob?.isActive == true) {
+            persistPending = true
+            return
+        }
         saveJob = scope.launch {
             delay(600L)
+            val snapshot = snapshotMessages()
+            val conversationMetas = conversations.toList()
             withContext(Dispatchers.IO) {
-                AiConversationStore.save(context, id, snapshot)
-                AiConversationIndex.save(context, active, conversationMetas)
+                AiConversationStore.save(context, id, snapshot, rootMessageId)
+                AiConversationIndex.save(context, id, conversationMetas)
+            }
+            if (persistPending) {
+                persistPending = false
+                persist()
             }
         }
     }
 
     private fun saveCurrentNow() {
         saveJob?.cancel()
+        persistPending = false
         val context = appContext ?: return
         val id = activeConversationId ?: return
         updateCurrentMeta()
         runCatching {
-            AiConversationStore.save(context, id, snapshotMessages())
+            AiConversationStore.save(context, id, snapshotMessages(), rootMessageId)
             AiConversationIndex.save(context, activeConversationId, conversations.toList())
         }
     }
@@ -1045,6 +1545,9 @@ object AiChatStore {
 // ============================================================
 
 internal data class SavedMessage(
+    val id: Long = 0L,
+    val parentId: Long? = null,
+    val selectedChildId: Long? = null,
     val role: String,
     val content: String,
     val reasoning: String,
@@ -1055,8 +1558,11 @@ internal data class SavedMessage(
     val usageTokens: Int,
     val usageEstimated: Boolean,
     val error: String?,
+    val errorAction: AiErrorAction? = null,
     val steps: List<AiAgentStep> = emptyList(),
     val generatedFiles: List<AiGeneratedFile> = emptyList(),
+    val sources: List<AiSource> = emptyList(),
+    val continuable: Boolean = false,
 )
 
 /** 旧记录里只有「已生成文件：Download/Mote/xxx」文字，这里补回结构化文件卡片。 */
@@ -1139,6 +1645,13 @@ internal object AiConversationStore {
                                         AiStepState.valueOf(item.optString("state"))
                                     }.getOrDefault(AiStepState.Done)
                                         .let { if (it == AiStepState.Running) AiStepState.Done else it },
+                                    kind = runCatching {
+                                        AiStepKind.valueOf(item.optString("kind"))
+                                    }.getOrDefault(AiStepKind.Other),
+                                    sourceIds = item.optJSONArray("sourceIds")?.let { ids ->
+                                        (0 until ids.length()).map { ids.optInt(it) }
+                                    }.orEmpty(),
+                                    url = item.optString("url").takeIf { it.isNotBlank() },
                                 ),
                             )
                         }
@@ -1168,9 +1681,28 @@ internal object AiConversationStore {
                     } else {
                         emptyList()
                     }
+                    val sources = mutableListOf<AiSource>()
+                    obj.optJSONArray("sources")?.let { sourceArray ->
+                        for (i in 0 until sourceArray.length()) {
+                            val item = sourceArray.optJSONObject(i) ?: continue
+                            val url = item.optString("url")
+                            if (url.isBlank()) continue
+                            sources.add(
+                                AiSource(
+                                    index = item.optInt("index", i + 1),
+                                    url = url,
+                                    title = item.optString("title").ifBlank { url },
+                                    siteName = item.optString("siteName"),
+                                    snippet = item.optString("snippet"),
+                                    publishedAt = item.optString("publishedAt")
+                                        .takeIf { it.isNotBlank() },
+                                ),
+                            )
+                        }
+                    }
                     add(
                         AiUiMessage(
-                            id = index.toLong() + 1L,
+                            id = obj.optLong("id", index.toLong() + 1L),
                             role = role,
                             initialContent = content,
                             initialReasoning = obj.optString("reasoning"),
@@ -1181,9 +1713,25 @@ internal object AiConversationStore {
                             initialUsageTokens = obj.optInt("usageTokens"),
                             initialUsageEstimated = obj.optBoolean("usageEstimated"),
                             initialError = obj.optString("error").takeIf { it.isNotBlank() },
+                            initialErrorAction = runCatching {
+                                AiErrorAction.valueOf(obj.optString("errorAction"))
+                            }.getOrNull(),
                             initialReasoningDone = role == "assistant",
                             initialSteps = steps,
                             initialGeneratedFiles = generatedFiles + recovered,
+                            initialSources = sources,
+                            initialContinuable = obj.optBoolean("continuable"),
+                            parentId = if (obj.has("parentId") && !obj.isNull("parentId")) {
+                                obj.optLong("parentId")
+                            } else {
+                                null
+                            },
+                            initialSelectedChildId =
+                            if (obj.has("selectedChildId") && !obj.isNull("selectedChildId")) {
+                                obj.optLong("selectedChildId")
+                            } else {
+                                null
+                            },
                         ),
                     )
                 }
@@ -1191,7 +1739,31 @@ internal object AiConversationStore {
         }.getOrDefault(emptyList())
     }
 
-    fun save(context: Context, id: String, messages: List<SavedMessage>) {
+    fun loadRoot(context: Context, id: String): Long? {
+        val raw = runCatching { file(context, id).readText() }.getOrNull() ?: return null
+        return runCatching {
+            val root = JSONObject(raw)
+            if (root.has("rootMessageId") && !root.isNull("rootMessageId")) {
+                root.optLong("rootMessageId")
+            } else {
+                null
+            }
+        }.getOrNull()
+    }
+
+    fun raw(context: Context, id: String): String? =
+        runCatching { file(context, id).takeIf { it.isFile }?.readText() }.getOrNull()
+
+    fun writeRaw(context: Context, id: String, raw: String) {
+        runCatching { file(context, id).writeText(raw) }
+    }
+
+    fun save(
+        context: Context,
+        id: String,
+        messages: List<SavedMessage>,
+        rootMessageId: Long? = null,
+    ) {
         val target = file(context, id)
         if (messages.isEmpty()) {
             if (id != "legacy") target.delete()
@@ -1202,6 +1774,9 @@ internal object AiConversationStore {
             messages.forEach { message ->
                 array.put(
                     JSONObject().apply {
+                        put("id", message.id)
+                        message.parentId?.let { put("parentId", it) }
+                        message.selectedChildId?.let { put("selectedChildId", it) }
                         put("role", message.role)
                         put("content", message.content.take(MAX_CONTENT_CHARS))
                         put("reasoning", message.reasoning.take(MAX_CONTENT_CHARS))
@@ -1210,9 +1785,11 @@ internal object AiConversationStore {
                         put("createdAt", message.createdAt)
                         put("usageTokens", message.usageTokens)
                         put("usageEstimated", message.usageEstimated)
+                        if (message.continuable) put("continuable", true)
                         if (!message.error.isNullOrBlank()) {
                             put("error", message.error.take(4000))
                         }
+                        message.errorAction?.let { put("errorAction", it.name) }
                         if (message.steps.isNotEmpty()) {
                             put(
                                 "steps",
@@ -1224,6 +1801,16 @@ internal object AiConversationStore {
                                                 put("title", step.title.take(200))
                                                 put("detail", step.detail.take(300))
                                                 put("state", step.state.name)
+                                                put("kind", step.kind.name)
+                                                if (step.sourceIds.isNotEmpty()) {
+                                                    put(
+                                                        "sourceIds",
+                                                        JSONArray().apply {
+                                                            step.sourceIds.forEach { put(it) }
+                                                        },
+                                                    )
+                                                }
+                                                step.url?.let { put("url", it.take(1000)) }
                                             },
                                         )
                                     }
@@ -1263,10 +1850,32 @@ internal object AiConversationStore {
                                 }
                             },
                         )
+                        if (message.sources.isNotEmpty()) {
+                            put(
+                                "sources",
+                                JSONArray().apply {
+                                    message.sources.forEach { source ->
+                                        put(
+                                            JSONObject().apply {
+                                                put("index", source.index)
+                                                put("url", source.url)
+                                                put("title", source.title.take(300))
+                                                put("siteName", source.siteName.take(120))
+                                                put("snippet", source.snippet.take(500))
+                                                source.publishedAt?.let {
+                                                    put("publishedAt", it.take(120))
+                                                }
+                                            },
+                                        )
+                                    }
+                                },
+                            )
+                        }
                     },
                 )
             }
             val root = JSONObject().put("messages", array)
+            rootMessageId?.let { root.put("rootMessageId", it) }
             target.writeText(root.toString())
         }
     }

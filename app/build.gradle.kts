@@ -138,8 +138,8 @@ android {
         applicationId = "com.torachen.mote"
         minSdk = 24
         targetSdk = 37
-        versionCode = 25
-        versionName = "0.3.4"
+        versionCode = 26
+        versionName = "0.3.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -259,6 +259,8 @@ dependencies {
 
     // ===== 测试 =====
     testImplementation(libs.junit)
+    // Android 单测里的 org.json 是空壳；MCP JSON-RPC/配置测试需要真实实现。仅测试期使用。
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 

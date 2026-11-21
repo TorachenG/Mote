@@ -4,7 +4,15 @@ package com.torachen.mote.ui.ai
 
 import android.content.Context
 import com.torachen.mote.service.MoteAccessibilityService
+import com.torachen.mote.ui.ai.mcp.AiToolApprovalDecision
+import com.torachen.mote.ui.ai.mcp.AiToolApprovalRequest
+import com.torachen.mote.ui.ai.mcp.McpManager
+import com.torachen.mote.ui.ai.plugins.AiPluginRuntime
+import com.torachen.mote.ui.ai.usage.AiRequestUsage
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -31,10 +39,23 @@ internal object AiAgentRunner {
     private const val MAX_TOOL_MESSAGES = 30
     private const val TOOL_FENCE = "```mote-tool"
 
+    private val DEVICE_CONTROL_TOOLS = setOf(
+        "open_app",
+        "read_screen",
+        "tap",
+        "long_press",
+        "swipe",
+        "scroll",
+        "input_text",
+        "press_key",
+    )
+
     data class Result(
         val text: String,
         val documentCreated: Boolean,
         val toolsUsed: List<String>,
+        val sources: List<AiSource> = emptyList(),
+        val stopReason: String? = null,
     )
 
     fun isServiceConnected(): Boolean = MoteAccessibilityService.instance != null
@@ -49,6 +70,7 @@ internal object AiAgentRunner {
         files: List<AiAttachment>,
         permission: AiFilePermission,
         reasoning: AiReasoningLevel,
+        prefixAssistant: String? = null,
         onThought: (String) -> Unit,
         onStep: (AiAgentStep) -> Unit,
         onContent: (String) -> Unit,
@@ -56,35 +78,73 @@ internal object AiAgentRunner {
         onConfirmEdit: suspend (AiFileEditRequest) -> Boolean,
         onNotice: (String) -> Unit,
         onGeneratedFile: (AiGeneratedFile) -> Unit = {},
+        onSources: (List<AiSource>) -> Unit = {},
+        deviceControlEnabled: Boolean = AiSettings.agentEnabled,
+        allowedTools: Set<String>? = null,
+        mcpServerIds: Set<String>? = null,
+        onApproveTool: suspend (AiToolApprovalRequest) -> AiToolApprovalDecision = {
+            AiToolApprovalDecision.Deny
+        },
+        onRequestUsage: (AiRequestUsage) -> Unit = {},
     ): Result {
+        McpManager.awaitReady(context, mcpServerIds)
+        val mcpSpecs = McpManager.specsFor(context, mcpServerIds) +
+                McpManager.resourceSpecs(context, mcpServerIds) +
+                AiPluginRuntime.tools(context)
         val env = AiToolEnv(
             context = context,
             files = files,
             permission = permission,
             webSearchEnabled = AiSettings.webSearchEnabled,
-            deviceControlEnabled = AiSettings.agentEnabled,
+            deviceControlEnabled = deviceControlEnabled,
             accessibilityReady = MoteAccessibilityService.instance != null,
             supportsVision = provider.specFor(provider.model).supportsImage,
+            allowedTools = allowedTools,
+            extraTools = mcpSpecs,
+            externalExecutor = { call ->
+                when {
+                    call.name.startsWith("plugin__") ->
+                        AiPluginRuntime.executeTool(context, call)
+
+                    call.name == "mcp_list_resources" || call.name == "mcp_read_resource" ->
+                        McpManager.executeResourceTool(context, call, mcpServerIds)
+
+                    else -> McpManager.executeTool(
+                        context = context,
+                        call = call,
+                        supportsVision = provider.specFor(provider.model).supportsImage,
+                    )
+                }
+            },
+            onApproveTool = onApproveTool,
+            externalInstructions = McpManager.instructionsFor(context, mcpServerIds) +
+                    AiPluginRuntime.promptSections(context),
         )
         val system = buildString {
             if (systemPrompt.isNotBlank()) append(systemPrompt.trim()).append("\n\n")
+            append("【当前环境】").append(latestReminder()).append("\n\n")
             append(aiToolSystemPrompt(env))
         }
 
         val messages = ArrayList<AiPromptMessage>()
         messages.addAll(history)
-        messages.add(
-            AiPromptMessage(
-                role = "user",
-                text = buildUserText(userRequest, files),
-                images = userImages,
-            ),
-        )
+        if (prefixAssistant.isNullOrBlank()) {
+            messages.add(
+                AiPromptMessage(
+                    role = "user",
+                    text = buildUserText(userRequest, files),
+                    images = userImages,
+                ),
+            )
+        } else {
+            messages.add(AiPromptMessage(role = "assistant", text = prefixAssistant))
+        }
 
         var documentCreated = false
         val toolsUsed = LinkedHashSet<String>()
         var stepId = 0L
         var parseFailures = 0
+        var lastStopReason: String? = null
 
         // 先让用户看到「它查了一遍自己会什么」，这也是模型本轮真实拿到的工具清单。
         val availableTitles = aiAvailableToolTitles(env)
@@ -111,23 +171,63 @@ internal object AiAgentRunner {
                 holdToolCalls = allowTools,
             )
             val answer = StringBuilder()
-            AiClient.streamChat(
-                provider = provider,
-                systemPrompt = system,
-                messages = messages,
-                stream = AiSettings.streamEnabled,
-                reasoning = reasoning,
-                onCall = onCall,
-            ).collect { event ->
-                when (event) {
-                    is AiStreamEvent.Reasoning -> onThought(event.delta)
-                    is AiStreamEvent.Content -> {
-                        answer.append(event.delta)
-                        gate.feed(event.delta)
-                    }
+            val requestId = UUID.randomUUID().toString()
+            val startedAt = System.currentTimeMillis()
+            val inputChars = system.length + messages.sumOf { it.text.length }
+            var realUsage: AiTokenUsage? = null
+            try {
+                AiClient.streamChat(
+                    provider = provider,
+                    systemPrompt = system,
+                    messages = messages,
+                    stream = AiSettings.streamEnabled,
+                    reasoning = reasoning,
+                    onCall = onCall,
+                ).collect { event ->
+                    when (event) {
+                        is AiStreamEvent.Reasoning -> onThought(event.delta)
+                        is AiStreamEvent.Content -> {
+                            answer.append(event.delta)
+                            gate.feed(event.delta)
+                        }
 
-                    AiStreamEvent.Done -> Unit
+                        is AiStreamEvent.Usage -> realUsage = event.usage
+                        is AiStreamEvent.Done -> {
+                            lastStopReason = event.stopReason
+                        }
+                    }
                 }
+            } catch (error: Throwable) {
+                runCatching {
+                    onRequestUsage(
+                        AiRequestUsage(
+                            requestId = requestId,
+                            usage = realUsage,
+                            startedAt = startedAt,
+                            endedAt = System.currentTimeMillis(),
+                            success = false,
+                            error = error.message?.take(300) ?: error.javaClass.simpleName,
+                            streamed = AiSettings.streamEnabled,
+                            estimatedInputChars = inputChars,
+                            estimatedOutputChars = answer.length,
+                        ),
+                    )
+                }
+                throw error
+            }
+            runCatching {
+                onRequestUsage(
+                    AiRequestUsage(
+                        requestId = requestId,
+                        usage = realUsage,
+                        startedAt = startedAt,
+                        endedAt = System.currentTimeMillis(),
+                        success = true,
+                        streamed = AiSettings.streamEnabled,
+                        estimatedInputChars = inputChars,
+                        estimatedOutputChars = answer.length,
+                    ),
+                )
             }
             val text = answer.toString().trim()
             if (text.isEmpty()) {
@@ -153,6 +253,8 @@ internal object AiAgentRunner {
                         text = answer,
                         documentCreated = documentCreated,
                         toolsUsed = toolsUsed.toList(),
+                        sources = env.sourceRegistry.snapshot(),
+                        stopReason = lastStopReason,
                     )
                 }
 
@@ -186,13 +288,34 @@ internal object AiAgentRunner {
                     val images = mutableListOf<AiImagePart>()
                     calls.forEach { call ->
                         val id = ++stepId
+                        val stepKind = aiToolStepKind(call.name)
+                        val stepUrl = call.string("url", "link").takeIf { it.isNotBlank() }
+                        val sourcesBefore = env.sourceRegistry.snapshot().map { it.index }.toSet()
                         onStep(
                             AiAgentStep(
                                 id = id,
                                 title = aiToolRunningTitle(call),
                                 state = AiStepState.Running,
+                                kind = stepKind,
+                                url = stepUrl,
                             ),
                         )
+                        if (call.name in DEVICE_CONTROL_TOOLS) {
+                            // 先亮起流光和“正在操作”长条，再跳转/操作，
+                            // 避免应用已经切走几秒后才看到控制提示。
+                            try {
+                                withContext(Dispatchers.Main.immediate) {
+                                    if (!AiFloatingBubbleService.isRunning()) {
+                                        AiFloatingController.startTemporary(context)
+                                    }
+                                    AiFloatingBubbleService.setAgentStatus(aiToolRunningTitle(call))
+                                    AiFloatingBubbleService.setAgentBusy(true)
+                                }
+                            } catch (cancel: CancellationException) {
+                                throw cancel
+                            } catch (_: Exception) {}
+                            if (call.name == "open_app") delay(320L)
+                        }
                         val outcome = withContext(Dispatchers.Main.immediate) {
                             aiExecuteTool(
                                 env = env,
@@ -210,6 +333,11 @@ internal object AiAgentRunner {
                                 title = outcome.title,
                                 detail = outcome.text.firstLine(80),
                                 state = if (outcome.failed) AiStepState.Failed else AiStepState.Done,
+                                kind = stepKind,
+                                sourceIds = env.sourceRegistry.snapshot()
+                                    .filter { it.index !in sourcesBefore }
+                                    .map { it.index },
+                                url = stepUrl,
                             ),
                         )
                         results.append("\n【").append(call.name).append("】")
@@ -218,6 +346,9 @@ internal object AiAgentRunner {
                             .append(outcome.text.take(MAX_RESULT_CHARS))
                             .append('\n')
                         outcome.image?.let(images::add)
+                        if (call.name == "web_search" || call.name == "fetch_page") {
+                            onSources(env.sourceRegistry.snapshot())
+                        }
                     }
                     messages.add(AiPromptMessage(role = "assistant", text = answer))
                     messages.add(
@@ -253,7 +384,16 @@ internal object AiAgentRunner {
             text = finalAnswer,
             documentCreated = documentCreated,
             toolsUsed = toolsUsed.toList(),
+            sources = env.sourceRegistry.snapshot(),
+            stopReason = lastStopReason,
         )
+    }
+
+    private fun latestReminder(): String {
+        val now = java.util.Date()
+        val locale = java.util.Locale.getDefault()
+        val date = java.text.SimpleDateFormat("yyyy年M月d日 EEEE HH:mm", locale).format(now)
+        return "$date，时区：${java.util.TimeZone.getDefault().id}，平台：Android，语言：${locale.toLanguageTag()}"
     }
 
     private fun buildUserText(request: String, files: List<AiAttachment>): String = buildString {

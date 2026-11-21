@@ -72,6 +72,7 @@ import top.yukonga.miuix.kmp.theme.lightColorScheme
 import top.yukonga.miuix.kmp.window.WindowDialog
 import com.torachen.mote.ui.AiChatLaunchRequest
 import com.torachen.mote.ui.MainActivity
+import com.torachen.mote.ui.ai.mcp.AiToolApprovalDialog
 
 /**
  * 悬浮在其它应用上层的 AI 面板。
@@ -385,6 +386,7 @@ private fun AiFloatingPanel(
             }
         }
         AiFileEditConfirmDialog()
+        AiToolApprovalDialog()
         val editing = editingMessage
         if (editing != null) {
             WindowDialog(

@@ -311,7 +311,7 @@ private val settingsSections = listOf(
         items = listOf(
             SettingsItem("网页安全中心", MiuixIcons.Link, "settings_web_security"),
             SettingsItem("通知与权限", MiuixIcons.Report, "settings_app_permissions", MEDIUM_ICON_INNER_SIZE, Color(0xFFA4A4A4)),
-            SettingsItem("个人信息", MiuixIcons.Lock, "settings_personal_info", MEDIUM_ICON_INNER_SIZE, Color(0xFF1DCD3A)),
+            SettingsItem("密码与个人信息", MiuixIcons.Lock, "settings_personal_info", MEDIUM_ICON_INNER_SIZE, Color(0xFF1DCD3A)),
         )
     ),
     SettingsSection(
@@ -676,7 +676,20 @@ internal fun lookupPageIconColor(route: String): Color? =
     findSettingsItemByRoute(route)?.iconBgColor
         ?: if (route in AI_SETTINGS_ROUTES) Color(0xFF7767F9) else null
 
-private val AI_SETTINGS_ROUTES = setOf("settings_ai", "ai_providers", "ai_provider_edit")
+private val AI_SETTINGS_ROUTES = setOf(
+    "settings_ai",
+    "ai_providers",
+    "ai_provider_edit",
+    "ai_mcp_servers",
+    "ai_mcp_edit",
+    "ai_presets",
+    "ai_preset_edit",
+    "ai_usage",
+    "ai_tasks",
+    "ai_task_edit",
+    "ai_task_runs",
+    "ai_plugins",
+)
 
 // ============================================================
 // ★ Material 图标反查（圆润风格）
@@ -695,7 +708,7 @@ private fun materialIconFor(title: String): ImageVector = when (title) {
     "网页安全中心" -> Icons.Rounded.Security
     "通知与权限" -> Icons.Rounded.Notifications
     "法律信息" -> Icons.Rounded.Gavel
-    "个人信息" -> Icons.Rounded.Person
+    "密码与个人信息" -> Icons.Rounded.Person
     "关于" -> Icons.Rounded.Info
     else -> Icons.Rounded.Info
 }
@@ -2226,11 +2239,21 @@ internal fun M3SegmentArrowItem(
     title: String,
     onClick: () -> Unit,
     endText: String? = null,
+    summary: String? = null,
     leading: (@Composable () -> Unit)? = null,
 ) {
     M3SegmentItem(
         headline = { M3Text(title) },
         leading = leading,
+        supporting = if (summary != null) {
+            {
+                M3Text(
+                    text = summary,
+                    color = M3MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = M3MaterialTheme.typography.bodyMedium,
+                )
+            }
+        } else null,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (endText != null) {

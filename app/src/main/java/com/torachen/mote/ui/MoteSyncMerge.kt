@@ -34,6 +34,7 @@ object MoteSyncMerge {
         mergeHistory(local, remote, snapshot, out)
         mergeKeyedArray("home_quick_urls", local, remote, snapshot, out, ::quickUrlKey)
         mergeKeyedArray("saved_passwords_v1", local, remote, snapshot, out, ::passwordKey)
+        mergeAiChats(local, remote, snapshot, out)
         mergeSearchHistory(local, remote, snapshot, out)
         mergeSettings(local, remote, snapshot, out)
 
@@ -202,6 +203,58 @@ object MoteSyncMerge {
         val arr = JSONArray()
         for (value in merged.values) arr.put(value)
         putArray(out, "history", arr)
+    }
+
+    /* ---------------- AI 对话 ---------------- */
+
+    /**
+     * AI 对话按会话 id 合并；同一会话两端都有时保留 updatedAt 较新的完整消息树。
+     * 删除规则与其他数组一致：上次同步后任一端删除的会话，合并结果也删除。
+     */
+    private fun mergeAiChats(
+        local: JSONObject,
+        remote: JSONObject,
+        snapshot: JSONObject,
+        out: JSONObject,
+    ) {
+        val key = "ai_chats_v1"
+        if (keepOneSide(key, local, remote, out)) return
+        val localArr = parseArray(local, key)
+        val remoteArr = parseArray(remote, key)
+        if (localArr == null && remoteArr == null) return
+
+        fun idOf(obj: JSONObject): String = obj.optString("id", "")
+        val localMap = LinkedHashMap<String, JSONObject>()
+        localArr?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                localMap[idOf(obj)] = obj
+            }
+        }
+        val remoteMap = LinkedHashMap<String, JSONObject>()
+        remoteArr?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                remoteMap[idOf(obj)] = obj
+            }
+        }
+        val prevKeys = parseArray(snapshot, key)
+            ?.let { arr -> (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(::idOf) } }
+            ?.toSet() ?: emptySet()
+        val deleted = prevKeys.filter { it !in localMap.keys || it !in remoteMap.keys }.toSet()
+
+        val merged = LinkedHashMap<String, JSONObject>()
+        for ((id, value) in localMap) if (id !in deleted) merged[id] = value
+        for ((id, value) in remoteMap) {
+            if (id in deleted) continue
+            val localValue = merged[id]
+            if (localValue == null) {
+                merged[id] = value
+            } else if (value.optLong("updatedAt", 0L) > localValue.optLong("updatedAt", 0L)) {
+                merged[id] = value
+            }
+        }
+        out.put(key, JSONArray(merged.values.toList()).toString())
     }
 
     /* ---------------- 通用数组（快捷网址 / 密码） ---------------- */

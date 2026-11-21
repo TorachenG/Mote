@@ -375,6 +375,17 @@ import com.torachen.mote.ui.ai.AiProviderNav
 import com.torachen.mote.ui.ai.AiProvidersPage
 import com.torachen.mote.R
 import com.torachen.mote.ui.ai.AiSettingsPage
+import com.torachen.mote.ui.ai.mcp.McpServerEditPage
+import com.torachen.mote.ui.ai.mcp.McpServerNav
+import com.torachen.mote.ui.ai.mcp.McpServersPage
+import com.torachen.mote.ui.ai.plugins.AiPluginsPage
+import com.torachen.mote.ui.ai.preset.AiPresetEditPage
+import com.torachen.mote.ui.ai.preset.AiPresetsPage
+import com.torachen.mote.ui.ai.tasks.AiTaskEditPage
+import com.torachen.mote.ui.ai.tasks.AiTaskNav
+import com.torachen.mote.ui.ai.tasks.AiTaskRunsPage
+import com.torachen.mote.ui.ai.tasks.AiTasksPage
+import com.torachen.mote.ui.ai.usage.AiUsagePage
 import com.torachen.mote.ui.filemanager.FileManagerSettingsPage
 import com.torachen.mote.ui.filemanager.LocalFileViewerRequest
 import com.torachen.mote.ui.filemanager.LocalFileViewerState
@@ -432,6 +443,9 @@ private const val MAX_BOOKMARK_SIZE = 1000
 /** 除更新提示外，所有 Snackbar 统一显示 2 秒。 */
 internal val Snackbar2s = SnackbarDuration.Custom(2_000L)
 private const val MAX_SEARCH_HISTORY_SIZE = 20
+
+/** 历史记录是否显示完全相同的重复链接（默认折叠，只保留最新一条）。 */
+private const val KEY_HISTORY_SHOW_DUPLICATES = "history_show_duplicates"
 
 private const val SHAKE_G_FORCE_THRESHOLD = 2.1f
 private const val SHAKE_COOLDOWN_MS = 700L
@@ -527,6 +541,10 @@ internal data class PendingPassword(
 
 internal object PasswordCaptureStore {
     var pending by mutableStateOf<PendingPassword?>(null)
+}
+
+internal object PasswordAutofillStore {
+    var pending by mutableStateOf(false)
 }
 
 internal object InitialInsetsFallback {
@@ -2027,6 +2045,149 @@ private val JS_PASSWORD_DETECT = """
 })();
 """.trimIndent()
 
+/** 从完整网址（或用户手动输入的裸域名）中取出可比较的 host。 */
+private fun passwordHostOf(url: String): String? {
+    val host = runCatching { Uri.parse(url).host }.getOrNull()
+    val raw = if (!host.isNullOrBlank()) {
+        host
+    } else {
+        url.trim()
+            .substringBefore('/')
+            .substringBefore('?')
+            .substringBefore('#')
+            .substringAfter("@")
+            .substringBefore(':')
+    }
+    return raw.lowercase()
+        .removePrefix("www.")
+        .takeIf { it.isNotBlank() && it.contains('.') }
+}
+
+/** 找出与当前网址同域（允许页面位于已保存域名的子域）的密码，最近的排前面。 */
+private fun passwordEntriesForUrl(
+    entries: List<PasswordEntry>,
+    url: String,
+): List<PasswordEntry> {
+    val pageHost = passwordHostOf(url) ?: return emptyList()
+    return entries.filter { entry ->
+        val savedHost = passwordHostOf(entry.url) ?: return@filter false
+        pageHost == savedHost || pageHost.endsWith(".$savedHost")
+    }.sortedByDescending { it.timestamp }
+}
+
+/**
+ * 登录页自动填充脚本。只填充空的、可见的密码框及其对应的用户名框，
+ * 不提交表单，填充成功后通过 bridge 通知宿主显示 SnackBar。
+ */
+private fun buildPasswordAutofillScript(entries: List<PasswordEntry>): String {
+    val creds = JSONArray()
+    entries.take(5).forEach { entry ->
+        creds.put(
+            JSONObject().apply {
+                put("username", entry.username)
+                put("password", entry.password)
+            }
+        )
+    }
+    return """
+(function(){
+    if (window.__mote_pwd_autofill_url === location.href) return;
+    window.__mote_pwd_autofill_url = location.href;
+    var creds = $creds;
+    if (!creds || creds.length === 0) return;
+
+    function setValue(el, value) {
+        try {
+            var proto = Object.getPrototypeOf(el);
+            var desc = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (desc && desc.set) desc.set.call(el, value);
+            else el.value = value;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (e) {
+            try { el.value = value; } catch (e2) {}
+        }
+    }
+
+    function isVisible(el) {
+        try {
+            if (!el || el.disabled || el.readOnly) return false;
+            if (el.offsetParent === null) return false;
+            var style = window.getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        } catch (e) { return true; }
+    }
+
+    function usernameScore(el) {
+        var text = ((el.name || '') + ' ' + (el.id || '') + ' ' +
+            (el.getAttribute('autocomplete') || '') + ' ' +
+            (el.getAttribute('placeholder') || '')).toLowerCase();
+        var score = 0;
+        if (text.indexOf('user') >= 0) score += 4;
+        if (text.indexOf('email') >= 0) score += 4;
+        if (text.indexOf('login') >= 0) score += 3;
+        if (text.indexOf('account') >= 0) score += 3;
+        if (text.indexOf('phone') >= 0 || text.indexOf('mobile') >= 0) score += 3;
+        if (text.indexOf('search') >= 0) score -= 6;
+        if (text.indexOf('captcha') >= 0 || text.indexOf('verify') >= 0) score -= 6;
+        return score;
+    }
+
+    function findUsername(pwd) {
+        try {
+            var scope = pwd.form || document;
+            var list = scope.querySelectorAll(
+                'input[type="text"],input[type="email"],input[type="tel"],input[autocomplete="username"],input:not([type])'
+            );
+            var best = null;
+            var bestScore = -999;
+            var fallback = null;
+            for (var i = 0; i < list.length; i++) {
+                var el = list[i];
+                if (el === pwd || !isVisible(el)) continue;
+                if (!fallback) fallback = el;
+                var score = usernameScore(el);
+                var ac = (el.getAttribute('autocomplete') || '').toLowerCase();
+                if (ac === 'username') score += 8;
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = el;
+                }
+            }
+            return best || fallback;
+        } catch (e) { return null; }
+    }
+
+    var attempts = 0;
+    function tryFill() {
+        try {
+            attempts++;
+            var pwdInputs = document.querySelectorAll('input[type="password"]');
+            for (var i = 0; i < pwdInputs.length; i++) {
+                var pwd = pwdInputs[i];
+                if (!isVisible(pwd) || pwd.value) continue;
+                var cred = creds[0];
+                var user = findUsername(pwd);
+                if (user && !user.value && cred.username) setValue(user, cred.username);
+                setValue(pwd, cred.password);
+                if (window.moteBridge && window.moteBridge.onPasswordAutofilled) {
+                    window.moteBridge.onPasswordAutofilled();
+                }
+                return;
+            }
+            if (attempts < 6) setTimeout(tryFill, 700);
+        } catch (e) {}
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', tryFill);
+    } else {
+        tryFill();
+    }
+})();
+""".trimIndent()
+}
+
 private fun buildJsSmartPreconnect(maxHosts: Int): String = """
 (function(){
   if (window.__mote_preconnect_installed) return;
@@ -2682,7 +2843,7 @@ private val JS_SNIFF_RESOURCES = """
   function catByExt(url) {
     var clean = url.replace(/[#?].*${'$'}/, '').toLowerCase();
     if (/\.(jpg|jpeg|png|gif|webp|bmp|svg|ico|tif|tiff|avif|heic|heif|jfif|apng)${'$'}/.test(clean)) return 'image';
-    if (/\.(mp4|webm|mkv|mov|avi|flv|wmv|ts|m4v|m3u8|mpd|3gp|ogv|rm|rmvb|asf)${'$'}/.test(clean)) return 'video';
+    if (/\.(mp4|webm|mkv|mov|avi|flv|wmv|ts|m4v|m4s|cmfv|cmfa|m3u8|mpd|3gp|ogv|rm|rmvb|asf)${'$'}/.test(clean)) return 'video';
     if (/\.(mp3|wav|flac|aac|m4a|ogg|opus|wma|ape|mka|amr|mid|midi)${'$'}/.test(clean)) return 'audio';
     if (/\.(zip|rar|7z|tar|gz|tgz|bz2|apk|ipa|exe|dmg|iso|pdf|doc|docx|xls|xlsx|ppt|pptx|epub|mobi|azw3|txt|md|json|xml|csv|torrent|swf|crx|deb|rpm|msi|jar)${'$'}/.test(clean)) return 'file';
     return null;
@@ -2725,6 +2886,17 @@ private val JS_SNIFF_RESOURCES = """
     push(el.currentSrc, 'audio');
     el.querySelectorAll('source').forEach(function(s){ push(s.src, 'audio'); });
   });
+
+  // 部分站点的媒体地址没有扩展名，performance 的 initiatorType 仍能识别为 video/audio。
+  try {
+    performance.getEntriesByType('resource').forEach(function(e){
+      var c = catByExt(e.name);
+      if (c) push(e.name, c);
+      else if (e.initiatorType === 'video' || e.initiatorType === 'audio') {
+        push(e.name, e.initiatorType);
+      }
+    });
+  } catch(e) {}
 
   document.querySelectorAll('svg image').forEach(function(el){
     push(el.getAttribute('href'), 'image');
@@ -3030,7 +3202,7 @@ data class ToolDef(
     val title: String,
     val icon: ImageVector,
     val isToggle: Boolean = false,
-    val customIcon: (@Composable (isActive: Boolean) -> Unit)? = null,
+    val customIcon: (@Composable (isActive: Boolean, tint: Color) -> Unit)? = null,
     val customItem: (@Composable (isActive: Boolean) -> Unit)? = null,
     val specialAction: ((Context) -> Unit)? = null,
 )
@@ -3171,15 +3343,13 @@ internal fun defaultTools(): List<ToolDef> = listOf(
         id = "ai_chat",
         title = "Mote AI",
         icon = MiuixIcons.MindMap,
-        customIcon = { isActive ->
+        customIcon = { _, tint ->
             Image(
                 painter = painterResource(id = R.mipmap.mote_logo),
                 contentDescription = "Mote AI",
                 modifier = Modifier.size(26.dp),
-                colorFilter = ColorFilter.tint(
-                    if (isActive) MiuixTheme.colorScheme.primary
-                    else MiuixTheme.colorScheme.onSurface,
-                ),
+                // 与所在工具栏其它图标使用同一个颜色（含禁用态）
+                colorFilter = ColorFilter.tint(tint),
             )
         },
     ),
@@ -3274,12 +3444,15 @@ private fun sniffCategoryFromNetwork(url: String): SniffCategory? {
         clean.endsWith(".mov") || clean.endsWith(".m4v") || clean.endsWith(".flv") ||
         clean.endsWith(".avi") || clean.endsWith(".wmv") || clean.endsWith(".3gp") ||
         clean.endsWith(".ogv") || clean.endsWith(".ts") ||
+        clean.endsWith(".m4s") || clean.endsWith(".cmfv") || clean.endsWith(".cmfa") ||
         clean.endsWith(".m3u8") || clean.endsWith(".mpd")
     ) return SniffCategory.VIDEO
 
     if (lower.contains("mime=video") || lower.contains("mime%3dvideo") ||
         lower.contains("type=video") || lower.contains("format=mp4") ||
         lower.contains("/videoplayback") ||
+        lower.contains("/m4s/") || lower.contains(".m4s") ||
+        lower.contains("/hls/") || lower.contains("/dash/") ||
         lower.contains("/video/tos/") ||
         lower.contains("/tos-alisg-") ||
         lower.contains("/alisg/") ||
@@ -4466,7 +4639,43 @@ private fun RenderPageContent(
             "settings_ai" -> AiSettingsPage(
                 onBack = { onPop() },
                 onOpenProviders = { onPush("ai_providers") },
+                onOpenMcp = { onPush("ai_mcp_servers") },
+                onOpenPresets = { onPush("ai_presets") },
+                onOpenUsage = { onPush("ai_usage") },
+                onOpenTasks = { onPush("ai_tasks") },
+                onOpenPlugins = { onPush("ai_plugins") },
             )
+            "ai_usage" -> AiUsagePage(onBack = { onPop() })
+            "ai_plugins" -> AiPluginsPage(onBack = { onPop() })
+            "ai_tasks" -> AiTasksPage(
+                onBack = { onPop() },
+                onEdit = { onPush("ai_task_edit") },
+                onRuns = { taskId ->
+                    AiTaskNav.runs(taskId)
+                    onPush("ai_task_runs")
+                },
+            )
+            "ai_task_edit" -> AiTaskEditPage(
+                onBack = { onPop() },
+                onRuns = { taskId ->
+                    AiTaskNav.runs(taskId)
+                    onPush("ai_task_runs")
+                },
+            )
+            "ai_task_runs" -> AiTaskRunsPage(onBack = { onPop() })
+            "ai_presets" -> AiPresetsPage(
+                onBack = { onPop() },
+                onEdit = { onPush("ai_preset_edit") },
+            )
+            "ai_preset_edit" -> AiPresetEditPage(onBack = { onPop() })
+            "ai_mcp_servers" -> McpServersPage(
+                onBack = { onPop() },
+                onEdit = { id ->
+                    if (id == null) McpServerNav.new() else McpServerNav.open(id)
+                    onPush("ai_mcp_edit")
+                },
+            )
+            "ai_mcp_edit" -> McpServerEditPage(onBack = { onPop() })
             "ai_providers" -> AiProvidersPage(
                 onBack = { onPop() },
                 onEditProvider = { id ->
@@ -4614,12 +4823,21 @@ private fun routeTitle(route: String): String = when (route) {
     "settings_ai" -> "AI 设置"
     "ai_providers" -> "AI 服务"
     "ai_provider_edit" -> "AI 服务"
+    "ai_mcp_servers" -> "MCP 服务"
+    "ai_mcp_edit" -> "MCP 服务"
+    "ai_presets" -> "Agent 预设"
+    "ai_preset_edit" -> "Agent 预设"
+    "ai_usage" -> "用量统计"
+    "ai_tasks" -> "自动化任务"
+    "ai_task_edit" -> "自动化任务"
+    "ai_task_runs" -> "运行记录"
+    "ai_plugins" -> "插件"
     "settings_web" -> "网页浏览设置"
     "settings_icon" -> "图标"
     "settings_layout" -> "主题与界面"
     "settings_web_security" -> "网页安全中心"
     "settings_app_permissions" -> "通知与权限"
-    "settings_personal_info" -> "个人信息"
+    "settings_personal_info" -> "密码与个人信息"
     "settings_password_manager" -> "密码管理器"
     "settings_legal" -> "法律信息"
     "settings_about" -> "关于"
@@ -4975,6 +5193,13 @@ private fun ImmersiveSystemBarsEffect(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    // 质感界面使用 Material 主题，必须按 Material 的明暗判断系统栏图标，
+    // 不能沿用 BrowserScreen 的 Miuix 表面色，否则深色模式下图标不会变白。
+    val appIsDark = if (LocalUiMode.current == UiMode.Material) {
+        M3MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    } else {
+        themeIsDark
+    }
 
     fun applySystemBarIcons() {
         if (isFullscreen || showNewTabPage) return
@@ -4985,14 +5210,14 @@ private fun ImmersiveSystemBarsEffect(
         )
         if (!isTop) {
             // 浏览器不在最上层（如进入设置页）时恢复主题色系统栏图标
-            controller.isAppearanceLightStatusBars = !themeIsDark
-            controller.isAppearanceLightNavigationBars = !themeIsDark
+            controller.isAppearanceLightStatusBars = !appIsDark
+            controller.isAppearanceLightNavigationBars = !appIsDark
             return
         }
         controller.isAppearanceLightStatusBars =
-            if (topActive) !topIsDark else !themeIsDark
+            if (topActive) !topIsDark else !appIsDark
         controller.isAppearanceLightNavigationBars =
-            if (bottomActive) !bottomIsDark else !themeIsDark
+            if (bottomActive) !bottomIsDark else !appIsDark
     }
 
     LaunchedEffect(
@@ -5004,6 +5229,7 @@ private fun ImmersiveSystemBarsEffect(
         isTop,
         isFullscreen,
         themeIsDark,
+        appIsDark,
     ) {
         if (isFullscreen || showNewTabPage) return@LaunchedEffect
         // 延迟一点，避开新标签页/上一个页面退出时对系统栏图标的还原
@@ -5021,6 +5247,7 @@ private fun ImmersiveSystemBarsEffect(
         isTop,
         isFullscreen,
         themeIsDark,
+        appIsDark,
     ) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -5159,6 +5386,7 @@ private fun BrowserBottomBar(
     items: List<BrowserBottomBarItem>,
     barVisible: Boolean,
     onItemClick: (String) -> Unit,
+    onItemLongClick: (String) -> Unit = {},
     navBarBottomPadding: Dp,
     backgroundColor: Color,
 ) {
@@ -5209,9 +5437,10 @@ private fun BrowserBottomBar(
                                     .fillMaxHeight()
                                     .graphicsLayer { alpha = alphaAnim }
                                     .clipToBounds()
-                                    .clickable(
+                                    .combinedClickable(
                                         enabled = alphaAnim > 0.5f && item.enabled,
                                         onClick = { onItemClick(item.id) },
+                                        onLongClick = { onItemLongClick(item.id) },
                                     ),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -5280,7 +5509,7 @@ private fun FusedHeaderLeading(
                         contentAlignment = Alignment.Center,
                     ) {
                         if (it.customIcon != null) {
-                            it.customIcon(true)
+                            it.customIcon(true, tint)
                         } else {
                             Icon(
                                 imageVector = it.icon,
@@ -5454,6 +5683,9 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
     incognito: Boolean,
     context: Context,
     prefs: android.content.SharedPreferences,
+    currentPageFavicon: Bitmap?,
+    currentPageTitle: String,
+    currentPageUrl: String,
     onInputChange: (TextFieldValue) -> Unit,
     onPick: (String) -> Unit,
     onClearHistory: () -> Unit,
@@ -5465,6 +5697,57 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
             withContext(Dispatchers.IO) { readClipboardUrl(context, prefs) }
         } else null
     }
+
+    // 当前网页信息卡：与「复制的链接」卡片同一套视觉，显示网页图标、标题和链接。
+    val showCurrentPageCard = focused &&
+        currentPageUrl.isNotBlank() && currentPageUrl != "about:blank"
+    val currentPageSuggestion: @Composable () -> Unit = {
+        AnimatedVisibility(
+            visible = showCurrentPageCard,
+            enter = expandVertically(
+                animationSpec = tween(220),
+                expandFrom = contentAnimAnchor,
+            ) + fadeIn(tween(160)),
+            exit = shrinkVertically(
+                animationSpec = tween(200),
+                shrinkTowards = contentAnimAnchor,
+            ) + fadeOut(tween(120)),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MiuixTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FaviconOrFallback(
+                    favicon = currentPageFavicon,
+                    size = 18.dp,
+                    fallbackTint = titleChrome.secondaryContentColor,
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = currentPageTitle.ifBlank { currentPageUrl },
+                        fontSize = 14.sp,
+                        color = titleChrome.contentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = currentPageUrl,
+                        fontSize = 12.sp,
+                        color = titleChrome.secondaryContentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+
     val clipUrl = clipboardUrl
     val clipboardJumpSuggestion: @Composable () -> Unit = {
         AnimatedVisibility(
@@ -5519,7 +5802,10 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
             }
         }
     }
-    if (!headerAtBottom) clipboardJumpSuggestion()
+    if (!headerAtBottom) {
+        currentPageSuggestion()
+        clipboardJumpSuggestion()
+    }
     AnimatedVisibility(
         visible = focused && inputText.isNotBlank() && suggestions.isNotEmpty(),
         enter = expandVertically(
@@ -5663,12 +5949,347 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
             }
         }
     }
-    if (headerAtBottom) clipboardJumpSuggestion()
+    if (headerAtBottom) {
+        clipboardJumpSuggestion()
+        currentPageSuggestion()
+    }
 }
 
 // ============================================================
 // 浏览器主界面
 // ============================================================
+
+/** 浏览器页的密码保存提示 / 自动填充提示（均使用 SnackBar）。 */
+@Composable
+private fun PasswordSnackbarEffects(
+    prefs: SharedPreferences,
+    snackbarHostState: SnackbarHostState,
+    scope: CoroutineScope,
+) {
+    val pendingPassword = PasswordCaptureStore.pending
+    LaunchedEffect(pendingPassword) {
+        val p = pendingPassword ?: return@LaunchedEffect
+        PasswordCaptureStore.pending = null
+        if (!passwordSavePromptEnabled(prefs)) return@LaunchedEffect
+
+        val existing = loadSavedPasswords(prefs)
+        val alreadySaved = existing.any {
+            it.url == p.url && it.username == p.username && it.password == p.password
+        }
+        if (alreadySaved) return@LaunchedEffect
+
+        val result = snackbarHostState.showSnackbar(
+            message = "是否保存该密码？",
+            actionLabel = "保存",
+            duration = Snackbar2s,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            val newEntry = PasswordEntry(
+                url = p.url,
+                username = p.username,
+                password = p.password,
+            )
+            saveSavedPasswords(prefs, existing + newEntry)
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "密码已保存",
+                    duration = Snackbar2s,
+                )
+            }
+        }
+    }
+
+    val passwordAutofilled = PasswordAutofillStore.pending
+    LaunchedEffect(passwordAutofilled) {
+        if (!passwordAutofilled) return@LaunchedEffect
+        PasswordAutofillStore.pending = false
+        snackbarHostState.showSnackbar(
+            message = "已自动填充已保存的密码",
+            duration = Snackbar2s,
+        )
+    }
+}
+
+@Composable
+private fun BottomBarLongPressMenu(
+    menuId: String?,
+    show: Boolean,
+    serial: Int,
+    webView: WebView?,
+    historyFaviconCache: Map<String, Bitmap>,
+    activeWindow: BrowserWindow?,
+    isFullscreen: Boolean,
+    isNewTabPage: Boolean,
+    prefs: SharedPreferences,
+    toolActionHandler: (String, Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onDismissFinished: () -> Unit,
+    onHistoryNavigate: (Int) -> Unit,
+    onOpenToolCustomize: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onExit: () -> Unit,
+) {
+    if (menuId == null) return
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val navBottom = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+        .takeIf { it > 0.dp }
+        ?: with(density) { InitialInsetsFallback.navBarBottomPx.toDp() }
+
+    // 关闭动画期间 WebView 历史可能已经变化，先把菜单内容固定住，
+    // 保持 Entry/Item 结构稳定（与原生下拉菜单一致）。
+    val entries: List<DropdownEntry> = remember(menuId, serial) {
+        when (menuId) {
+        "back", "forward" -> {
+            val historyList = webView?.copyBackForwardList()
+            val currentIndex = historyList?.currentIndex ?: -1
+            val items = if (historyList != null && currentIndex >= 0) {
+                val indexRange = if (menuId == "back") {
+                    0 until currentIndex
+                } else {
+                    (currentIndex + 1) until historyList.size
+                }
+                indexRange.mapNotNull { index ->
+                    val historyItem = historyList.getItemAtIndex(index)
+                        ?: return@mapNotNull null
+                    val itemUrl = historyItem.url.orEmpty()
+                    if (itemUrl.isBlank() || itemUrl == "about:blank") {
+                        return@mapNotNull null
+                    }
+                    val host = try {
+                        Uri.parse(itemUrl).host
+                    } catch (_: Exception) {
+                        null
+                    }
+                    val itemIcon = historyItem.favicon
+                        ?: host?.let { historyFaviconCache[it] }
+                        ?: host?.let { FaviconStore.get(context, it) }
+                    DropdownItem(
+                        text = historyItem.title?.takeIf { it.isNotBlank() }
+                            ?: host?.takeIf { it.isNotBlank() }
+                            ?: itemUrl,
+                        summary = itemUrl,
+                        icon = { modifier ->
+                            Box(modifier, contentAlignment = Alignment.Center) {
+                                FaviconOrFallback(
+                                    favicon = itemIcon,
+                                    size = 22.dp,
+                                    fallbackTint = MiuixTheme.colorScheme.onSurface,
+                                )
+                            }
+                        },
+                        onClick = {
+                            onDismiss()
+                            onHistoryNavigate(index - currentIndex)
+                        },
+                    )
+                }
+            } else emptyList()
+            if (items.isEmpty()) emptyList() else listOf(DropdownEntry(items = items))
+        }
+
+        "tools" -> {
+            val allTools = defaultTools().filter { it.id != "play_in_player" }
+            val disabledIds = toolMenuDisabledIds(prefs).toSet()
+            val menuTools = allToolMenuIds(prefs)
+                .filter { it !in disabledIds }
+                .mapNotNull { id -> allTools.find { it.id == id } }
+            val activeToolIds = setOfNotNull(
+                "night_mode".takeIf { activeWindow?.nightMode == true },
+                "no_image".takeIf { activeWindow?.noImage == true },
+                "desktop_mode".takeIf { activeWindow?.desktopMode == true },
+                "incognito".takeIf { activeWindow?.incognito == true },
+                "translate".takeIf { activeWindow?.translated == true },
+                "fullscreen".takeIf { isFullscreen },
+            )
+            val disabledInNewTab = setOf(
+                "translate", "zoom", "find_in_page", "tts", "sniff",
+                "save_page", "print", "share", "play_in_player", "view_source",
+            )
+            val toolItems = menuTools.map { tool ->
+                val isActive = tool.id in activeToolIds
+                DropdownItem(
+                    text = tool.title,
+                    enabled = !(isNewTabPage && tool.id in disabledInNewTab),
+                    icon = { modifier ->
+                        val iconTint = if (tool.isToggle && isActive) {
+                            MiuixTheme.colorScheme.primary
+                        } else {
+                            MiuixTheme.colorScheme.onSurface
+                        }
+                        if (tool.customIcon != null) {
+                            Box(modifier, contentAlignment = Alignment.Center) {
+                                tool.customIcon(isActive, iconTint)
+                            }
+                        } else {
+                            Icon(
+                                imageVector = tool.icon,
+                                contentDescription = null,
+                                tint = iconTint,
+                                modifier = modifier,
+                            )
+                        }
+                    },
+                    onClick = {
+                        onDismiss()
+                        val special = tool.specialAction
+                        if (special != null) {
+                            special(context)
+                        } else {
+                            val nextActive = if (tool.isToggle) !isActive else false
+                            toolActionHandler(tool.id, nextActive)
+                        }
+                    },
+                )
+            }
+            listOf(
+                DropdownEntry(items = toolItems),
+                DropdownEntry(
+                    items = listOf(
+                        DropdownItem(
+                            text = "编辑工具栏",
+                            icon = { modifier ->
+                                Icon(
+                                    imageVector = MiuixIcons.Edit,
+                                    contentDescription = null,
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = modifier,
+                                )
+                            },
+                            onClick = {
+                                onDismiss()
+                                onOpenToolCustomize()
+                            },
+                        ),
+                        DropdownItem(
+                            text = "设置",
+                            icon = { modifier ->
+                                Icon(
+                                    imageVector = MiuixIcons.Settings,
+                                    contentDescription = null,
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = modifier,
+                                )
+                            },
+                            onClick = {
+                                onDismiss()
+                                onOpenSettings()
+                            },
+                        ),
+                        DropdownItem(
+                            text = "关闭 Mote",
+                            icon = { modifier ->
+                                Icon(
+                                    imageVector = MiuixIcons.Close2,
+                                    contentDescription = null,
+                                    tint = MiuixTheme.colorScheme.onSurface,
+                                    modifier = modifier,
+                                )
+                            },
+                            onClick = {
+                                onDismiss()
+                                onExit()
+                            },
+                        ),
+                    ),
+                ),
+            )
+        }
+
+        else -> emptyList()
+    }
+    }
+
+    if (entries.isEmpty()) {
+        LaunchedEffect(menuId) {
+            onDismiss()
+            onDismissFinished()
+        }
+        return
+    }
+
+    // 兜底：极少数情况下 Popup 的退出动画结束回调没有送达，
+    // 也要在关闭后清掉菜单，避免下次长按复用已关闭的状态。
+    LaunchedEffect(show, menuId) {
+        if (!show && menuId != null) {
+            kotlinx.coroutines.delay(400L)
+            if (!show) onDismissFinished()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        key(serial) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(bottom = navBottom + BOTTOM_BAR_HEIGHT)
+                    .height(1.dp),
+            ) {
+                WindowCascadingListPopup(
+                    show = show,
+                    entries = entries,
+                    onDismissRequest = onDismiss,
+                    onDismissFinished = onDismissFinished,
+                    minWidth = 180.dp,
+                    enableWindowDim = false,
+                    dropdownColors = DropdownDefaults.dropdownColors(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwipeEdgeIndicator(
+    direction: Int,
+    progress: Float,
+    panelWidthPx: Float,
+    modifier: Modifier = Modifier,
+) {
+    val iconScale = 1f + progress * 0.6f
+    val shape = if (direction == -1) {
+        RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
+    } else {
+        RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
+    }
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .offset {
+                val inScreenPx = (panelWidthPx * progress).roundToInt()
+                val offScreenPx = panelWidthPx.roundToInt() - inScreenPx
+                if (direction == -1) {
+                    IntOffset(-offScreenPx, 0)
+                } else {
+                    IntOffset(offScreenPx, 0)
+                }
+            }
+            .width(40.dp)
+            .padding(vertical = 360.dp)
+            .clip(shape)
+            .background(Color.Black.copy(alpha = 0.55f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (direction == -1) {
+                MiuixIcons.ChevronBackward
+            } else {
+                MiuixIcons.ChevronForward
+            },
+            contentDescription = if (direction == -1) "后退" else "前进",
+            tint = Color.White,
+            modifier = Modifier
+                .size(15.dp)
+                .graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                },
+        )
+    }
+}
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -5757,6 +6378,10 @@ fun BrowserScreen(
 
     var showToolSheet by remember { mutableStateOf(false) }
     var showWindowSheet by remember { mutableStateOf(false) }
+    // 底部工具栏长按菜单：back / forward / tools
+    var bottomBarMenuId by remember { mutableStateOf<String?>(null) }
+    var bottomBarMenuShow by remember { mutableStateOf(false) }
+    var bottomBarMenuSerial by remember { mutableIntStateOf(0) }
     // 融合式双栏：标题栏与工具栏合并为一行（后退 + 自定义功能 | 搜索栏 | 窗口 + 工具栏）
     val fusedPrefs = remember {
         context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
@@ -7739,37 +8364,11 @@ fun BrowserScreen(
         }
     }
 
-    val pendingPassword = PasswordCaptureStore.pending
-    LaunchedEffect(pendingPassword) {
-        val p = pendingPassword ?: return@LaunchedEffect
-        PasswordCaptureStore.pending = null
-
-        val existing = loadSavedPasswords(prefs)
-        val alreadySaved = existing.any {
-            it.url == p.url && it.username == p.username && it.password == p.password
-        }
-        if (alreadySaved) return@LaunchedEffect
-
-        val result = snackbarHostState.showSnackbar(
-            message = "是否保存该密码？",
-            actionLabel = "保存",
-            duration = Snackbar2s,
-        )
-        if (result == SnackbarResult.ActionPerformed) {
-            val newEntry = PasswordEntry(
-                url = p.url,
-                username = p.username,
-                password = p.password,
-            )
-            saveSavedPasswords(prefs, existing + newEntry)
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "密码已保存",
-                    duration = Snackbar2s,
-                )
-            }
-        }
-    }
+    PasswordSnackbarEffects(
+        prefs = prefs,
+        snackbarHostState = snackbarHostState,
+        scope = scope,
+    )
 
     LaunchedEffect(activeWindowId) {
         val id = activeWindowId ?: return@LaunchedEffect
@@ -8222,6 +8821,7 @@ fun BrowserScreen(
         headerNavBarBottomPadding + headerBottomBarHeight,
     )
     val headerVisible = !isFullscreen && htmlFullscreenView == null && !showNewTabPage
+    val isSearchFocusedState = rememberUpdatedState(isSearchFocused)
     val contentAnimAnchor: Alignment.Vertical =
         if (headerAtBottom) Alignment.Bottom else Alignment.Top
     val bottomHeaderContentHeight = with(headerDensity) {
@@ -8314,27 +8914,69 @@ fun BrowserScreen(
                         isSearchFocused = focused
                         if (focused) {
                             showSecuritySheet = false
-                            // 无论标题栏平时显示网页标题还是网址，点进输入框后都切到完整网址，
-                            // 方便长按全选、复制或修改链接。
-                            activeWindow?.let { win ->
-                                val url = win.url
-                                if (url.isNotBlank() && !isHomeUrl(url)) {
-                                    urlInput = TextFieldValue(
-                                        text = url,
-                                        selection = TextRange(url.length),
-                                    )
+                            // 网页里的输入框可能仍持有原生焦点，先让 WebView 失焦，
+                            // 否则输入法会把文字继续送给网页而不是标题栏搜索框。
+                            activeWindowId?.let { id ->
+                                webViewMap[id]?.let { wv ->
+                                    wv.clearFocus()
+                                    try {
+                                        wv.evaluateJavascript(
+                                            "(function(){try{var e=document.activeElement;" +
+                                                "if(e&&e.blur)e.blur();}catch(err){}})()",
+                                            null,
+                                        )
+                                    } catch (_: Exception) {}
                                 }
+                            }
+                            activeWindow?.let { win ->
+                                val resultQuery = searchQueryForResultPage(win.url, searchEngines)
+                                    ?: searchQueryHolder.value.takeIf {
+                                        isSearchResultPage && it.isNotBlank()
+                                    }
+                                if (resultQuery == null) {
+                                    // 普通网页：点进搜索框先清空，方便直接输入；
+                                    // 只有用户自己输入的内容（以及页面标题/网址等自动内容）
+                                    // 需要区分，自动内容失焦后再恢复。
+                                    val autoText = when {
+                                        isHomeUrl(win.url) || win.url.isBlank() -> ""
+                                        headerTextMode == 1 &&
+                                            win.title.isNotBlank() &&
+                                            win.title != "无标题" &&
+                                            win.title != "about:blank" -> win.title
+                                        else -> win.url
+                                    }
+                                    val current = urlInput.text
+                                    val isAutoContent = current.isBlank() ||
+                                        current == autoText ||
+                                        current == win.url ||
+                                        current == "about:blank"
+                                    if (isAutoContent) {
+                                        urlInput = TextFieldValue("")
+                                    }
+                                }
+                                // 搜索结果页：点击搜索栏不清空，保留搜索词。
                             }
                         } else {
                             searchBarExpanded = false
                             activeWindow?.let { win ->
-                                if (urlInput.text.isBlank() &&
+                                val resultQuery = searchQueryForResultPage(win.url, searchEngines)
+                                    ?: searchQueryHolder.value.takeIf {
+                                        isSearchResultPage && it.isNotBlank()
+                                    }
+                                if (resultQuery != null) {
+                                    // 空框失焦（例如点击网页）时才恢复搜索词；
+                                    // 用户编辑过则保留编辑内容。
+                                    if (urlInput.text.isBlank()) {
+                                        urlInput = TextFieldValue(resultQuery)
+                                    }
+                                } else if (urlInput.text.isBlank() &&
                                     !isHomeUrl(win.url)
                                 ) {
                                     urlInput = if (
                                         headerTextMode == 1 &&
                                         win.title.isNotBlank() &&
-                                        win.title != "无标题"
+                                        win.title != "无标题" &&
+                                        win.title != "about:blank"
                                     ) {
                                         TextFieldValue(win.title)
                                     } else {
@@ -8344,7 +8986,8 @@ fun BrowserScreen(
                                     headerTextMode == 1 &&
                                     urlInput.text == win.url &&
                                     win.title.isNotBlank() &&
-                                    win.title != "无标题"
+                                    win.title != "无标题" &&
+                                    win.title != "about:blank"
                                 ) {
                                     urlInput = TextFieldValue(win.title)
                                 }
@@ -8422,6 +9065,9 @@ fun BrowserScreen(
                     incognito = activeWindow?.incognito == true,
                     context = context,
                     prefs = prefs,
+                    currentPageFavicon = activeWindow?.favicon,
+                    currentPageTitle = activeWindow?.title.orEmpty(),
+                    currentPageUrl = activeWindow?.url.orEmpty(),
                     onInputChange = { urlInput = it },
                     onPick = { item ->
                         urlInput = TextFieldValue(item)
@@ -8735,7 +9381,9 @@ fun BrowserScreen(
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
-                                if (event.changes.any { it.changedToDown() }) {
+                                if (event.changes.any { it.changedToDown() } &&
+                                    isSearchFocusedState.value
+                                ) {
                                     clearSearchFocus()
                                 }
                             }
@@ -8828,7 +9476,20 @@ fun BrowserScreen(
                         onRecordHistory = { u, t -> recordHistory(u, t) },
                         onAddToSearchHistory = { q -> addToSearchHistory(q) },
                         onIsSearchResultPage = { b -> isSearchResultPage = b },
-                        onUrlInput = { tv -> urlInput = tv },
+                        onUrlInput = { tv ->
+                            val text = tv.text
+                            val winUrl = windows.firstOrNull { it.id == activeWindowId }
+                                ?.url.orEmpty()
+                            val blankLike = text.isBlank() || text == "about:blank"
+                            // 导航已经开始后，旧 about:blank 页面的迟到回调不能清空/覆盖
+                            // 搜索框里刚显示的跳转链接。
+                            val staleBlank = blankLike &&
+                                winUrl.isNotBlank() && !isHomeUrl(winUrl) &&
+                                urlInput.text.isNotBlank()
+                            if (!staleBlank) {
+                                urlInput = tv
+                            }
+                        },
                         isSearchFocused = { isSearchFocused },
                         onZoomForHost = { h -> computeZoomForHost(h) },
                         onZoomFactor = { f -> zoomFactor = f },
@@ -9281,6 +9942,7 @@ fun BrowserScreen(
                 },
                 canSwipeBack = activeWindow?.canGoBack == true,
                 canSwipeForward = activeWindow?.canGoForward == true,
+                swipeNavEnabled = swipeNavEnabled,
                 onOpenNewTabCustomization = onOpenNewTabCustomization,
                 onOpenCrop = onOpenCrop,
                 onRequestDownload = { dl ->
@@ -9297,54 +9959,15 @@ fun BrowserScreen(
         }
 
         if (animatedSwipeOffset > 1f && swipeEdgeDirection != 0) {
-            val progress = (animatedSwipeOffset / swipeTriggerPx).coerceIn(0f, 1f)
-            val iconScale = 1f + progress * 0.6f
-            val iconColor = Color.White
-
-            val shape = if (swipeEdgeDirection == -1) {
-                RoundedCornerShape(topEnd = 20.dp, bottomEnd = 20.dp)
-            } else {
-                RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .align(
-                        if (swipeEdgeDirection == -1) Alignment.CenterStart
-                        else Alignment.CenterEnd
-                    )
-                    .offset {
-                        val inScreenPx = (swipePanelWidthPx * progress).roundToInt()
-                        val offScreenPx = swipePanelWidthPx.roundToInt() - inScreenPx
-                        if (swipeEdgeDirection == -1) {
-                            IntOffset(-offScreenPx, 0)
-                        } else {
-                            IntOffset(offScreenPx, 0)
-                        }
-                    }
-                    .width(40.dp)
-                    .padding(vertical = 360.dp)
-                    .clip(shape)
-                    .background(Color.Black.copy(alpha = 0.55f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (swipeEdgeDirection == -1) {
-                        MiuixIcons.ChevronBackward
-                    } else {
-                        MiuixIcons.ChevronForward
-                    },
-                    contentDescription = if (swipeEdgeDirection == -1) "后退" else "前进",
-                    tint = iconColor,
-                    modifier = Modifier
-                        .size(15.dp)
-                        .graphicsLayer {
-                            scaleX = iconScale
-                            scaleY = iconScale
-                        },
-                )
-            }
+            SwipeEdgeIndicator(
+                direction = swipeEdgeDirection,
+                progress = (animatedSwipeOffset / swipeTriggerPx).coerceIn(0f, 1f),
+                panelWidthPx = swipePanelWidthPx,
+                modifier = Modifier.align(
+                    if (swipeEdgeDirection == -1) Alignment.CenterStart
+                    else Alignment.CenterEnd
+                ),
+            )
         }
 
         val bottomBarDensity = LocalDensity.current
@@ -9438,7 +10061,11 @@ fun BrowserScreen(
                         ) { tool ->
                             if (tool != null) {
                                 if (tool.customIcon != null) {
-                                    tool.customIcon(dynamicToolEnabled)
+                                    tool.customIcon(
+                                        dynamicToolEnabled,
+                                        if (dynamicToolEnabled) onSurface
+                                        else onSurface.copy(alpha = 0.3f),
+                                    )
                                 } else {
                                     Icon(
                                         imageVector = tool.icon,
@@ -9502,6 +10129,30 @@ fun BrowserScreen(
                         "tools" -> showToolSheet = true
                         "windows" -> showWindowSheet = true
                         "dynamic" -> effectiveDynamicTool?.let { runDynamicToolAction(it) }
+                    }
+                },
+                onItemLongClick = { id ->
+                    val wv = activeWindowId?.let { webViewMap[it] }
+                    when (id) {
+                        "back" -> if (wv?.canGoBack() == true) {
+                            clearSearchFocus()
+                            bottomBarMenuSerial++
+                            bottomBarMenuId = "back"
+                            bottomBarMenuShow = true
+                        }
+                        "forward" -> if (wv?.canGoForward() == true) {
+                            clearSearchFocus()
+                            bottomBarMenuSerial++
+                            bottomBarMenuId = "forward"
+                            bottomBarMenuShow = true
+                        }
+                        "tools" -> {
+                            clearSearchFocus()
+                            bottomBarMenuSerial++
+                            bottomBarMenuId = "tools"
+                            bottomBarMenuShow = true
+                        }
+                        else -> Unit
                     }
                 },
                 navBarBottomPadding = navBarBottomPadding2,
@@ -9914,64 +10565,7 @@ fun BrowserScreen(
         bookmarks.any { !it.isFolder && it.url == currentUrl }
     }
 
-    BrowserToolSheet(
-        show = showToolSheet,
-        pageTitle = if (showNewTabPage) "新标签页"
-        else (activeWindow?.title?.ifBlank { "无标题" } ?: "新标签页"),
-        isFullscreen = isFullscreen,
-        isNightMode = activeWindow?.nightMode == true,
-        isIncognito = activeWindow?.incognito == true,
-        isDesktopMode = activeWindow?.desktopMode == true,
-        isNoImage = activeWindow?.noImage == true,
-        isTranslated = activeWindow?.translated == true,
-        isNewTabPage = showNewTabPage,
-        isBookmarked = isCurrentPageBookmarked,
-        onAddBookmark = {
-            val win = activeWindow
-            if (win != null && win.url.isNotBlank() && win.url != "about:blank") {
-                val title = win.title.ifBlank { win.url }
-                if (bookmarks.none { it.url == win.url }) {
-                    bookmarks.add(0, BookmarkItem(title = title, url = win.url, timestamp = System.currentTimeMillis()))
-                    saveBookmarks()
-                    val host = try { win.url.toUri().host } catch (_: Exception) { null }
-                    if (!host.isNullOrBlank()) {
-                        val bmp = faviconCache[host] ?: win.favicon
-                        if (bmp != null) {
-                            scope.launch(Dispatchers.IO) {
-                                FaviconStore.save(context, host, bmp)
-                            }
-                        }
-                    }
-
-                    scope.launch {
-                        snackbarHostState.showSnackbar(message = "已添加到书签", duration = Snackbar2s)
-                    }
-                }
-            }
-        },
-        onRemoveBookmark = {
-            val win = activeWindow
-            if (win != null && win.url.isNotBlank()) {
-                val existingIndex = bookmarks.indexOfFirst { !it.isFolder && it.url == win.url }
-                if (existingIndex >= 0) {
-                    bookmarks.removeAt(existingIndex)
-                    saveBookmarks()
-                    scope.launch {
-                        snackbarHostState.showSnackbar(message = "已删除书签", duration = Snackbar2s)
-                    }
-                }
-            }
-        },
-        onOpenSettings = {
-            showToolSheet = false
-            onOpenSettings()
-        },
-        onOpenToolCustomize = {
-            showToolSheet = false
-            onOpenToolCustomize()
-        },
-        onDismiss = { showToolSheet = false },
-        onToolAction = { toolId, isActive ->
+    val toolActionHandler: (String, Boolean) -> Unit = { toolId, isActive ->
             val id = activeWindowId
             MoteApplication.trackEventSafe("tool_used", mapOf("tool_id" to toolId))
             when (toolId) {
@@ -10196,7 +10790,88 @@ fun BrowserScreen(
                 }
             }
             showToolSheet = false
+    }
+
+    BrowserToolSheet(
+        show = showToolSheet,
+        pageTitle = if (showNewTabPage) "新标签页"
+        else (activeWindow?.title?.ifBlank { "无标题" } ?: "新标签页"),
+        isFullscreen = isFullscreen,
+        isNightMode = activeWindow?.nightMode == true,
+        isIncognito = activeWindow?.incognito == true,
+        isDesktopMode = activeWindow?.desktopMode == true,
+        isNoImage = activeWindow?.noImage == true,
+        isTranslated = activeWindow?.translated == true,
+        isNewTabPage = showNewTabPage,
+        isBookmarked = isCurrentPageBookmarked,
+        onAddBookmark = {
+            val win = activeWindow
+            if (win != null && win.url.isNotBlank() && win.url != "about:blank") {
+                val title = win.title.ifBlank { win.url }
+                if (bookmarks.none { it.url == win.url }) {
+                    bookmarks.add(0, BookmarkItem(title = title, url = win.url, timestamp = System.currentTimeMillis()))
+                    saveBookmarks()
+                    val host = try { win.url.toUri().host } catch (_: Exception) { null }
+                    if (!host.isNullOrBlank()) {
+                        val bmp = faviconCache[host] ?: win.favicon
+                        if (bmp != null) {
+                            scope.launch(Dispatchers.IO) {
+                                FaviconStore.save(context, host, bmp)
+                            }
+                        }
+                    }
+
+                    scope.launch {
+                        snackbarHostState.showSnackbar(message = "已添加到书签", duration = Snackbar2s)
+                    }
+                }
+            }
         },
+        onRemoveBookmark = {
+            val win = activeWindow
+            if (win != null && win.url.isNotBlank()) {
+                val existingIndex = bookmarks.indexOfFirst { !it.isFolder && it.url == win.url }
+                if (existingIndex >= 0) {
+                    bookmarks.removeAt(existingIndex)
+                    saveBookmarks()
+                    scope.launch {
+                        snackbarHostState.showSnackbar(message = "已删除书签", duration = Snackbar2s)
+                    }
+                }
+            }
+        },
+        onOpenSettings = {
+            showToolSheet = false
+            onOpenSettings()
+        },
+        onOpenToolCustomize = {
+            showToolSheet = false
+            onOpenToolCustomize()
+        },
+        onDismiss = { showToolSheet = false },
+        onToolAction = toolActionHandler,
+    )
+
+    BottomBarLongPressMenu(
+        menuId = bottomBarMenuId,
+        show = bottomBarMenuShow,
+        serial = bottomBarMenuSerial,
+        webView = activeWindowId?.let { webViewMap[it] },
+        historyFaviconCache = faviconCache,
+        activeWindow = activeWindow,
+        isFullscreen = isFullscreen,
+        isNewTabPage = showNewTabPage,
+        prefs = prefs,
+        toolActionHandler = toolActionHandler,
+        onDismiss = { bottomBarMenuShow = false },
+        onDismissFinished = { bottomBarMenuId = null },
+        onHistoryNavigate = { delta ->
+            clearSearchFocus()
+            activeWindowId?.let { webViewMap[it]?.goBackOrForward(delta) }
+        },
+        onOpenToolCustomize = onOpenToolCustomize,
+        onOpenSettings = onOpenSettings,
+        onExit = { toolActionHandler("exit", false) },
     )
 
     val mergedSniffed = remember(
@@ -11898,8 +12573,17 @@ private fun WebViewLayer(
                             onProgressChanged = { p ->
                                 onUpdateWindow(id) { it.progress = p }
                             },
-                            onPageStateChanged = { url, title, back, fwd ->
+                            onPageStateChanged = pageState@{ url, title, back, fwd ->
                                 val win0 = windows.firstOrNull { it.id == id }
+                                val previousUrl = win0?.url.orEmpty()
+                                // 旧 about:blank 页面的回调可能晚于新导航到达，
+                                // 不能用它把已经设置的跳转链接改回空白。
+                                if ((url.isBlank() || url == "about:blank") &&
+                                    previousUrl.isNotBlank() &&
+                                    !isHomeUrl(previousUrl)
+                                ) {
+                                    return@pageState
+                                }
                                 val urlChanged = win0?.url != url
                                 if (urlChanged) {
                                     sniffedResources.clear()
@@ -11996,6 +12680,9 @@ private fun WebViewLayer(
                                 val query = searchQueryHolder.value
                                 val showQueryInBar = isOnSearchResultPage && query.isNotBlank()
                                 onIsSearchResultPage(showQueryInBar)
+                                val displayTitle = title.takeIf {
+                                    it.isNotBlank() && it != "无标题" && it != "about:blank"
+                                }
 
                                 if (!isSearchFocused()) {
                                     onUrlInput(
@@ -12003,8 +12690,8 @@ private fun WebViewLayer(
                                             showQueryInBar -> TextFieldValue(query)
                                             isHomeUrl(url) || url.isBlank() -> TextFieldValue("")
                                             prefs.getInt("browser_header_text_mode", 1) == 1 &&
-                                                title.isNotBlank() && title != "无标题" ->
-                                                TextFieldValue(title)
+                                                displayTitle != null ->
+                                                TextFieldValue(displayTitle)
                                             else -> TextFieldValue(url)
                                         }
                                     )
@@ -12272,8 +12959,20 @@ private fun createWebView(
             @JavascriptInterface
             fun onPasswordSubmit(url: String, username: String, password: String) {
                 if (url.isBlank() || password.isBlank()) return
+                val promptEnabled = try {
+                    context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+                        .getBoolean(KEY_PASSWORD_SAVE_PROMPT, true)
+                } catch (_: Exception) { true }
+                if (!promptEnabled) return
                 post {
                     PasswordCaptureStore.pending = PendingPassword(url, username, password)
+                }
+            }
+
+            @JavascriptInterface
+            fun onPasswordAutofilled() {
+                post {
+                    PasswordAutofillStore.pending = true
                 }
             }
         }, "moteBridge")
@@ -12298,12 +12997,25 @@ private fun createWebView(
         var lastTouchRawY = 0
         var lastTouchViewX = 0f
         var lastTouchViewY = 0f
+        // 用户最近一次真实触摸/点击的时间，用于区分「用户点击跳转」和「网页自动跳转」
+        var lastUserInteractionAt = 0L
         setOnTouchListener { _, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN ||
+                event.actionMasked == MotionEvent.ACTION_UP
+            ) {
+                lastUserInteractionAt = SystemClock.uptimeMillis()
+            }
             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
                 lastTouchRawX = event.rawX.toInt()
                 lastTouchRawY = event.rawY.toInt()
                 lastTouchViewX = event.x
                 lastTouchViewY = event.y
+            }
+            false
+        }
+        setOnKeyListener { _, _, event ->
+            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                lastUserInteractionAt = SystemClock.uptimeMillis()
             }
             false
         }
@@ -12657,18 +13369,32 @@ private fun createWebView(
                 val url = request?.url?.toString() ?: return false
                 val lower = url.lowercase()
                 try {
-                    val secPrefs = context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
                     if (SecurityStateHolder.effectiveRedirects(SecurityStateHolder.info.host) &&
                         request != null &&
                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
-                        request.isRedirect
+                        request.isRedirect &&
+                        request.isForMainFrame
                     ) {
-                        val currentHost = view?.url?.let { Uri.parse(it).host.orEmpty() }.orEmpty()
-                        val targetHost = request.url.host.orEmpty()
-                        if (currentHost.isNotBlank() && targetHost.isNotBlank() && currentHost != targetHost) {
-                            WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_SMART)
-                            Toast.makeText(context, "网页重定向已拦截：$targetHost", Toast.LENGTH_SHORT).show()
-                            return true
+                        // 只拦截网页自动发起的跨站跳转：
+                        // 用户刚点过页面（链接/按钮），或系统标记为带用户手势的请求，
+                        // 都视为用户主动跳转，直接放行。
+                        val hasUserGesture = try {
+                            request.hasGesture()
+                        } catch (_: Exception) {
+                            false
+                        }
+                        val recentlyTouched = lastUserInteractionAt > 0L &&
+                            SystemClock.uptimeMillis() - lastUserInteractionAt <= 5000L
+                        if (!hasUserGesture && !recentlyTouched) {
+                            val currentHost = view?.url?.let { Uri.parse(it).host.orEmpty() }.orEmpty()
+                            val targetHost = request.url.host.orEmpty()
+                            if (currentHost.isNotBlank() && targetHost.isNotBlank() &&
+                                currentHost != targetHost
+                            ) {
+                                WebSecurityStats.bump(context, WebSecurityStats.CATEGORY_SMART)
+                                Toast.makeText(context, "网页重定向已拦截：$targetHost", Toast.LENGTH_SHORT).show()
+                                return true
+                            }
                         }
                     }
                 } catch (_: Exception) {}
@@ -12835,7 +13561,24 @@ private fun createWebView(
                     // 让页面上报是否适合侧滑切页：被放大或可横向滚动时禁用
                     view?.evaluateJavascript(JS_SWIPE_NAV_SYNC, null)
                     view?.evaluateJavascript(jsHook, null)
-                    view?.evaluateJavascript(JS_PASSWORD_DETECT, null)
+                    try {
+                        val pmPrefs = context.getSharedPreferences(
+                            "mote_prefs", Context.MODE_PRIVATE
+                        )
+                        if (passwordSavePromptEnabled(pmPrefs)) {
+                            view?.evaluateJavascript(JS_PASSWORD_DETECT, null)
+                        }
+                        if (passwordAutofillEnabled(pmPrefs)) {
+                            val matched = passwordEntriesForUrl(
+                                loadSavedPasswords(pmPrefs), u
+                            )
+                            if (matched.isNotEmpty()) {
+                                view?.evaluateJavascript(
+                                    buildPasswordAutofillScript(matched), null
+                                )
+                            }
+                        }
+                    } catch (_: Exception) {}
 
                     // 电脑模式：页面脚本执行后再兜底覆盖一次指纹
                     view?.evaluateJavascript(JS_DESKTOP_FINGERPRINT, null)
@@ -13864,21 +14607,11 @@ private fun SniffSheet(
         }
     }
 
-    // 视频无论是否打开“显示所有资源”，都必须先有缩略图才外显；
-    // 图片/文件等其他资源只在“显示所有资源”打开时显示。
+    // 视频只要嗅探到就先显示，缩略图在后台加载；图片/文件等仍只在“显示所有资源”时外显。
     val importantResources = resources.filter { res ->
-        val videoReady = res.category != SniffCategory.VIDEO ||
-            videoThumbs.containsKey(res.url)
-        videoReady && (
-            showAllResources ||
-                res.category == SniffCategory.VIDEO ||
-                res.category == SniffCategory.AUDIO
-            )
-    }
-    val videoPending = resources.any {
-        it.category == SniffCategory.VIDEO &&
-            videoThumbs[it.url] == null &&
-            videoFailed[it.url] != true
+        showAllResources ||
+            res.category == SniffCategory.VIDEO ||
+            res.category == SniffCategory.AUDIO
     }
 
     LaunchedEffect(showAllResources) {
@@ -13946,7 +14679,7 @@ private fun SniffSheet(
                     contentDescription = "筛选",
                     tint = when {
                         filter != null || showAllResources -> MiuixTheme.colorScheme.primary
-                        importantResources.isNotEmpty() -> MiuixTheme.colorScheme.onSurface
+                        resources.isNotEmpty() || isSniffing -> MiuixTheme.colorScheme.onSurface
                         else -> MiuixTheme.colorScheme.onSurface.copy(alpha = 0.3f)
                     },
                     modifier = Modifier.size(24.dp),
@@ -13980,20 +14713,6 @@ private fun SniffSheet(
                             )
                         }
                     }
-                    videoPending && importantResources.isEmpty() -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 40.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "正在加载视频缩略图…",
-                                fontSize = 14.sp,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            )
-                        }
-                    }
                     filteredResources.isEmpty() -> {
                         Box(
                             modifier = Modifier
@@ -14002,7 +14721,12 @@ private fun SniffSheet(
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = if (filter != null) "当前筛选下暂无资源" else "未发现可嗅探的资源",
+                                text = when {
+                                    filter != null -> "当前筛选下暂无资源"
+                                    resources.isNotEmpty() && !showAllResources ->
+                                        "已嗅探到资源，可在右上角打开「显示所有资源」查看"
+                                    else -> "未发现可嗅探的资源"
+                                },
                                 fontSize = 14.sp,
                                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             )
@@ -14781,8 +15505,14 @@ private fun HistorySheet(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    val prefs = remember {
+        context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
+    }
     var filter by remember { mutableStateOf(HistoryFilter.ALL) }
     var sort by remember { mutableStateOf(HistorySort.NEWEST_FIRST) }
+    var showDuplicates by remember {
+        mutableStateOf(prefs.getBoolean(KEY_HISTORY_SHOW_DUPLICATES, false))
+    }
     var currentTab by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(show) {
@@ -14803,7 +15533,7 @@ private fun HistorySheet(
         }
     }
 
-    val filteredSorted = remember(currentSourceList.toList(), filter, sort) {
+    val filteredSorted = remember(currentSourceList.toList(), filter, sort, showDuplicates) {
         val now = System.currentTimeMillis()
         val filtered = when (filter) {
             HistoryFilter.ALL -> currentSourceList
@@ -14814,9 +15544,22 @@ private fun HistorySheet(
                 now - it.timestamp <= 30L * 24 * 3600 * 1000
             }
         }
+        // 默认把完全相同的链接折叠，只保留最新的一条
+        val visible = if (showDuplicates) {
+            filtered
+        } else {
+            val latestByUrl = LinkedHashMap<String, HistoryEntry>()
+            filtered.forEach { entry ->
+                val old = latestByUrl[entry.url]
+                if (old == null || entry.timestamp > old.timestamp) {
+                    latestByUrl[entry.url] = entry
+                }
+            }
+            latestByUrl.values.toList()
+        }
         when (sort) {
-            HistorySort.NEWEST_FIRST -> filtered.sortedByDescending { it.timestamp }
-            HistorySort.OLDEST_FIRST -> filtered.sortedBy { it.timestamp }
+            HistorySort.NEWEST_FIRST -> visible.sortedByDescending { it.timestamp }
+            HistorySort.OLDEST_FIRST -> visible.sortedBy { it.timestamp }
         }
     }
 
@@ -14833,7 +15576,7 @@ private fun HistorySheet(
         filteredSorted.map { it.url }
     }
 
-    val filterEntries = remember(filter, sort) {
+    val filterEntries = remember(filter, sort, showDuplicates) {
         listOf(
             DropdownEntry(
                 items = listOf(
@@ -14846,6 +15589,21 @@ private fun HistorySheet(
                 items = listOf(
                     DropdownItem(text = "从晚到早", selected = sort == HistorySort.NEWEST_FIRST, onClick = { sort = HistorySort.NEWEST_FIRST }),
                     DropdownItem(text = "从早到晚", selected = sort == HistorySort.OLDEST_FIRST, onClick = { sort = HistorySort.OLDEST_FIRST }),
+                ),
+            ),
+            DropdownEntry(
+                items = listOf(
+                    DropdownItem(
+                        text = "显示重复历史",
+                        selected = showDuplicates,
+                        onClick = {
+                            val next = !showDuplicates
+                            showDuplicates = next
+                            prefs.edit()
+                                .putBoolean(KEY_HISTORY_SHOW_DUPLICATES, next)
+                                .apply()
+                        },
+                    ),
                 ),
             ),
         )
@@ -14909,7 +15667,11 @@ private fun HistorySheet(
                         Icon(
                             imageVector = MiuixIcons.Filter,
                             contentDescription = "筛选",
-                            tint = if (filter != HistoryFilter.ALL || sort != HistorySort.NEWEST_FIRST) {
+                            tint = if (
+                                filter != HistoryFilter.ALL ||
+                                sort != HistorySort.NEWEST_FIRST ||
+                                showDuplicates
+                            ) {
                                 MiuixTheme.colorScheme.primary
                             } else {
                                 MiuixTheme.colorScheme.onSurface
@@ -16173,7 +16935,7 @@ internal fun ToolGridItem(tool: ToolDef, isActive: Boolean, isEnabled: Boolean =
         verticalArrangement = Arrangement.Center,
     ) {
         if (tool.customIcon != null) {
-            tool.customIcon(isActive)
+            tool.customIcon(isActive, animatedIconColor)
         } else {
             Icon(
                 imageVector = tool.icon,
@@ -17678,7 +18440,13 @@ private fun MoteUrlInputField(
         textStyle = inputTextStyle,
         cursorBrush = SolidColor(MiuixTheme.colorScheme.primary),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { currentOnSearch() }),
+        keyboardActions = KeyboardActions(
+            onSearch = { currentOnSearch() },
+            // 部分输入法会把“开始/前往”映射成 Go/Done/Send，统一按搜索处理
+            onGo = { currentOnSearch() },
+            onDone = { currentOnSearch() },
+            onSend = { currentOnSearch() },
+        ),
         interactionSource = interactionSource,
         decorationBox = { innerTextField ->
             Box(

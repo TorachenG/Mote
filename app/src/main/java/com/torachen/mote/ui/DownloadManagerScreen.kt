@@ -976,6 +976,7 @@ fun DownloadManagerScreen(
         )
         UiMode.Material -> DownloadManagerScreenMaterial(
             onBack, onOpenDownloadSettings, onOpenTaskDetail, onSelectionModeChange, onOpenDownloadsFolder,
+            showBackButton,
         )
     }
 }
@@ -1982,6 +1983,7 @@ private fun DownloadManagerScreenMaterial(
     onOpenTaskDetail: () -> Unit,
     onSelectionModeChange: (Boolean) -> Unit,
     onOpenDownloadsFolder: () -> Unit,
+    showBackButton: Boolean = true,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -2063,8 +2065,14 @@ private fun DownloadManagerScreenMaterial(
                         )
                     },
                     navigationIcon = {
-                        M3IconButton(onClick = { if (isMultiSelectMode) exitMultiSelect() else onBack() }) {
-                            M3Icon(imageVector = if (isMultiSelectMode) Icons.Filled.Close else MiuixIcons.Back, contentDescription = "返回")
+                        when {
+                            isMultiSelectMode -> M3IconButton(onClick = { exitMultiSelect() }) {
+                                M3Icon(imageVector = Icons.Filled.Close, contentDescription = "退出多选")
+                            }
+                            showBackButton -> M3IconButton(onClick = onBack) {
+                                M3Icon(imageVector = MiuixIcons.Back, contentDescription = "返回")
+                            }
+                            else -> Spacer(Modifier.size(48.dp))
                         }
                     },
                     actions = {

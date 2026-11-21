@@ -18,6 +18,8 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
+import com.torachen.mote.ui.ai.AiFloatingBubbleService
+import com.torachen.mote.ui.ai.tasks.AiTaskTriggerBus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -99,7 +101,14 @@ class MoteAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            val pkg = event.packageName?.toString().orEmpty()
+            if (pkg.isNotBlank() && pkg != packageName) {
+                AiTaskTriggerBus.onAppForeground(this, pkg, isMote = false)
+            }
+        }
+    }
 
     override fun onInterrupt() = Unit
 
@@ -202,9 +211,17 @@ class MoteAccessibilityService : AccessibilityService() {
             clickable = clickable.parent
         }
         val targetNode = clickable ?: node
-        if (targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
         val rect = Rect()
         targetNode.getBoundsInScreen(rect)
+        if (targetNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            if (!rect.isEmpty) {
+                AiFloatingBubbleService.showTouchEffect(
+                    rect.centerX().toFloat(),
+                    rect.centerY().toFloat(),
+                )
+            }
+            return true
+        }
         return if (!rect.isEmpty) {
             tap(rect.centerX().toFloat(), rect.centerY().toFloat())
         } else {
@@ -255,6 +272,7 @@ class MoteAccessibilityService : AccessibilityService() {
 
     fun tap(x: Float, y: Float): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        AiFloatingBubbleService.showTouchEffect(x, y)
         val path = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, 80L))
@@ -265,6 +283,7 @@ class MoteAccessibilityService : AccessibilityService() {
     /** 长按指定坐标。 */
     fun longPress(x: Float, y: Float, durationMs: Long = 650L): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        AiFloatingBubbleService.showTouchEffect(x, y)
         val path = Path().apply { moveTo(x, y) }
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0L, durationMs))
@@ -329,6 +348,7 @@ class MoteAccessibilityService : AccessibilityService() {
             moveTo(startX, startY)
             lineTo(endX, endY)
         }
+        AiFloatingBubbleService.showTouchEffect(startX, startY)
         val gesture = GestureDescription.Builder()
             .addStroke(
                 GestureDescription.StrokeDescription(path, 0L, durationMs.coerceIn(80L, 2000L)),

@@ -59,7 +59,10 @@ object MoteAutoSync {
         "cloudbase_access_token", "cloudbase_refresh_token", "cloudbase_user_id",
         "cloudbase_username", "sync_e2ee_enabled", "sync_fallback_pass", "sync_e2ee_derived_key",
         "sync_frequency", "sync_provider", "sync_auto_on_start", "sync_conflict_pending",
-        "sync_snapshot_v1"
+        "sync_snapshot_v1",
+        // 密钥与本机扩展状态不触发/不参与云同步
+        "ai_providers", "mote_secrets", "ai_mcp_servers", "ai_mcp_tool_policies",
+        "ai_presets", "ai_plugins", "ai_plugin_config", "ai_tasks", "ai_usage"
     )
 
     fun start(context: Context) {

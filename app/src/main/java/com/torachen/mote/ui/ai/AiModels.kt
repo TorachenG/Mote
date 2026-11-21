@@ -34,6 +34,24 @@ data class AiModelSpec(
     val supportsImage: Boolean = false,
 )
 
+/** 联网搜索/网页阅读得到的来源，编号用于正文里的 [citation:N]。 */
+data class AiSource(
+    val index: Int,
+    val url: String,
+    var title: String,
+    val siteName: String = "",
+    var snippet: String = "",
+    var publishedAt: String? = null,
+)
+
+/** 错误后可以给用户的快捷操作。 */
+enum class AiErrorAction {
+    None,
+    ApiKey,
+    Retry,
+    TopUp,
+}
+
 /** 一条用户已保存的服务配置。 */
 data class AiProviderConfig(
     val id: String,
@@ -48,6 +66,8 @@ data class AiProviderConfig(
     val supportsReasoning: Boolean = false,
     val modelAliases: Map<String, String> = emptyMap(),
     val modelSpecs: Map<String, AiModelSpec> = emptyMap(),
+    /** Keystore 中的密钥引用；持久化时不再写 apiKey 明文。 */
+    val keyRef: String? = null,
 ) {
     val isLocalEndpoint: Boolean
         get() = baseUrl.contains("127.0.0.1") ||
@@ -123,11 +143,27 @@ data class AiImagePart(
     val base64: String,
 )
 
+/** 一次模型请求的 token 用量。input 为未缓存输入，缓存单独计数。 */
+data class AiTokenUsage(
+    val inputTokens: Int = 0,
+    val outputTokens: Int = 0,
+    val cacheReadTokens: Int = 0,
+    val cacheWriteTokens: Int = 0,
+    val reasoningTokens: Int = 0,
+    val totalTokens: Int = 0,
+    val estimated: Boolean = false,
+) {
+    val isEmpty: Boolean
+        get() = inputTokens == 0 && outputTokens == 0 &&
+                cacheReadTokens == 0 && cacheWriteTokens == 0 && reasoningTokens == 0
+}
+
 /** 流式事件。 */
 sealed interface AiStreamEvent {
     data class Reasoning(val delta: String) : AiStreamEvent
     data class Content(val delta: String) : AiStreamEvent
-    data object Done : AiStreamEvent
+    data class Usage(val usage: AiTokenUsage) : AiStreamEvent
+    data class Done(val stopReason: String? = null) : AiStreamEvent
 }
 
 /** 思考区里一条工具动作的进度状态。 */
@@ -135,6 +171,16 @@ enum class AiStepState {
     Running,
     Done,
     Failed,
+}
+
+/** 工具步骤类型，用于思考区显示对应的图标与来源摘要。 */
+enum class AiStepKind {
+    Other,
+    Search,
+    Read,
+    Open,
+    Device,
+    File,
 }
 
 /**
@@ -147,6 +193,9 @@ data class AiAgentStep(
     val title: String,
     val detail: String = "",
     val state: AiStepState = AiStepState.Running,
+    val kind: AiStepKind = AiStepKind.Other,
+    val sourceIds: List<Int> = emptyList(),
+    val url: String? = null,
 )
 
 /** AI 在一次对话里生成的文件，用于对话底部的文件区展示与打开。 */

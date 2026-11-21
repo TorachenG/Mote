@@ -64,11 +64,16 @@ object AiClient {
             if (result.content.isNotBlank()) {
                 emit(AiStreamEvent.Content(result.content))
             }
-            emit(AiStreamEvent.Done)
+            result.usage?.takeIf { !it.isEmpty }?.let { emit(AiStreamEvent.Usage(it)) }
+            emit(AiStreamEvent.Done())
         }
     }.flowOn(Dispatchers.IO)
 
-    private data class Completion(val reasoning: String, val content: String)
+    private data class Completion(
+        val reasoning: String,
+        val content: String,
+        val usage: AiTokenUsage? = null,
+    )
 
     // ============================================================
     // 模型列表 / 连通性测试
@@ -130,6 +135,8 @@ object AiClient {
             put("model", provider.model)
             put("messages", openAiMessages(systemPrompt, messages))
             put("stream", true)
+            // OpenAI 兼容接口在流式模式下默认不返回 usage；请求最后一个 chunk 带上。
+            put("stream_options", JSONObject().put("include_usage", true))
             applyOpenAiReasoning(provider, reasoning)
         }
         val response = execute(
@@ -139,6 +146,7 @@ object AiClient {
             accept = "text/event-stream",
             onCall = onCall,
         )
+        var stopReason: String? = null
         response.use { res ->
             val raw = if (res.isSuccessful) null else readBody(res)
             ensureSuccessful(res, raw)
@@ -154,10 +162,12 @@ object AiClient {
                 obj.optJSONObject("error")?.let { error ->
                     throw IOException(error.stringOrNull("message") ?: "接口返回错误")
                 }
-                val delta = obj.optJSONArray("choices")
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("delta")
-                    ?: continue
+                openAiUsage(obj)?.takeIf { !it.isEmpty }?.let { emit(AiStreamEvent.Usage(it)) }
+                val choice = obj.optJSONArray("choices")?.optJSONObject(0)
+                choice?.stringOrNull("finish_reason")?.takeIf { it.isNotBlank() }?.let {
+                    stopReason = it
+                }
+                val delta = choice?.optJSONObject("delta") ?: continue
                 val reasoning = delta.stringOrNull("reasoning_content")
                     ?: delta.stringOrNull("reasoning")
                 if (!reasoning.isNullOrEmpty()) {
@@ -169,7 +179,7 @@ object AiClient {
                 }
             }
         }
-        emit(AiStreamEvent.Done)
+        emit(AiStreamEvent.Done(stopReason))
     }
 
     private fun openAiMessages(systemPrompt: String, messages: List<AiPromptMessage>): JSONArray {
@@ -250,6 +260,8 @@ object AiClient {
             accept = "text/event-stream",
             onCall = onCall,
         )
+        var stopReason: String? = null
+        var usage = AiTokenUsage()
         response.use { res ->
             val raw = if (res.isSuccessful) null else readBody(res)
             ensureSuccessful(res, raw)
@@ -262,6 +274,11 @@ object AiClient {
                 if (data.isEmpty() || data == "[DONE]") continue
                 val obj = runCatching { JSONObject(data) }.getOrNull() ?: continue
                 when (obj.stringOrNull("type")) {
+                    "message_start" -> {
+                        obj.optJSONObject("message")?.optJSONObject("usage")
+                            ?.let { usage = anthropicUsage(usage, it) }
+                    }
+
                     "content_block_delta" -> {
                         val delta = obj.optJSONObject("delta") ?: continue
                         when (delta.stringOrNull("type")) {
@@ -275,6 +292,12 @@ object AiClient {
                         }
                     }
 
+                    "message_delta" -> {
+                        stopReason = obj.optJSONObject("delta")
+                            ?.stringOrNull("stop_reason")
+                            ?.takeIf { it.isNotBlank() } ?: stopReason
+                        obj.optJSONObject("usage")?.let { usage = anthropicUsage(usage, it) }
+                    }
                     "message_stop" -> break
                     "error" -> {
                         val error = obj.optJSONObject("error")
@@ -283,7 +306,8 @@ object AiClient {
                 }
             }
         }
-        emit(AiStreamEvent.Done)
+        if (!usage.isEmpty) emit(AiStreamEvent.Usage(usage))
+        emit(AiStreamEvent.Done(stopReason))
     }
 
     private fun anthropicMessages(messages: List<AiPromptMessage>): JSONArray {
@@ -371,6 +395,8 @@ object AiClient {
             accept = "text/event-stream",
             onCall = onCall,
         )
+        var stopReason: String? = null
+        var usage: AiTokenUsage? = null
         response.use { res ->
             val raw = if (res.isSuccessful) null else readBody(res)
             ensureSuccessful(res, raw)
@@ -385,10 +411,17 @@ object AiClient {
                 obj.optJSONObject("error")?.let { error ->
                     throw IOException(error.stringOrNull("message") ?: "接口返回错误")
                 }
+                obj.optJSONObject("usageMetadata")?.let { usage = geminiUsage(it) }
+                obj.optJSONArray("candidates")
+                    ?.optJSONObject(0)
+                    ?.stringOrNull("finishReason")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { stopReason = it }
                 emitGeminiParts(obj)
             }
         }
-        emit(AiStreamEvent.Done)
+        usage?.takeIf { !it.isEmpty }?.let { emit(AiStreamEvent.Usage(it)) }
+        emit(AiStreamEvent.Done(stopReason))
     }
 
     private suspend fun FlowCollector<AiStreamEvent>.emitGeminiParts(obj: JSONObject) {
@@ -550,6 +583,7 @@ object AiClient {
                     Completion(
                         reasoning = reasoning,
                         content = message?.stringOrNull("content") ?: "",
+                        usage = openAiUsage(json),
                     )
                 }
 
@@ -564,7 +598,11 @@ object AiClient {
                             "thinking" -> reasoning.append(block.stringOrNull("thinking").orEmpty())
                         }
                     }
-                    Completion(reasoning.toString(), builder.toString())
+                    Completion(
+                        reasoning.toString(),
+                        builder.toString(),
+                        anthropicUsage(AiTokenUsage(), json.optJSONObject("usage")),
+                    )
                 }
 
                 AiProtocol.Gemini -> {
@@ -585,7 +623,11 @@ object AiClient {
                             }
                         }
                     }
-                    Completion(reasoning.toString(), builder.toString())
+                    Completion(
+                        reasoning.toString(),
+                        builder.toString(),
+                        json.optJSONObject("usageMetadata")?.let { geminiUsage(it) },
+                    )
                 }
             }
         }
@@ -714,6 +756,29 @@ internal class AiHttpException(val code: Int, val detail: String) :
     IOException("HTTP $code: $detail")
 
 /** 把异常翻译成适合直接展示给用户的中文提示。 */
+internal fun aiErrorAction(throwable: Throwable): AiErrorAction {
+    if (throwable is AiHttpException) {
+        return when (throwable.code) {
+            401, 403 -> AiErrorAction.ApiKey
+            402 -> AiErrorAction.TopUp
+            408, 429 -> AiErrorAction.Retry
+            in 500..599 -> AiErrorAction.Retry
+            else -> AiErrorAction.None
+        }
+    }
+    val message = throwable.message.orEmpty()
+    return when {
+        throwable is java.io.IOException ||
+                throwable is java.net.UnknownHostException ||
+                throwable is java.net.ConnectException ||
+                message.contains("timeout", ignoreCase = true) ||
+                message.contains("Failed to connect", ignoreCase = true) ||
+                message.contains("Unable to resolve host", ignoreCase = true) ->
+            AiErrorAction.Retry
+        else -> AiErrorAction.None
+    }
+}
+
 internal fun aiErrorMessage(throwable: Throwable): String {
     if (throwable is AiHttpException) {
         return when (throwable.code) {
@@ -749,6 +814,61 @@ internal fun aiErrorMessage(throwable: Throwable): String {
         message.isBlank() -> "请求失败，请稍后重试"
         else -> message
     }
+}
+
+private fun openAiUsage(obj: JSONObject): AiTokenUsage? {
+    val usage = obj.optJSONObject("usage") ?: return null
+    val prompt = usage.optInt("prompt_tokens", 0)
+    val completion = usage.optInt("completion_tokens", 0)
+    val cached = usage.optJSONObject("prompt_tokens_details")
+        ?.optInt("cached_tokens", 0)
+        ?: usage.optInt("prompt_cache_hit_tokens", 0)
+    val miss = usage.optInt("prompt_cache_miss_tokens", -1)
+    val reasoning = usage.optJSONObject("completion_tokens_details")
+        ?.optInt("reasoning_tokens", 0) ?: 0
+    val input = if (miss >= 0) miss else (prompt - cached).coerceAtLeast(0)
+    val total = usage.optInt("total_tokens", prompt + completion)
+    if (input == 0 && completion == 0 && cached == 0 && reasoning == 0) return null
+    return AiTokenUsage(
+        inputTokens = input,
+        outputTokens = completion,
+        cacheReadTokens = cached,
+        reasoningTokens = reasoning,
+        totalTokens = total,
+    )
+}
+
+private fun anthropicUsage(base: AiTokenUsage, usage: JSONObject?): AiTokenUsage {
+    if (usage == null) return base
+    val input = usage.optInt("input_tokens", base.inputTokens)
+    val output = usage.optInt("output_tokens", base.outputTokens)
+    val cacheRead = usage.optInt("cache_read_input_tokens", base.cacheReadTokens)
+    val cacheWrite = usage.optInt("cache_creation_input_tokens", base.cacheWriteTokens)
+    val reasoning = usage.optInt("reasoning_tokens", base.reasoningTokens)
+    return AiTokenUsage(
+        inputTokens = input,
+        outputTokens = output,
+        cacheReadTokens = cacheRead,
+        cacheWriteTokens = cacheWrite,
+        reasoningTokens = reasoning,
+        totalTokens = input + output + cacheRead + cacheWrite,
+    )
+}
+
+private fun geminiUsage(usage: JSONObject): AiTokenUsage? {
+    val prompt = usage.optInt("promptTokenCount", 0)
+    val output = usage.optInt("candidatesTokenCount", 0)
+    val cached = usage.optInt("cachedContentTokenCount", 0)
+    val reasoning = usage.optInt("thoughtsTokenCount", 0)
+    val total = usage.optInt("totalTokenCount", prompt + output)
+    if (prompt == 0 && output == 0 && cached == 0 && reasoning == 0) return null
+    return AiTokenUsage(
+        inputTokens = (prompt - cached).coerceAtLeast(0),
+        outputTokens = output,
+        cacheReadTokens = cached,
+        reasoningTokens = reasoning,
+        totalTokens = total,
+    )
 }
 
 private fun isDeepSeekProvider(provider: AiProviderConfig): Boolean =

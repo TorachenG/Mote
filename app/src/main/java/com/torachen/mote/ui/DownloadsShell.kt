@@ -57,6 +57,7 @@ import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
 import top.yukonga.miuix.kmp.icon.extended.FileDownloads
 import top.yukonga.miuix.kmp.icon.extended.FolderFill
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -111,6 +112,14 @@ fun DownloadsShell(
     var filesSelecting by remember { mutableStateOf(false) }
     var filesSubPage by remember { mutableStateOf(false) }
     val viewerOpen = LocalFileViewerState.current != null
+    val commonBack: () -> Unit = {
+        if (pagerState.currentPage == 1) {
+            if (!fileController.onBackPressed()) onBack()
+        } else {
+            onBack()
+        }
+    }
+    val showCommonBack = !downloadsSelecting && !filesSelecting && !viewerOpen
 
     when (LocalUiMode.current) {
         UiMode.Miuix -> DownloadsShellMiuix(
@@ -120,6 +129,8 @@ fun DownloadsShell(
             pagerState = pagerState,
             swipeEnabled = !downloadsSelecting && !filesSelecting && !viewerOpen,
             onBack = onBack,
+            onCommonBack = commonBack,
+            showCommonBack = showCommonBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
             onOpenInBrowser = onOpenInBrowser,
@@ -142,6 +153,8 @@ fun DownloadsShell(
             pagerState = pagerState,
             swipeEnabled = !downloadsSelecting && !filesSelecting && !viewerOpen,
             onBack = onBack,
+            onCommonBack = commonBack,
+            showCommonBack = showCommonBack,
             onOpenDownloadSettings = onOpenDownloadSettings,
             onOpenTaskDetail = onOpenTaskDetail,
             onOpenInBrowser = onOpenInBrowser,
@@ -162,6 +175,8 @@ private fun DownloadsShellMiuix(
     tab: Int,
     onTabChange: (Int) -> Unit,
     onBack: () -> Unit,
+    onCommonBack: () -> Unit,
+    showCommonBack: Boolean,
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
@@ -206,7 +221,7 @@ private fun DownloadsShellMiuix(
                         onOpenTaskDetail = onOpenTaskDetail,
                         onSelectionModeChange = onDownloadsSelectingChange,
                         onOpenDownloadsFolder = onOpenDownloadsFolder,
-                        showBackButton = true,
+                        showBackButton = false,
                     )
                 } else {
                     FileManagerPage(
@@ -217,9 +232,32 @@ private fun DownloadsShellMiuix(
                         onOpenScanner = onOpenScanner,
                         onOpenFileSettings = onOpenFileSettings,
                         onSubPageChange = onFilesSubPageChange,
-                        showBackButton = true,
+                        showBackButton = false,
                     )
                 }
+            }
+        }
+
+        if (showCommonBack) {
+            // 两个页签共用同一个固定返回按钮，切页时不随页面移动
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(
+                        start = 0.dp,
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 6.dp,
+                    )
+                    .size(40.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onCommonBack() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = MiuixIcons.ChevronBackward,
+                    contentDescription = "返回",
+                    tint = MiuixTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(22.dp),
+                )
             }
         }
 
@@ -325,6 +363,8 @@ private fun DownloadsShellMaterial(
     tab: Int,
     onTabChange: (Int) -> Unit,
     onBack: () -> Unit,
+    onCommonBack: () -> Unit,
+    showCommonBack: Boolean,
     onOpenDownloadSettings: () -> Unit,
     onOpenTaskDetail: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
@@ -350,6 +390,7 @@ private fun DownloadsShellMaterial(
                 onOpenTaskDetail = onOpenTaskDetail,
                 onSelectionModeChange = onDownloadsSelectingChange,
                 onOpenDownloadsFolder = onOpenDownloadsFolder,
+                showBackButton = false,
             )
         } else {
             FileManagerPage(
@@ -359,7 +400,31 @@ private fun DownloadsShellMaterial(
                 controller = fileController,
                 onOpenScanner = onOpenScanner,
                 onOpenFileSettings = onOpenFileSettings,
+                showBackButton = false,
             )
+        }
+
+        if (showCommonBack) {
+            // Material 页签也使用同一个固定返回按钮，保持 Material 材质
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(
+                        start = 4.dp,
+                        top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
+                    )
+                    .size(48.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .clickable { onCommonBack() },
+                contentAlignment = Alignment.Center,
+            ) {
+                M3Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    contentDescription = "返回",
+                    tint = M3MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
         }
 
         AnimatedVisibility(

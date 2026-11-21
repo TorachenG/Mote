@@ -28,11 +28,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -132,6 +135,8 @@ internal data class AiMdListItem(
 )
 
 private const val URL_TAG = "MOTE_MD_URL"
+private const val CITATION_TAG = "MOTE_MD_CITATION"
+private val LocalAiCitationClick = staticCompositionLocalOf<((Int) -> Unit)?> { null }
 
 private val headingRegex = Regex("^(#{1,6})\\s+(.*)$")
 private val unorderedListRegex = Regex("^(\\s*)([-*+•])\\s+(.*)$")
@@ -446,6 +451,23 @@ private fun appendInline(
 ) {
     var index = 0
     while (index < text.length) {
+        val citation = parseCitationMarker(text, index)
+        if (citation != null) {
+            val (number, end) = citation
+            val start = builder.length
+            builder.pushStyle(
+                SpanStyle(
+                    color = palette.accent,
+                    background = palette.accent.copy(alpha = 0.12f),
+                    fontSize = baseFontSize * 0.78f,
+                ),
+            )
+            builder.append("[$number]")
+            builder.pop()
+            builder.addStringAnnotation(CITATION_TAG, number.toString(), start, builder.length)
+            index = end
+            continue
+        }
         val char = text[index]
         val lineBreakEnd = if (char == '<') lineBreakTagEnd(text, index) else -1
         when {
@@ -692,6 +714,16 @@ private fun appendMath(
     builder.pop()
 }
 
+private fun parseCitationMarker(text: String, index: Int): Pair<Int, Int>? {
+    val prefix = "[citation:"
+    if (!text.startsWith(prefix, index, ignoreCase = true)) return null
+    val close = text.indexOf(']', index + prefix.length)
+    if (close < 0) return null
+    val number = text.substring(index + prefix.length, close).trim().toIntOrNull() ?: return null
+    if (number <= 0) return null
+    return number to close + 1
+}
+
 private fun appendLink(
     builder: AnnotatedString.Builder,
     label: String,
@@ -706,7 +738,18 @@ private fun appendLink(
             textDecoration = TextDecoration.Underline,
         ),
     )
-    appendInline(builder, label, palette, baseFontSize)
+    // 裸链接的 label 本身就是 URL；若再交给 appendInline 解析，
+    // 会再次命中 http(s) 自动链接分支并递归到栈溢出。
+    val isBareLink = label.startsWith("http://", ignoreCase = true) ||
+            label.startsWith("https://", ignoreCase = true) ||
+            (label.startsWith("<") &&
+                    (label.contains("http://", ignoreCase = true) ||
+                            label.contains("https://", ignoreCase = true)))
+    if (isBareLink) {
+        builder.append(label)
+    } else {
+        appendInline(builder, label, palette, baseFontSize)
+    }
     builder.pop()
     builder.addStringAnnotation(URL_TAG, url, start, builder.length)
 }
@@ -756,15 +799,18 @@ internal fun AiMarkdown(
     baseStyle: TextStyle,
     baseFontSize: TextUnit,
     modifier: Modifier = Modifier,
+    onCitationClick: ((Int) -> Unit)? = null,
 ) {
     val blocks = remember(source, palette, baseFontSize) {
         parseAiMarkdown(source, palette, baseFontSize)
     }
+    CompositionLocalProvider(LocalAiCitationClick provides onCitationClick) {
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        blocks.forEach { block ->
+        blocks.forEachIndexed { index, block ->
+            key(index, block) {
             when (block) {
                 is AiMdBlock.Paragraph -> {
                     AiInlineText(
@@ -946,7 +992,9 @@ internal fun AiMarkdown(
                     )
                 }
             }
+            }
         }
+    }
     }
 }
 
@@ -1023,8 +1071,10 @@ private fun AiInlineText(
     textAlign: TextAlign = TextAlign.Start,
 ) {
     val hasLink = remember(text) {
-        text.getStringAnnotations(URL_TAG, 0, text.length).isNotEmpty()
+        text.getStringAnnotations(URL_TAG, 0, text.length).isNotEmpty() ||
+                text.getStringAnnotations(CITATION_TAG, 0, text.length).isNotEmpty()
     }
+    val citationHandler = LocalAiCitationClick.current
     val resolvedStyle = style.copy(color = color, lineHeight = lineHeight, textAlign = textAlign)
     if (!hasLink) {
         BasicText(
@@ -1046,6 +1096,12 @@ private fun AiInlineText(
                 val layout = layoutResult ?: return@detectTapGestures
                 val offset = layout.getOffsetForPosition(position)
                     .coerceIn(0, (text.length - 1).coerceAtLeast(0))
+                val citation = text.getStringAnnotations(CITATION_TAG, offset, offset)
+                    .firstOrNull()
+                if (citation != null) {
+                    citation.item.toIntOrNull()?.let { citationHandler?.invoke(it) }
+                    return@detectTapGestures
+                }
                 val url = text.getStringAnnotations(URL_TAG, offset, offset)
                     .firstOrNull()
                     ?.item

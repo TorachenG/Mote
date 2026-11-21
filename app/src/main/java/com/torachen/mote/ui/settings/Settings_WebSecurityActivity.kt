@@ -2072,53 +2072,59 @@ private fun WebSiteManagerPageMiuix(onBack: () -> Unit, onOpenSite: (String) -> 
                         }
                     }
                 }
-                items(sites) { host ->
-                    Card(
-                        modifier = Modifier
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 12.dp),
-                    ) {
-                        Row(
+                if (sites.isNotEmpty()) {
+                    item(key = "site_list") {
+                        Card(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 56.dp)
-                                .combinedClickable(
-                                    onClick = {
-                                        if (selecting) {
-                                            if (selected.contains(host)) selected.remove(host) else selected.add(host)
-                                        } else {
-                                            onOpenSite(host)
-                                        }
-                                    },
-                                    onLongClick = {
-                                        selecting = true
-                                        if (!selected.contains(host)) selected.add(host)
-                                    },
-                                )
-                                .padding(horizontal = 16.dp, vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                                .padding(horizontal = 12.dp)
+                                .padding(bottom = 12.dp),
                         ) {
-                            if (selecting) {
-                                Checkbox(
-                                    state = if (selected.contains(host)) ToggleableState.On else ToggleableState.Off,
-                                    onClick = null,
-                                )
-                                Spacer(Modifier.width(10.dp))
-                            }
-                            Text(
-                                text = host,
-                                style = MiuixTheme.textStyles.headline1,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                                color = MiuixTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (!selecting) {
-                                Icon(
-                                    imageVector = MiuixIcons.ChevronForward,
-                                    contentDescription = null,
-                                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                    modifier = Modifier.size(20.dp),
-                                )
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                sites.forEach { host ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 56.dp)
+                                            .combinedClickable(
+                                                onClick = {
+                                                    if (selecting) {
+                                                        if (selected.contains(host)) selected.remove(host) else selected.add(host)
+                                                    } else {
+                                                        onOpenSite(host)
+                                                    }
+                                                },
+                                                onLongClick = {
+                                                    selecting = true
+                                                    if (!selected.contains(host)) selected.add(host)
+                                                },
+                                            )
+                                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (selecting) {
+                                            Checkbox(
+                                                state = if (selected.contains(host)) ToggleableState.On else ToggleableState.Off,
+                                                onClick = null,
+                                            )
+                                            Spacer(Modifier.width(10.dp))
+                                        }
+                                        Text(
+                                            text = host,
+                                            style = MiuixTheme.textStyles.headline1,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                                            color = MiuixTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        if (!selecting) {
+                                            Icon(
+                                                imageVector = MiuixIcons.ChevronForward,
+                                                contentDescription = null,
+                                                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

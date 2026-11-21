@@ -1184,6 +1184,7 @@ private fun NewTabPageMiuix(
     onSwipeVisual: (direction: Int, offsetPx: Float, isDragging: Boolean) -> Unit = { _, _, _ -> },
     canSwipeBack: Boolean = false,
     canSwipeForward: Boolean = false,
+    swipeNavEnabled: Boolean = true,
     onOpenNewTabCustomization: () -> Unit = {},
     onRequestDownload: (PendingDownload) -> Unit = {},
     onOpenCrop: () -> Unit = {},
@@ -1845,6 +1846,7 @@ private fun NewTabPageMiuix(
 
     val isEditModeState = rememberUpdatedState(isEditMode || isFolderEditMode)
     val windowCountState = rememberUpdatedState(windowCount)
+    val searchFocusedState = rememberUpdatedState(searchFocused)
     val onSwipeWindowState = rememberUpdatedState(onSwipeWindow)
     val onSwipeNavState = rememberUpdatedState(onSwipeNav)
     val onSwipeVisualState = rememberUpdatedState(onSwipeVisual)
@@ -1862,7 +1864,8 @@ private fun NewTabPageMiuix(
                         Modifier.layerBackdrop(folderBlurBackdrop)
                     } else Modifier
                 )
-                .pointerInput(Unit) {
+                .pointerInput(swipeNavEnabled) {
+                    if (!swipeNavEnabled) return@pointerInput
                     val triggerPx = SWIPE_WINDOW_TRIGGER.toPx()
                     val slopPx = 20f
                     awaitPointerEventScope {
@@ -1874,7 +1877,11 @@ private fun NewTabPageMiuix(
                             val editModeNow = isEditModeState.value
                             val winCountNow = windowCountState.value
 
-                            if (editModeNow || draggingItemIdState.value != null) {
+                            // 搜索框（含快捷输入栏）获得焦点时，把横向手势交给内部组件，
+                            // 否则会吞掉快捷输入栏的横向滚动 / 光标拖动。
+                            if (editModeNow || draggingItemIdState.value != null ||
+                                searchFocusedState.value
+                            ) {
                                 while (true) {
                                     val ev = awaitPointerEvent(PointerEventPass.Initial)
                                     if (ev.changes.none { it.pressed }) break
@@ -4214,7 +4221,6 @@ private fun WeatherDetailSheet(
     val error = WeatherStateHolder.error
 
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var precise by remember {
         initWeatherPreciseFromPrefs(context)
         mutableStateOf(WeatherStateHolder.precise)
@@ -4223,7 +4229,6 @@ private fun WeatherDetailSheet(
     fun applyPrecise(enabled: Boolean) {
         setWeatherPrecise(context, enabled)
         precise = enabled
-        scope.launch { fetchWeather(context, forceRefresh = true) }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -5616,6 +5621,7 @@ internal fun NewTabPage(
     onSwipeVisual: (direction: Int, offsetPx: Float, isDragging: Boolean) -> Unit = { _, _, _ -> },
     canSwipeBack: Boolean = false,
     canSwipeForward: Boolean = false,
+    swipeNavEnabled: Boolean = true,
     onOpenNewTabCustomization: () -> Unit = {},
     onRequestDownload: (PendingDownload) -> Unit = {},
     onOpenCrop: () -> Unit = {},
@@ -5639,6 +5645,7 @@ internal fun NewTabPage(
             onSwipeVisual = onSwipeVisual,
             canSwipeBack = canSwipeBack,
             canSwipeForward = canSwipeForward,
+            swipeNavEnabled = swipeNavEnabled,
             onOpenNewTabCustomization = onOpenNewTabCustomization,
             onRequestDownload = onRequestDownload,
             onOpenCrop = onOpenCrop,
@@ -5920,6 +5927,31 @@ private fun NewTabPageMaterial(
     DisposableEffect(Unit) {
         onDispose {
             NewTabControlColorStore.color = null
+        }
+    }
+
+    // 质感界面：新标签页不再有 Miuix 版的系统栏图标逻辑，这里按 Material 背景明暗补齐，
+    // 否则深色模式下状态栏图标会一直是深色。
+    val materialThemeIsDark = remember(themeSurface) { themeSurface.luminance() < 0.5f }
+    val isLightSystemBars = remember(onWallpaper) { onWallpaper.luminance() < 0.5f }
+    LaunchedEffect(isTop, isLightSystemBars, materialThemeIsDark) {
+        val activity = context as? Activity ?: return@LaunchedEffect
+        val window = activity.window
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        // 新标签页在最上层时跟随壁纸/横幅明暗；被设置页盖住时恢复主题明暗
+        val lightIcons = if (isTop) isLightSystemBars else !materialThemeIsDark
+        controller.isAppearanceLightStatusBars = lightIcons
+        controller.isAppearanceLightNavigationBars = lightIcons
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                val activity = context as? Activity
+                val window = activity?.window ?: return@onDispose
+                val controller = WindowCompat.getInsetsController(window, window.decorView)
+                controller.isAppearanceLightStatusBars = !materialThemeIsDark
+                controller.isAppearanceLightNavigationBars = !materialThemeIsDark
+            } catch (_: Exception) {}
         }
     }
 
@@ -7588,7 +7620,6 @@ private fun M3WeatherDetailDialog(
     val error = WeatherStateHolder.error
 
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     var precise by remember {
         initWeatherPreciseFromPrefs(context)
@@ -7599,7 +7630,6 @@ private fun M3WeatherDetailDialog(
     fun applyPrecise(enabled: Boolean) {
         setWeatherPrecise(context, enabled)
         precise = enabled
-        scope.launch { fetchWeather(context, forceRefresh = true) }
     }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(

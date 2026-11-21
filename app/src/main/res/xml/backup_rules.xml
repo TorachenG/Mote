@@ -6,8 +6,6 @@
    See https://developer.android.com/about/versions/12/backup-restore
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Keystore 密钥不会随备份恢复，密文备份到新设备也无法解密，直接排除。 -->
+    <exclude domain="sharedpref" path="mote_secrets.xml" />
 </full-backup-content>

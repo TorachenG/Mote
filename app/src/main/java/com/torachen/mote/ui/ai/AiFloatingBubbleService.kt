@@ -26,6 +26,7 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -34,6 +35,7 @@ import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.torachen.mote.ui.MainActivity
@@ -65,7 +67,12 @@ class AiFloatingBubbleService : Service() {
         @Volatile
         private var agentBusy = false
 
+        @Volatile
+        private var agentStatusText = "正在操作手机"
+
         fun isRunning(): Boolean = running && instance != null
+
+        fun isAgentBusy(): Boolean = agentBusy
 
         /** 悬浮面板打开时隐藏悬浮球，关闭后恢复。 */
         fun setBubbleVisible(visible: Boolean) {
@@ -78,6 +85,19 @@ class AiFloatingBubbleService : Service() {
             instance?.applyAgentBusy(busy)
         }
 
+        /** 更新长条悬浮球旁边“现在在干什么”的文案。 */
+        fun setAgentStatus(status: String) {
+            agentStatusText = status.ifBlank { "正在操作手机" }
+            instance?.updateAgentStatus(agentStatusText)
+        }
+
+        /** 在 Agent 点击的屏幕坐标处播放光圈特效。 */
+        fun showTouchEffect(x: Float, y: Float) {
+            val service = instance ?: return
+            service.bubbleView?.post { service.playTouchEffect(x, y) }
+                ?: service.playTouchEffect(x, y)
+        }
+
         /** 切换模型/服务商后刷新球内图标。 */
         fun refreshIcon() {
             instance?.updateBubbleIcon()
@@ -88,6 +108,11 @@ class AiFloatingBubbleService : Service() {
     private var bubbleView: View? = null
     private var bubbleIconView: ImageView? = null
     private var bubbleDotsView: View? = null
+    private var bubbleStatusView: TextView? = null
+    private var bubbleParams: WindowManager.LayoutParams? = null
+    private var bubbleMorphAnimator: ValueAnimator? = null
+    private var bubbleMorphGeneration = 0
+    private var touchEffectView: View? = null
     private var closeView: View? = null
     private var closeParams: WindowManager.LayoutParams? = null
     private var closeShown = false
@@ -174,6 +199,16 @@ class AiFloatingBubbleService : Service() {
         val dots = TypingDotsView(this).apply {
             visibility = View.GONE
         }
+        val status = TextView(this).apply {
+            visibility = View.GONE
+            alpha = 0f
+            textSize = 13f
+            setTextColor(Color.parseColor("#1C1C1E"))
+            gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(4), 0, dp(12), 0)
+        }
         container.addView(
             icon,
             FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER),
@@ -181,6 +216,14 @@ class AiFloatingBubbleService : Service() {
         container.addView(
             dots,
             FrameLayout.LayoutParams(dp(34), dp(22), Gravity.CENTER),
+        )
+        container.addView(
+            status,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                Gravity.START or Gravity.CENTER_VERTICAL,
+            ).apply { leftMargin = dp(44) },
         )
         val layoutParams = WindowManager.LayoutParams(
             size,
@@ -222,14 +265,14 @@ class AiFloatingBubbleService : Service() {
                     val dy = event.rawY - downRawY
                     if (abs(dx) > dp(4) || abs(dy) > dp(4)) moved = true
                     val metrics = resources.displayMetrics
-                    val maxX = (metrics.widthPixels - size).coerceAtLeast(0)
-                    val maxY = (metrics.heightPixels - size).coerceAtLeast(0)
+                    val maxX = (metrics.widthPixels - layoutParams.width).coerceAtLeast(0)
+                    val maxY = (metrics.heightPixels - layoutParams.height).coerceAtLeast(0)
                     layoutParams.x = (startX + dx.toInt()).coerceIn(0, maxX)
                     layoutParams.y = (startY + dy.toInt()).coerceIn(0, maxY)
                     windowManager.updateViewLayout(view, layoutParams)
                     if (moved) {
                         showCloseTarget(true)
-                        overClose = isInsideClose(layoutParams, size)
+                        overClose = isInsideClose(layoutParams, layoutParams.width)
                         updateCloseTarget(overClose)
                         view.alpha = if (overClose) 0.72f else 1f
                     }
@@ -243,7 +286,7 @@ class AiFloatingBubbleService : Service() {
                         if (overClose) {
                             stopSelf()
                         } else if (moved) {
-                            snapToEdge(view, layoutParams, size)
+                            snapToEdge(view, layoutParams, layoutParams.width)
                         } else {
                             openFloatingPanel()
                         }
@@ -290,21 +333,154 @@ class AiFloatingBubbleService : Service() {
         bubbleView = container
         bubbleIconView = icon
         bubbleDotsView = dots
+        bubbleStatusView = status
+        bubbleParams = layoutParams
         closeView = close
         this.closeParams = closeParams
         updateBubbleIcon()
     }
 
     private fun applyAgentBusy(busy: Boolean) {
-        bubbleIconView?.visibility = if (busy) View.GONE else View.VISIBLE
-        bubbleDotsView?.visibility = if (busy) View.VISIBLE else View.GONE
-        if (busy) showAgentGlow() else hideAgentGlow()
-        if (!busy) updateBubbleIcon()
+        if (busy) {
+            bubbleIconView?.visibility = View.GONE
+            bubbleDotsView?.visibility = View.VISIBLE
+            bubbleStatusView?.visibility = View.VISIBLE
+            bubbleStatusView?.text = agentStatusText
+            animateBubble(bar = true)
+            showAgentGlow()
+        } else {
+            animateBubble(bar = false) {
+                bubbleDotsView?.visibility = View.GONE
+                bubbleStatusView?.visibility = View.GONE
+                bubbleIconView?.visibility = View.VISIBLE
+                updateBubbleIcon()
+            }
+            hideAgentGlow()
+        }
+    }
+
+    private fun updateAgentStatus(text: String) {
+        bubbleStatusView?.text = text
+        if (agentBusy) animateBubble(bar = true)
+    }
+
+    /** 悬浮球与长条之间平滑变形；长条左侧保留原来的三点加载。 */
+    private fun animateBubble(bar: Boolean, onEnd: (() -> Unit)? = null) {
+        val view = bubbleView ?: return
+        val params = bubbleParams ?: return
+        val generation = ++bubbleMorphGeneration
+        bubbleMorphAnimator?.cancel()
+
+        val metrics = resources.displayMetrics
+        val maxWidth = (metrics.widthPixels - dp(24)).coerceAtLeast(dp(120))
+        val targetWidth = if (bar) {
+            val textWidth = bubbleStatusView?.paint
+                ?.measureText(agentStatusText)
+                ?.toInt() ?: 0
+            (dp(48) + textWidth + dp(20)).coerceIn(dp(150), minOf(dp(260), maxWidth))
+        } else {
+            dp(50)
+        }
+        val targetHeight = if (bar) dp(46) else dp(50)
+        val targetX = params.x.coerceAtMost(
+            (metrics.widthPixels - targetWidth - dp(8)).coerceAtLeast(dp(8)),
+        )
+
+        val dotsParams = if (bar) {
+            FrameLayout.LayoutParams(
+                dp(34),
+                dp(22),
+                Gravity.START or Gravity.CENTER_VERTICAL,
+            ).apply { leftMargin = dp(8) }
+        } else {
+            FrameLayout.LayoutParams(dp(34), dp(22), Gravity.CENTER)
+        }
+        bubbleDotsView?.layoutParams = dotsParams
+        bubbleStatusView?.let { status ->
+            if (bar) {
+                status.visibility = View.VISIBLE
+                status.alpha = 0f
+                status.animate().alpha(1f).setDuration(180L).start()
+            } else {
+                status.animate().alpha(0f).setDuration(140L)
+                    .withEndAction {
+                        if (!agentBusy) status.visibility = View.GONE
+                    }
+                    .start()
+            }
+        }
+
+        val startWidth = params.width
+        val startHeight = params.height
+        val startX = params.x
+        bubbleMorphAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 260L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedFraction
+                params.width = (startWidth + (targetWidth - startWidth) * fraction).toInt()
+                params.height = (startHeight + (targetHeight - startHeight) * fraction).toInt()
+                params.x = (startX + (targetX - startX) * fraction).toInt()
+                runCatching { windowManager.updateViewLayout(view, params) }
+                (view.background as? BubbleShadowDrawable)?.invalidateSelf()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (generation != bubbleMorphGeneration) return
+                    bubbleMorphAnimator = null
+                    if (!bar) onEnd?.invoke()
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        runCatching {
+                            view.systemGestureExclusionRects = listOf(
+                                Rect(0, 0, params.width, params.height),
+                            )
+                        }
+                    }
+                }
+            })
+            start()
+        }
+    }
+
+    private fun playTouchEffect(x: Float, y: Float) {
+        touchEffectView?.let { existing ->
+            runCatching { windowManager.removeView(existing) }
+        }
+        touchEffectView = null
+        val sizePx = dp(220)
+        val effect = AgentTouchEffectView(this) { finished ->
+            if (touchEffectView === finished) {
+                touchEffectView = null
+                runCatching { windowManager.removeView(finished) }
+            }
+        }
+        val params = WindowManager.LayoutParams(
+            sizePx,
+            sizePx,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            },
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            this.x = (x - sizePx / 2f).toInt()
+            this.y = (y - sizePx / 2f).toInt()
+        }
+        runCatching {
+            windowManager.addView(effect, params)
+            touchEffectView = effect
+        }
     }
 
     private fun showAgentGlow() {
         if (glowView != null) return
-        val glow = AgentGlowView(this)
+        val glow = AgentGlowView(this).apply { alpha = 0f }
         val metrics = resources.displayMetrics
         val params = WindowManager.LayoutParams(
             metrics.widthPixels,
@@ -333,14 +509,17 @@ class AiFloatingBubbleService : Service() {
         runCatching {
             windowManager.addView(glow, params)
             glowView = glow
+            glow.animate().alpha(1f).setDuration(220L).start()
         }
     }
 
     private fun hideAgentGlow() {
-        glowView?.let { view ->
-            runCatching { windowManager.removeView(view) }
-        }
+        val view = glowView ?: return
         glowView = null
+        view.animate().cancel()
+        view.animate().alpha(0f).setDuration(180L)
+            .withEndAction { runCatching { windowManager.removeView(view) } }
+            .start()
     }
 
     private fun showCloseTarget(show: Boolean) {
@@ -460,7 +639,13 @@ class AiFloatingBubbleService : Service() {
         running = false
         snapAnimator?.cancel()
         snapAnimator = null
+        bubbleMorphAnimator?.cancel()
+        bubbleMorphAnimator = null
         hideAgentGlow()
+        touchEffectView?.let { view ->
+            runCatching { windowManager.removeView(view) }
+        }
+        touchEffectView = null
         closeView?.let { view ->
             runCatching { windowManager.removeView(view) }
         }
@@ -472,6 +657,8 @@ class AiFloatingBubbleService : Service() {
         bubbleView = null
         bubbleIconView = null
         bubbleDotsView = null
+        bubbleStatusView = null
+        bubbleParams = null
         super.onDestroy()
     }
 
@@ -615,6 +802,96 @@ private class AgentGlowView(context: android.content.Context) : View(context) {
     }
 }
 
+/** Agent 点击坐标处的光圈：渐变出现，先收缩再扩散，最后淡出。 */
+private class AgentTouchEffectView(
+    context: android.content.Context,
+    private val onFinished: (View) -> Unit,
+) : View(context) {
+    private val density = resources.displayMetrics.density
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 3.2f * density
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val ringColors = intArrayOf(
+        Color.parseColor("#3482FF"),
+        Color.parseColor("#9B5CFF"),
+        Color.parseColor("#00D4FF"),
+        Color.parseColor("#3482FF"),
+    )
+    private var phase = 0f
+    private val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 640L
+        interpolator = DecelerateInterpolator()
+        addUpdateListener {
+            phase = it.animatedFraction
+            invalidate()
+        }
+        addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                onFinished(this@AgentTouchEffectView)
+            }
+        })
+    }
+
+    init {
+        animator.start()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (width <= 0 || height <= 0) return
+        val t = phase
+        // 出现：1.35 → 0.72 收缩；随后 0.72 → 2.0 扩散消失
+        val scale = if (t < 0.34f) {
+            1.35f - 0.63f * (t / 0.34f)
+        } else {
+            0.72f + 1.28f * ((t - 0.34f) / 0.66f)
+        }
+        val alpha = when {
+            t < 0.16f -> t / 0.16f
+            t > 0.68f -> ((1f - t) / 0.32f).coerceIn(0f, 1f)
+            else -> 1f
+        }
+        val cx = width / 2f
+        val cy = height / 2f
+        val radius = minOf(width, height) / 2f * scale
+        if (radius <= 0f) return
+
+        glowPaint.shader = RadialGradient(
+            cx,
+            cy,
+            radius * 1.25f,
+            intArrayOf(
+                (0x333482FF).toInt(),
+                (0x189B5CFF).toInt(),
+                (0x00000000),
+            ),
+            floatArrayOf(0.0f, 0.55f, 1f),
+            Shader.TileMode.CLAMP,
+        )
+        glowPaint.alpha = (alpha * 160).toInt()
+        canvas.drawCircle(cx, cy, radius * 1.25f, glowPaint)
+
+        ringPaint.shader = SweepGradient(
+            cx,
+            cy,
+            ringColors,
+            null,
+        )
+        ringPaint.alpha = (alpha * 255).toInt()
+        canvas.drawCircle(cx, cy, radius, ringPaint)
+    }
+
+    override fun onDetachedFromWindow() {
+        animator.cancel()
+        super.onDetachedFromWindow()
+    }
+}
+
 /** 白色圆形 + 无方向的柔和环境阴影（类似 iOS 的均匀弥散阴影）。 */
 private class BubbleShadowDrawable(private val density: Float) : Drawable() {
 
@@ -624,9 +901,27 @@ private class BubbleShadowDrawable(private val density: Float) : Drawable() {
     }
 
     override fun draw(canvas: Canvas) {
+        val width = bounds.width().toFloat()
+        val height = bounds.height().toFloat()
+        if (width > height * 1.25f) {
+            // Agent 控制时的长条：白色胶囊 + 柔和底层阴影
+            val radius = height / 2f
+            val shadow = RectF(
+                2f * density,
+                4f * density,
+                width - 2f * density,
+                height + 2f * density,
+            )
+            shadowPaint.shader = null
+            shadowPaint.color = 0x22000000
+            canvas.drawRoundRect(shadow, radius, radius, shadowPaint)
+            whitePaint.color = Color.WHITE
+            canvas.drawRoundRect(RectF(0f, 0f, width, height), radius, radius, whitePaint)
+            return
+        }
         val cx = bounds.exactCenterX()
         val cy = bounds.exactCenterY()
-        val shadowRadius = minOf(bounds.width(), bounds.height()) / 2f
+        val shadowRadius = minOf(width, height) / 2f
         val circleRadius = (shadowRadius - 6f * density).coerceAtLeast(1f)
 
         shadowPaint.shader = RadialGradient(

@@ -45,6 +45,29 @@ class AiMarkdownParserTest {
     }
 
     @Test
+    fun `citation marker renders as source number`() {
+        val blocks = parseAiMarkdown(
+            "这是结论[citation:2]。",
+            palette,
+            16.sp,
+        )
+        val paragraph = blocks.single() as AiMdBlock.Paragraph
+        assertTrue(paragraph.text.text.contains("[2]"))
+        assertFalse(paragraph.text.text.contains("[citation:"))
+    }
+
+    @Test
+    fun `bare url in paragraph does not recurse`() {
+        val blocks = parseAiMarkdown(
+            "打开 https://toracheng.github.io/Mote 看看",
+            palette,
+            16.sp,
+        )
+        val paragraph = blocks.single() as AiMdBlock.Paragraph
+        assertTrue(paragraph.text.text.contains("https://toracheng.github.io/Mote"))
+    }
+
+    @Test
     fun `table does not swallow following paragraph`() {
         val blocks = parseAiMarkdown(
             "| a | b |\n| --- | --- |\n| 1 | 2 |\n\n后面的话",

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
+import android.net.Uri
 import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.provider.Settings as AndroidSettings
@@ -54,10 +55,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -87,6 +88,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -125,6 +127,10 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import com.torachen.mote.ui.filemanager.LocalFileViewerRequest
 import com.torachen.mote.ui.filemanager.LocalFileViewerState
+import com.torachen.mote.ui.ai.mcp.AiToolApprovalDialog
+import com.torachen.mote.ui.ai.preset.AiPresetChip
+import com.torachen.mote.ui.ai.preset.AiPresetPickerDialog
+import com.torachen.mote.ui.ai.preset.AiPresetStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
@@ -155,6 +161,9 @@ import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.icon.extended.AppRecording
+import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Copy
 import top.yukonga.miuix.kmp.icon.extended.Delete
@@ -180,6 +189,7 @@ import com.torachen.mote.ui.KEY_PROGRESSIVE_TITLE_BLUR
 import com.torachen.mote.ui.SettingsBackButton
 import com.torachen.mote.ui.buildBackCardMaterialModifier
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -345,12 +355,20 @@ private fun AiChatContent(
         mutableStateOf(AiDraftStore.get(context, AiChatStore.activeConversationId))
     }
     val attachments = remember { mutableStateListOf<AiAttachment>() }
+    val draftAttachments = remember { mutableStateMapOf<String, List<AiAttachment>>() }
+    var draftAttachmentConversation by remember {
+        mutableStateOf(AiChatStore.activeConversationId)
+    }
     var readingFile by remember { mutableStateOf(false) }
     var pendingSuggestionPrompt by remember { mutableStateOf<String?>(null) }
     var inputBarHeightPx by remember { mutableIntStateOf(0) }
     var followBottom by remember { mutableStateOf(true) }
     var programmaticScroll by remember { mutableStateOf(false) }
     var showSidebar by remember { mutableStateOf(false) }
+    var showPresetPicker by remember { mutableStateOf(false) }
+    var sourceSheetSources by remember { mutableStateOf<List<AiSource>>(emptyList()) }
+    var sourceSheetIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingBranchScroll by remember { mutableStateOf<Int?>(null) }
     var editingMessage by remember { mutableStateOf<AiUiMessage?>(null) }
     var editText by remember { mutableStateOf("") }
     BackHandler(enabled = showSidebar) { showSidebar = false }
@@ -367,8 +385,17 @@ private fun AiChatContent(
 
     // 每个对话的输入草稿：切换对话时恢复；输入内容变化时写回当前对话。
     LaunchedEffect(AiChatStore.activeConversationId) {
-        input = AiDraftStore.get(context, AiChatStore.activeConversationId)
-        attachments.clear()
+        val current = AiChatStore.activeConversationId
+        input = AiDraftStore.get(context, current)
+        val previous = draftAttachmentConversation
+        if (previous != current) {
+            draftAttachments[previous ?: AiDraftStore.NEW_CONVERSATION_KEY] = attachments.toList()
+            attachments.clear()
+            attachments.addAll(
+                draftAttachments[current ?: AiDraftStore.NEW_CONVERSATION_KEY].orEmpty(),
+            )
+            draftAttachmentConversation = current
+        }
     }
 
     fun setInput(value: String) {
@@ -376,39 +403,67 @@ private fun AiChatContent(
         AiDraftStore.set(context, AiChatStore.activeConversationId, value)
     }
 
-    val filePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->        if (uri == null) {
-            pendingSuggestionPrompt = null
-            return@rememberLauncherForActivityResult
-        }
-        if (attachments.size >= 3) {
+    var failedFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
+    fun attachFiles(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val slots = (3 - attachments.size).coerceAtLeast(0)
+        if (slots <= 0) {
             Toast.makeText(context, "最多同时附加 3 个文件", Toast.LENGTH_SHORT).show()
             pendingSuggestionPrompt = null
-            return@rememberLauncherForActivityResult
+            return
+        }
+        val selected = uris.take(slots)
+        if (uris.size > slots) {
+            Toast.makeText(context, "最多同时附加 3 个文件，已忽略多余文件", Toast.LENGTH_SHORT)
+                .show()
         }
         readingFile = true
         scope.launch {
-            try {
-                val attachment = AiFileReader.read(context, uri)
-                attachments.add(attachment)
-                pendingSuggestionPrompt?.let {
-                    setInput(it)
-                    pendingSuggestionPrompt = null
+            val failures = mutableListOf<Uri>()
+            selected.forEach { uri ->
+                try {
+                    val attachment = AiFileReader.read(context, uri)
+                    attachments.add(attachment)
+                    pendingSuggestionPrompt?.let {
+                        setInput(it)
+                        pendingSuggestionPrompt = null
+                    }
+                    attachment.note?.let { note ->
+                        Toast.makeText(context, "${attachment.name}：$note", Toast.LENGTH_SHORT)
+                            .show()
+                    }
+                } catch (error: Exception) {
+                    failures.add(uri)
+                    if (failures.size == 1) {
+                        Toast.makeText(
+                            context,
+                            error.message ?: "读取文件失败，可点击失败提示重试",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                 }
-                attachment.note?.let { note ->
-                    Toast.makeText(context, "${attachment.name}：$note", Toast.LENGTH_SHORT).show()
-                }
-            } catch (error: Exception) {
-                Toast.makeText(
-                    context,
-                    error.message ?: "读取文件失败",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            } finally {
-                readingFile = false
             }
+            failedFiles = (failedFiles + failures).distinct().take(9)
+            readingFile = false
         }
+    }
+
+    fun retryFailedFiles() {
+        val retry = failedFiles
+        if (retry.isEmpty()) return
+        failedFiles = emptyList()
+        attachFiles(retry)
+    }
+
+    val filePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isEmpty()) {
+            pendingSuggestionPrompt = null
+            return@rememberLauncherForActivityResult
+        }
+        attachFiles(uris)
     }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -424,6 +479,47 @@ private fun AiChatContent(
                 Toast.LENGTH_SHORT,
             ).show()
         }
+    }
+
+    fun startVoiceInput() {
+        AiVoiceInput.start(
+            context = context,
+            languageTag = Locale.getDefault().toLanguageTag(),
+            onResult = { text ->
+                if (text.isNotBlank()) {
+                    setInput(if (input.isBlank()) text else input + " " + text)
+                }
+            },
+            onError = { message ->
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            },
+        )
+    }
+
+    val voicePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) startVoiceInput() else {
+            Toast.makeText(context, "需要录音权限才能语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun toggleVoiceInput() {
+        if (AiVoiceInput.listening) {
+            AiVoiceInput.stop()
+        } else if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            startVoiceInput()
+        } else {
+            voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { AiVoiceInput.stop() }
     }
 
     LaunchedEffect(listScrollState) {
@@ -458,7 +554,24 @@ private fun AiChatContent(
         }
     }
 
-    fun createNewConversation() {
+    LaunchedEffect(pendingBranchScroll) {
+        val target = pendingBranchScroll ?: return@LaunchedEffect
+        pendingBranchScroll = null
+        followBottom = false
+        withFrameNanos { }
+        delay(60)
+        val max = listScrollState.maxValue
+        if (max != Int.MAX_VALUE) {
+            listScrollState.scrollTo(target.coerceIn(0, max.coerceAtLeast(0)))
+        }
+    }
+
+    fun createNewConversation(presetId: String? = null) {
+        // 有多个预设时，先让用户选择；选择后才真正创建会话。
+        if (presetId == null && AiPresetStore.all(context).size > 1) {
+            showPresetPicker = true
+            return
+        }
         // 输入框有内容也可以新建：当前内容先存到当前对话的草稿里。
         val previousConversation = AiChatStore.activeConversationId
         AiDraftStore.set(
@@ -466,18 +579,21 @@ private fun AiChatContent(
             previousConversation ?: AiDraftStore.NEW_CONVERSATION_KEY,
             input,
         )
-        AiChatStore.newConversation()
+        AiChatStore.newConversation(presetId)
         // 原本还没有对话时，把这段草稿转到刚创建的对话上，避免输入内容“消失”。
         if (previousConversation == null) {
             AiChatStore.activeConversationId?.let { newConversationId ->
                 AiDraftStore.set(context, newConversationId, input)
             }
         }
+        draftAttachments[previousConversation ?: AiDraftStore.NEW_CONVERSATION_KEY] =
+            attachments.toList()
         attachments.clear()
         followBottom = true
     }
 
     fun submit() {
+        AiVoiceInput.stop()
         val text = input.trim()
         if (!configured) {
             Toast.makeText(context, "请先配置 AI 服务", Toast.LENGTH_SHORT).show()
@@ -496,6 +612,8 @@ private fun AiChatContent(
         }
         input = ""
         attachments.clear()
+        draftAttachments[draftKey ?: AiDraftStore.NEW_CONVERSATION_KEY] = emptyList()
+        failedFiles = emptyList()
         focusManager.clearFocus()
         followBottom = true
     }
@@ -577,6 +695,18 @@ private fun AiChatContent(
                                 AiMessageBubble(
                                     message = message,
                                     onRefresh = { AiChatStore.regenerate(message.id) },
+                                    onContinue = { AiChatStore.continueReply(message.id) },
+                                    onSwitchVersion = { id ->
+                                        pendingBranchScroll = listScrollState.value
+                                        followBottom = false
+                                        AiChatStore.switchVersion(id)
+                                    },
+                                    versionInfo = AiChatStore.versionInfo(message.id),
+                                    onShowSources = { sources, index ->
+                                        sourceSheetSources = sources
+                                        sourceSheetIndex = index
+                                    },
+                                    onOpenSettings = onOpenSettings,
                                     onEdit = {
                                         editingMessage = message
                                         editText = message.content
@@ -715,9 +845,16 @@ private fun AiChatContent(
                 },
                 attachments = attachments,
                 readingFile = readingFile,
+                failedFileCount = failedFiles.size,
+                onRetryFailedFiles = { retryFailedFiles() },
                 streaming = AiChatStore.streaming,
                 configured = configured,
+                voiceListening = AiVoiceInput.listening,
+                voiceLevel = AiVoiceInput.level,
+                voicePartial = AiVoiceInput.partialText,
+                onVoice = { toggleVoiceInput() },
                 canSend = configured &&
+                        !readingFile &&
                         (input.isNotBlank() || attachments.isNotEmpty()),
                 onAttach = { filePicker.launch(arrayOf("*/*")) },
                 onRemoveAttachment = { attachment -> attachments.remove(attachment) },
@@ -764,6 +901,15 @@ private fun AiChatContent(
             }
         }
         AiFileEditConfirmDialog()
+        AiToolApprovalDialog()
+        AiPresetPickerDialog(
+            show = showPresetPicker,
+            onDismiss = { showPresetPicker = false },
+            onSelect = { id ->
+                showPresetPicker = false
+                createNewConversation(id)
+            },
+        )
         val editing = editingMessage
         if (editing != null) {
             WindowDialog(
@@ -812,6 +958,30 @@ private fun AiChatContent(
                             ),
                         ) { Text("重新发送") }
                     }
+                }
+            }
+        }
+        WindowDialog(
+            show = sourceSheetSources.isNotEmpty(),
+            title = "来源",
+            onDismissRequest = {
+                sourceSheetSources = emptyList()
+                sourceSheetIndex = null
+            },
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items(sourceSheetSources, key = { it.url }) { source ->
+                    AiSourceCards(
+                        sources = listOf(source),
+                        max = 1,
+                        highlightIndex = sourceSheetIndex,
+                        showMore = false,
+                    )
                 }
             }
         }
@@ -895,6 +1065,25 @@ private fun AiTopBarIcon(
     }
 }
 
+private fun aiConversationGroup(timestamp: Long): String {
+    val now = Calendar.getInstance()
+    val then = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val sameDay = now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR)
+    if (sameDay) return "今天"
+    now.add(Calendar.DAY_OF_YEAR, -1)
+    val yesterday = now.get(Calendar.YEAR) == then.get(Calendar.YEAR) &&
+            now.get(Calendar.DAY_OF_YEAR) == then.get(Calendar.DAY_OF_YEAR)
+    if (yesterday) return "昨天"
+    val nowTime = System.currentTimeMillis()
+    val days = (nowTime - timestamp) / (24L * 60 * 60 * 1000)
+    return when {
+        days < 7 -> "最近 7 天"
+        days < 30 -> "最近 30 天"
+        else -> SimpleDateFormat("yyyy年M月", Locale.getDefault()).format(Date(timestamp))
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AiConversationSidebar(
@@ -918,6 +1107,7 @@ private fun AiConversationSidebar(
     } else {
         Color.White
     }
+    val groups = conversations.groupBy { aiConversationGroup(it.updatedAt) }
 
     Box(
         modifier = Modifier
@@ -992,7 +1182,16 @@ private fun AiConversationSidebar(
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                items(conversations, key = { it.id }) { meta ->
+                groups.forEach { (label, groupItems) ->
+                    item(key = "group-$label") {
+                        Text(
+                            text = label,
+                            fontSize = 11.sp,
+                            color = secondary,
+                            modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 2.dp),
+                        )
+                    }
+                    items(groupItems, key = { it.id }) { meta ->
                     val isActive = meta.id == activeId
                     val isChecked = meta.id in selectedIds
                     Row(
@@ -1056,6 +1255,7 @@ private fun AiConversationSidebar(
                             )
                         }
                     }
+                }
                 }
                 if (conversations.isEmpty()) {
                     item {
@@ -1207,6 +1407,11 @@ internal fun AiMessageBubble(
     aiBubbleColor: Color? = null,
     onRefresh: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
+    onSwitchVersion: ((Long) -> Unit)? = null,
+    versionInfo: AiChatStore.AiVersionInfo? = null,
+    onContinue: (() -> Unit)? = null,
+    onShowSources: ((List<AiSource>, Int?) -> Unit)? = null,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -1240,6 +1445,21 @@ internal fun AiMessageBubble(
         RoundedCornerShape(18.dp, 18.dp, 6.dp, 18.dp)
     } else {
         RoundedCornerShape(18.dp, 18.dp, 18.dp, 6.dp)
+    }
+
+    // 流式输出时按 80ms 合并渲染，避免每个 token 都重新解析整篇 Markdown。
+    val renderedContent = remember(message.id) { mutableStateOf(message.content) }
+    LaunchedEffect(message.id, message.streaming) {
+        while (message.streaming) {
+            delay(80)
+            if (renderedContent.value != message.content) {
+                renderedContent.value = message.content
+            }
+        }
+        renderedContent.value = message.content
+    }
+    LaunchedEffect(message.content, message.streaming) {
+        if (!message.streaming) renderedContent.value = message.content
     }
 
     fun copyMessage() {
@@ -1312,24 +1532,40 @@ internal fun AiMessageBubble(
                             message.reasoning.isNotBlank() ||
                             message.steps.size > 1
                     if (shouldShowThinking) {
-                        AiThinkingSection(message = message)
+                        AiThinkingSection(
+                            message = message,
+                            onShowSources = onShowSources,
+                        )
                     }
                     if (message.content.isNotBlank()) {
                         Spacer(Modifier.height(8.dp))
                     }
                 }
 
-                if (message.content.isNotBlank()) {
+                if (renderedContent.value.isNotBlank()) {
                     AiMarkdown(
-                        source = message.content,
+                        source = renderedContent.value,
                         palette = palette,
                         baseStyle = MiuixTheme.textStyles.body1.copy(color = contentColor),
                         baseFontSize = MiuixTheme.textStyles.body1.fontSize,
+                        onCitationClick = { index ->
+                            onShowSources?.invoke(message.sources, index)
+                        },
                     )
                 } else if (!isUser && message.streaming && message.reasoning.isBlank()) {
                     // 与思考框拉开和气泡底部一致的间距
                     Spacer(Modifier.height(10.dp))
                     AiTypingDots(color = secondaryColor)
+                }
+
+                if (!isUser && message.sources.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    AiSourceCards(message.sources, max = 3, showMore = false)
+                    Spacer(Modifier.height(6.dp))
+                    AiSourceSummary(
+                        sources = message.sources,
+                        onClick = { onShowSources?.invoke(message.sources, null) },
+                    )
                 }
 
                 if (message.error != null) {
@@ -1339,6 +1575,13 @@ internal fun AiMessageBubble(
                         fontSize = 13.sp,
                         color = if (isUser) Color.White else MiuixTheme.colorScheme.error,
                         lineHeight = 19.sp,
+                    )
+                }
+                if (!isUser && message.errorAction != null) {
+                    AiErrorActionRow(
+                        action = message.errorAction!!,
+                        onOpenSettings = onOpenSettings,
+                        onRetry = onRefresh,
                     )
                 }
                     }
@@ -1352,6 +1595,71 @@ internal fun AiMessageBubble(
                 onShare = { shareMessage() },
                 onRefresh = onRefresh,
                 onEdit = onEdit,
+                onContinue = onContinue,
+                onReadAloud = if (!isUser && message.content.isNotBlank()) {
+                    { AiReadAloud.toggle(context, message.content) }
+                } else {
+                    null
+                },
+            )
+            if (versionInfo != null && onSwitchVersion != null) {
+                AiBranchSwitcher(
+                    info = versionInfo,
+                    onSelect = onSwitchVersion,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiBranchSwitcher(
+    info: AiChatStore.AiVersionInfo,
+    onSelect: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(enabled = info.index > 0) {
+                    onSelect(info.ids[info.index - 1])
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = MiuixIcons.ChevronBackward,
+                contentDescription = "上一版本",
+                tint = color.copy(alpha = if (info.index > 0) 1f else 0.3f),
+                modifier = Modifier.size(14.dp),
+            )
+        }
+        Text(
+            text = "${info.index + 1} / ${info.ids.size}",
+            fontSize = 11.sp,
+            color = color,
+        )
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(enabled = info.index < info.ids.lastIndex) {
+                    onSelect(info.ids[info.index + 1])
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = MiuixIcons.ChevronForward,
+                contentDescription = "下一版本",
+                tint = color.copy(alpha = if (info.index < info.ids.lastIndex) 1f else 0.3f),
+                modifier = Modifier.size(14.dp),
             )
         }
     }
@@ -1364,6 +1672,8 @@ private fun AiMessageActions(
     onShare: () -> Unit,
     onRefresh: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
+    onContinue: (() -> Unit)? = null,
+    onReadAloud: (() -> Unit)? = null,
 ) {
     val color = MiuixTheme.colorScheme.onSurfaceVariantSummary
     val time = remember(message.createdAt) {
@@ -1395,6 +1705,39 @@ private fun AiMessageActions(
                     modifier = Modifier.size(14.dp),
                 )
             }
+        }
+        if (!message.isUser && onReadAloud != null) {
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clickable(onClick = onReadAloud),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (AiReadAloud.speaking || AiReadAloud.loading) {
+                    AiReadingBars(
+                        playing = AiReadAloud.speaking,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
+                } else {
+                    Icon(
+                        imageVector = MiuixIcons.AppRecording,
+                        contentDescription = "朗读",
+                        tint = color,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+        if (!message.isUser && message.continuable && onContinue != null) {
+            Text(
+                text = "继续",
+                fontSize = 11.sp,
+                color = MiuixTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(onClick = onContinue)
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
         }
         if (message.isUser && onEdit != null) {
             Box(
@@ -1548,7 +1891,264 @@ private fun AiAttachmentBubbleChip(
 // ============================================================
 
 @Composable
-private fun AiThinkingSection(message: AiUiMessage) {
+private fun AiSiteIcon(
+    source: AiSource,
+    size: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val host = remember(source.url) {
+        runCatching { java.net.URI(source.url).host.orEmpty() }.getOrDefault("")
+    }
+    val bitmap by produceState<android.graphics.Bitmap?>(null, host) {
+        value = if (host.isBlank()) null else AiIconLoader.load("https://$host/favicon.ico")
+    }
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(androidx.compose.foundation.shape.CircleShape)
+            .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.14f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        val icon = bitmap
+        if (icon != null) {
+            Image(
+                bitmap = icon.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                text = source.siteName.take(1).ifBlank { "链" },
+                fontSize = (size.value * 0.55f).sp,
+                color = MiuixTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiSourceCards(
+    sources: List<AiSource>,
+    max: Int = 6,
+    highlightIndex: Int? = null,
+    showMore: Boolean = true,
+) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        sources.take(max).forEach { source ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        if (source.index == highlightIndex) {
+                            MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        } else {
+                            MiuixTheme.colorScheme.secondaryContainer
+                        },
+                    )
+                    .clickable {
+                        if (!AiAppLauncher.openUrl(context, source.url)) {
+                            Toast.makeText(context, "无法打开来源", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(
+                    text = "${source.index}",
+                    fontSize = 11.sp,
+                    color = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(MiuixTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = source.title,
+                        fontSize = 13.sp,
+                        color = MiuixTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (source.siteName.isNotBlank() || source.snippet.isNotBlank()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 2.dp),
+                        ) {
+                            AiSiteIcon(source = source, size = 12.dp)
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = listOf(
+                                    source.siteName,
+                                    source.publishedAt.orEmpty(),
+                                    source.snippet.take(80),
+                                )
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · "),
+                                fontSize = 11.sp,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (showMore && sources.size > max) {
+            Text(
+                text = "还有 ${sources.size - max} 个来源",
+                fontSize = 11.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiVoiceWave(level: Float, partial: String) {
+    val animatedLevel by animateFloatAsState(
+        targetValue = level.coerceIn(0f, 1f),
+        animationSpec = tween(90),
+        label = "aiVoiceLevel",
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val factors = listOf(0.35f, 0.7f, 1f, 0.65f, 0.4f)
+            factors.forEach { factor ->
+                val height = 4f + 14f * animatedLevel * factor
+                Box(
+                    modifier = Modifier
+                        .width(2.5.dp)
+                        .height(height.dp)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(MiuixTheme.colorScheme.primary),
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = partial.ifBlank { "正在聆听…" },
+            fontSize = 12.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun AiReadingBars(playing: Boolean, color: Color) {
+    val transition = rememberInfiniteTransition(label = "aiReadingBars")
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        repeat(4) { index ->
+            val fraction by transition.animateFloat(
+                initialValue = if (playing) 0.25f else 0.6f,
+                targetValue = if (playing) 1f else 0.3f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = if (playing) 420 else 700,
+                        delayMillis = index * 90,
+                        easing = LinearEasing,
+                    ),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "aiReadingBar$index",
+            )
+            Box(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height((4 + 9 * fraction).dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(color.copy(alpha = if (playing) 0.9f else 0.45f)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiErrorActionRow(
+    action: AiErrorAction,
+    onOpenSettings: (() -> Unit)?,
+    onRetry: (() -> Unit)?,
+) {
+    val context = LocalContext.current
+    val label = when (action) {
+        AiErrorAction.ApiKey -> "去设置 API Key"
+        AiErrorAction.Retry -> "重试"
+        AiErrorAction.TopUp -> "去充值"
+        AiErrorAction.None -> return
+    }
+    val handler: (() -> Unit)? = when (action) {
+        AiErrorAction.ApiKey -> onOpenSettings
+        AiErrorAction.Retry -> onRetry
+        AiErrorAction.TopUp -> {
+            {
+                AiAppLauncher.openUrl(context, "https://platform.deepseek.com/top_up")
+            }
+        }
+        AiErrorAction.None -> null
+    } ?: return
+    val actionHandler = handler ?: return
+    Text(
+        text = label,
+        fontSize = 12.sp,
+        color = MiuixTheme.colorScheme.primary,
+        modifier = Modifier
+            .padding(top = 5.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = actionHandler)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun AiSourceSummary(
+    sources: List<AiSource>,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            sources.take(4).forEach { source ->
+                AiSiteIcon(source = source, size = 16.dp)
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = "共 ${sources.size} 个来源 · 查看全部",
+            fontSize = 11.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+        )
+    }
+}
+
+@Composable
+private fun AiThinkingSection(
+    message: AiUiMessage,
+    onShowSources: ((List<AiSource>, Int?) -> Unit)? = null,
+) {
     val steps = message.steps
     var expanded by remember(message.id, message.reasoningDone) {
         mutableStateOf(AiSettings.showThinking && !message.reasoningDone)
@@ -1567,7 +2167,6 @@ private fun AiThinkingSection(message: AiUiMessage) {
         else -> 0L
     }
     val runningStep = steps.lastOrNull { it.state == AiStepState.Running }
-    val failedCount = steps.count { it.state == AiStepState.Failed }
     val header = buildString {
         append(
             when {
@@ -1577,8 +2176,6 @@ private fun AiThinkingSection(message: AiUiMessage) {
             },
         )
         if (elapsed > 0L) append(" · ").append(formatAiElapsed(elapsed))
-        if (steps.isNotEmpty()) append(" · ").append(steps.size).append(" 步")
-        if (failedCount > 0) append(" · ").append(failedCount).append(" 步失败")
     }
     val secondary = MiuixTheme.colorScheme.onSurfaceVariantSummary
     val bodySize = MiuixTheme.textStyles.subtitle.fontSize
@@ -1652,7 +2249,11 @@ private fun AiThinkingSection(message: AiUiMessage) {
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 9.dp)) {
                 steps.forEach { step ->
                     key(step.id) {
-                        AiThinkingStepRow(step = step)
+                        AiThinkingStepRow(
+                            step = step,
+                            sources = message.sources,
+                            onShowSources = onShowSources,
+                        )
                     }
                 }
                 if (steps.isNotEmpty() && message.reasoning.isNotBlank()) {
@@ -1685,9 +2286,22 @@ private fun AiThinkingSection(message: AiUiMessage) {
 }
 
 @Composable
-private fun AiThinkingStepRow(step: AiAgentStep) {
+private fun AiThinkingStepRow(
+    step: AiAgentStep,
+    sources: List<AiSource> = emptyList(),
+    onShowSources: ((List<AiSource>, Int?) -> Unit)? = null,
+) {
     val secondary = MiuixTheme.colorScheme.onSurfaceVariantSummary
     val errorColor = MiuixTheme.colorScheme.error
+    val stepSources = sources.filter { it.index in step.sourceIds }
+    val kindLabel = when (step.kind) {
+        AiStepKind.Search -> "搜索"
+        AiStepKind.Read -> "网页"
+        AiStepKind.Open -> "打开"
+        AiStepKind.Device -> "操作"
+        AiStepKind.File -> "文件"
+        AiStepKind.Other -> null
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1704,6 +2318,14 @@ private fun AiThinkingStepRow(step: AiAgentStep) {
         }
         Spacer(Modifier.width(6.dp))
         Column(modifier = Modifier.weight(1f)) {
+            if (kindLabel != null) {
+                Text(
+                    text = kindLabel,
+                    fontSize = 9.sp,
+                    color = secondary.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(bottom = 1.dp),
+                )
+            }
             Text(
                 text = step.title,
                 fontSize = 12.sp,
@@ -1724,6 +2346,29 @@ private fun AiThinkingStepRow(step: AiAgentStep) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 1.dp),
                 )
+            }
+            if (stepSources.isNotEmpty() && onShowSources != null) {
+                Row(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onShowSources(stepSources, stepSources.first().index) }
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    stepSources.take(3).forEach { source ->
+                        AiSiteIcon(
+                            source = source,
+                            size = 13.dp,
+                            modifier = Modifier.padding(end = 2.dp),
+                        )
+                    }
+                    Text(
+                        text = "${stepSources.size} 个来源",
+                        fontSize = 10.sp,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }
@@ -1882,7 +2527,7 @@ private fun AiEmptyState(
         )
         Spacer(Modifier.height(18.dp))
         Row(
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             Text(
@@ -1892,7 +2537,7 @@ private fun AiEmptyState(
                 color = MiuixTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.width(6.dp))
-            AiPreviewBadge(modifier = Modifier.offset(y = (-1).dp))
+            AiPreviewBadge()
         }
         Spacer(Modifier.height(8.dp))
         Text(
@@ -2101,6 +2746,7 @@ internal fun AiQuickActionBar(onOpenSettings: () -> Unit) {
             )
         }
 
+        AiPresetChip()
         AiWebSearchChip()
         AiAgentChip()
         AiFloatingBallChip()
@@ -2256,7 +2902,9 @@ private fun AiQuickChip(text: String, onClick: () -> Unit) {
 @Composable
 private fun AiAgentChip() {
     val context = LocalContext.current
-    val enabled = AiSettings.agentEnabled
+    val presetDevice = AiConversationSettings
+        .presetFor(AiChatStore.activeConversationId)?.deviceControl
+    val enabled = presetDevice ?: AiSettings.agentEnabled
     Row(
         modifier = Modifier
             .height(36.dp)
@@ -2266,6 +2914,14 @@ private fun AiAgentChip() {
                 else MiuixTheme.colorScheme.surfaceContainer,
             )
             .clickable {
+                if (presetDevice != null) {
+                    Toast.makeText(
+                        context,
+                        "当前预设已固定自动操作开关，请到 Agent 预设中修改",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    return@clickable
+                }
                 if (!enabled) {
                     if (!MoteAccessibilityService.isEnabled(context)) {
                         Toast.makeText(
@@ -2435,8 +3091,14 @@ private fun AiChatInputBar(
     quickActions: @Composable () -> Unit = {},
     attachments: List<AiAttachment>,
     readingFile: Boolean,
+    failedFileCount: Int,
+    onRetryFailedFiles: () -> Unit,
     streaming: Boolean,
     configured: Boolean,
+    voiceListening: Boolean,
+    voiceLevel: Float,
+    voicePartial: String,
+    onVoice: () -> Unit,
     canSend: Boolean,
     onAttach: () -> Unit,
     onRemoveAttachment: (AiAttachment) -> Unit,
@@ -2461,7 +3123,7 @@ private fun AiChatInputBar(
         quickActions()
         Spacer(Modifier.height(4.dp))
 
-        if (attachments.isNotEmpty() || readingFile) {
+        if (attachments.isNotEmpty() || readingFile || failedFileCount > 0) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2494,7 +3156,27 @@ private fun AiChatInputBar(
                         )
                     }
                 }
+                if (failedFileCount > 0) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MiuixTheme.colorScheme.error.copy(alpha = 0.1f))
+                            .clickable(onClick = onRetryFailedFiles)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "$failedFileCount 个文件读取失败 · 重试",
+                            fontSize = 12.sp,
+                            color = MiuixTheme.colorScheme.error,
+                        )
+                    }
+                }
             }
+        }
+
+        if (voiceListening) {
+            AiVoiceWave(level = voiceLevel, partial = voicePartial)
         }
 
         Row(
@@ -2504,6 +3186,18 @@ private fun AiChatInputBar(
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = onVoice) {
+                Icon(
+                    imageVector = MiuixIcons.AppRecording,
+                    contentDescription = if (voiceListening) "停止语音输入" else "语音输入",
+                    tint = if (voiceListening) {
+                        MiuixTheme.colorScheme.primary
+                    } else {
+                        MiuixTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier.size(22.dp),
+                )
+            }
             IconButton(
                 onClick = onAttach,
                 enabled = attachments.size < 3 && !readingFile,

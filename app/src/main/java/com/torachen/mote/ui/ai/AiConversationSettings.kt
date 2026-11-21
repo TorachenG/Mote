@@ -2,6 +2,8 @@ package com.torachen.mote.ui.ai
 
 import android.content.Context
 import androidx.compose.runtime.mutableStateMapOf
+import com.torachen.mote.ui.ai.preset.AiAgentPreset
+import com.torachen.mote.ui.ai.preset.AiPresetStore
 import org.json.JSONObject
 
 /**
@@ -13,6 +15,7 @@ import org.json.JSONObject
 internal object AiConversationSettings {
 
     data class Config(
+        val presetId: String? = null,
         val providerId: String? = null,
         val modelId: String? = null,
         val permission: AiFilePermission? = null,
@@ -27,6 +30,7 @@ internal object AiConversationSettings {
     fun ensureLoaded(context: Context) {
         if (loaded) return
         loaded = true
+        AiPresetStore.ensureLoaded(context)
         val raw = aiPrefs(context).getString(KEY, null).orEmpty()
         if (raw.isBlank()) return
         runCatching {
@@ -34,6 +38,7 @@ internal object AiConversationSettings {
             json.keys().forEach { id ->
                 val obj = json.optJSONObject(id) ?: return@forEach
                 configs[id] = Config(
+                    presetId = obj.optString("preset").takeIf { it.isNotBlank() },
                     providerId = obj.optString("provider").takeIf { it.isNotBlank() },
                     modelId = obj.optString("model").takeIf { it.isNotBlank() },
                     permission = runCatching {
@@ -47,11 +52,24 @@ internal object AiConversationSettings {
         }
     }
 
-    /** 为新建的对话复制一份当前全局默认值。 */
-    fun ensureDefaults(context: Context, conversationId: String) {
+    /** 为新建对话绑定预设；历史对话保留旧的 provider/model 覆盖。 */
+    fun ensureDefaults(
+        context: Context,
+        conversationId: String,
+        presetId: String? = null,
+    ) {
         ensureLoaded(context)
-        if (configs.containsKey(conversationId)) return
-        configs[conversationId] = currentDefaults()
+        val selected = presetId ?: AiPresetStore.defaultId()
+        val existing = configs[conversationId]
+        if (existing != null) {
+            // 旧版本没有 preset 字段：补默认预设，但保留用户已选的 provider/model/权限。
+            if (existing.presetId == null) {
+                configs[conversationId] = existing.copy(presetId = selected)
+                persist(context)
+            }
+            return
+        }
+        configs[conversationId] = Config(presetId = selected)
         persist(context)
     }
 
@@ -60,23 +78,35 @@ internal object AiConversationSettings {
         ensureLoaded(context)
         var changed = false
         conversationIds.forEach { id ->
-            if (!configs.containsKey(id)) {
-                configs[id] = currentDefaults()
+            val existing = configs[id]
+            if (existing == null) {
+                configs[id] = Config(presetId = AiPresetStore.defaultId())
+                changed = true
+            } else if (existing.presetId == null) {
+                configs[id] = existing.copy(presetId = AiPresetStore.defaultId())
                 changed = true
             }
         }
         if (changed) persist(context)
     }
 
+    fun configFor(conversationId: String?): Config? =
+        conversationId?.let { configs[it] }
+
+    fun presetFor(conversationId: String?): AiAgentPreset? {
+        val config = configFor(conversationId)
+        return AiPresetStore.byId(config?.presetId)
+            ?: AiPresetStore.byId(AiPresetStore.defaultId())
+    }
+
     fun providerFor(conversationId: String?): AiProviderConfig? {
         val config = conversationId?.let { configs[it] }
+        val preset = presetFor(conversationId)
         val storedProvider = config?.providerId?.let { AiProviderStore.byId(it) }
-        val provider = storedProvider ?: AiProviderStore.active ?: return null
-        val modelId = if (storedProvider != null) {
-            config?.modelId?.takeIf { it.isNotBlank() }
-        } else {
-            null
-        }
+        val presetProvider = preset?.providerId?.let { AiProviderStore.byId(it) }
+        val provider = storedProvider ?: presetProvider ?: AiProviderStore.active ?: return null
+        val modelId = config?.modelId?.takeIf { it.isNotBlank() }
+            ?: preset?.modelId?.takeIf { it.isNotBlank() }
         // 模型可能已经在服务设置里被删除，失效时回退到该服务当前选择的模型。
         val usableModelId = modelId?.takeIf { id ->
             provider.models.isEmpty() || id in provider.models || id == provider.model
@@ -89,10 +119,17 @@ internal object AiConversationSettings {
     }
 
     fun permissionFor(conversationId: String?): AiFilePermission =
-        conversationId?.let { configs[it]?.permission } ?: AiPermissionStore.permission
+        conversationId?.let { configs[it]?.permission }
+            ?: presetFor(conversationId)?.filePermission
+            ?: AiPermissionStore.permission
 
     fun reasoningFor(conversationId: String?): AiReasoningLevel =
-        conversationId?.let { configs[it]?.reasoning } ?: AiSettings.reasoningLevel
+        conversationId?.let { configs[it]?.reasoning }
+            ?: presetFor(conversationId)?.reasoning
+            ?: AiSettings.reasoningLevel
+
+    fun contextTurnsFor(conversationId: String?): Int =
+        (presetFor(conversationId)?.contextTurns ?: AiSettings.contextTurns).coerceIn(0, 40)
 
     fun setProvider(
         context: Context,
@@ -103,7 +140,23 @@ internal object AiConversationSettings {
         ensureLoaded(context)
         AiProviderStore.upsert(context, provider.copy(model = modelId), makeActive = true)
         val id = conversationId ?: return
-        configs[id] = (configs[id] ?: Config()).copy(providerId = provider.id, modelId = modelId)
+        configs[id] = (configs[id] ?: Config(presetId = AiPresetStore.defaultId()))
+            .copy(providerId = provider.id, modelId = modelId)
+        persist(context)
+    }
+
+    /** 切换当前对话的预设；清空模型/权限覆盖，让新预设的能力边界真正生效。 */
+    fun setPreset(context: Context, conversationId: String?, presetId: String) {
+        ensureLoaded(context)
+        val id = conversationId ?: return
+        if (AiPresetStore.byId(presetId) == null) return
+        configs[id] = (configs[id] ?: Config()).copy(
+            presetId = presetId,
+            providerId = null,
+            modelId = null,
+            permission = null,
+            reasoning = null,
+        )
         persist(context)
     }
 
@@ -115,7 +168,8 @@ internal object AiConversationSettings {
         ensureLoaded(context)
         AiPermissionStore.setPermission(context, permission)
         val id = conversationId ?: return
-        configs[id] = (configs[id] ?: Config()).copy(permission = permission)
+        configs[id] = (configs[id] ?: Config(presetId = AiPresetStore.defaultId()))
+            .copy(permission = permission)
         persist(context)
     }
 
@@ -127,7 +181,8 @@ internal object AiConversationSettings {
         ensureLoaded(context)
         AiSettings.setReasoningLevel(context, level)
         val id = conversationId ?: return
-        configs[id] = (configs[id] ?: Config()).copy(reasoning = level)
+        configs[id] = (configs[id] ?: Config(presetId = AiPresetStore.defaultId()))
+            .copy(reasoning = level)
         persist(context)
     }
 
@@ -146,16 +201,6 @@ internal object AiConversationSettings {
         aiPrefs(context).edit().remove(KEY).apply()
     }
 
-    private fun currentDefaults(): Config {
-        val active = AiProviderStore.active
-        return Config(
-            providerId = active?.id,
-            modelId = active?.model,
-            permission = AiPermissionStore.permission,
-            reasoning = AiSettings.reasoningLevel,
-        )
-    }
-
     private fun persist(context: Context) {
         runCatching {
             val json = JSONObject()
@@ -163,6 +208,7 @@ internal object AiConversationSettings {
                 json.put(
                     id,
                     JSONObject().apply {
+                        config.presetId?.let { put("preset", it) }
                         config.providerId?.let { put("provider", it) }
                         config.modelId?.let { put("model", it) }
                         config.permission?.let { put("permission", it.name) }

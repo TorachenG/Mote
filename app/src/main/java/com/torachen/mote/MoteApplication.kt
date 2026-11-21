@@ -1,5 +1,6 @@
 package com.torachen.mote
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
@@ -9,6 +10,11 @@ import com.torachen.mote.ui.MoteAppContextHolder
 import com.torachen.mote.ui.ai.AiChatStore
 import com.torachen.mote.ui.ai.AiProviderStore
 import com.torachen.mote.ui.ai.AiSettings
+import com.torachen.mote.ui.ai.mcp.McpManager
+import com.torachen.mote.ui.ai.tasks.AiTaskScheduler
+import com.torachen.mote.ui.ai.tasks.AiTaskStore
+import com.torachen.mote.ui.ai.tasks.AiTaskTriggerBus
+import com.torachen.mote.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,7 +34,29 @@ class MoteApplication : Application() {
             AiProviderStore.ensureLoaded(this)
             AiSettings.ensureLoaded(this)
             AiChatStore.ensureLoaded(this)
+            McpManager.start(this)
+            AiTaskStore.ensureLoaded(this)
+            AiTaskScheduler.rescheduleAll(this)
         }
+
+        registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                if (activity is MainActivity) {
+                    AiTaskTriggerBus.onAppForeground(
+                        context = this@MoteApplication,
+                        packageName = packageName,
+                        isMote = true,
+                    )
+                }
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         repairLongPrefs(prefs)

@@ -18,7 +18,10 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -74,6 +77,12 @@ internal object WeatherStateHolder {
     /** 是否使用设备精确定位（精确到区/县）；默认关闭，沿用 IP 定位。 */
     var precise by mutableStateOf(false)
 
+    /**
+     * 每次真正发起请求时递增；定位方式切换或新请求发起后，
+     * 旧请求的结果会被丢弃，避免旧的精确定位结果覆盖新的 IP 定位结果。
+     */
+    val fetchGeneration = java.util.concurrent.atomic.AtomicLong(0L)
+
     const val CACHE_TTL_MS = 10 * 60 * 1000L
 
     fun isFresh(): Boolean =
@@ -81,6 +90,10 @@ internal object WeatherStateHolder {
 }
 
 internal const val KEY_WEATHER_PRECISE_LOCATION = "weather_precise_location"
+
+/** 定位方式切换后立即刷新天气，不依赖页面是否还在组合中。 */
+private val weatherRefreshScope =
+    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 internal fun hasFineLocationPermission(context: Context): Boolean {
     return ContextCompat.checkSelfPermission(
@@ -99,10 +112,23 @@ internal fun initWeatherPreciseFromPrefs(context: Context) {
 /** 切换精确定位开关并持久化；关闭时立即回到 IP 定位。 */
 internal fun setWeatherPrecise(context: Context, enabled: Boolean) {
     WeatherStateHolder.precise = enabled
+    // 让仍在进行的旧定位请求失效，避免它的结果稍后覆盖新结果
+    WeatherStateHolder.fetchGeneration.incrementAndGet()
+    WeatherStateHolder.loading = false
+    // 旧的天气缓存对应旧的定位方式，立即失效；下次启动也不会先显示旧城市
+    WeatherStateHolder.lastFetchAt = 0L
+    WeatherStateHolder.info = null
+    WeatherStateHolder.error = null
     context.getSharedPreferences("mote_prefs", Context.MODE_PRIVATE)
         .edit()
         .putBoolean(KEY_WEATHER_PRECISE_LOCATION, enabled)
+        .remove(KEY_WEATHER_CACHE)
         .apply()
+    // 用应用级作用域刷新，避免天气弹窗关闭后协程被取消
+    val appContext = context.applicationContext
+    weatherRefreshScope.launch {
+        fetchWeather(appContext, forceRefresh = true)
+    }
 }
 
 // ============================================================
@@ -425,8 +451,9 @@ internal suspend fun fetchWeather(context: Context, forceRefresh: Boolean = fals
     initWeatherPreciseFromPrefs(context)
 
     if (!forceRefresh && WeatherStateHolder.isFresh()) return
-    if (WeatherStateHolder.loading) return
+    if (WeatherStateHolder.loading && !forceRefresh) return
 
+    val generation = WeatherStateHolder.fetchGeneration.incrementAndGet()
     WeatherStateHolder.loading = true
     WeatherStateHolder.error = null
 
@@ -450,15 +477,21 @@ internal suspend fun fetchWeather(context: Context, forceRefresh: Boolean = fals
             val body = httpGetText(url, 10000)
             parseWeatherJson(body, loc.city, loc.precise)
         }
+        // 定位方式可能已经切换，旧请求的结果直接丢弃
+        if (generation != WeatherStateHolder.fetchGeneration.get()) return
         WeatherStateHolder.info = result
         WeatherStateHolder.lastFetchAt = System.currentTimeMillis()
         WeatherStateHolder.error = null
         saveWeatherCache(context, result, WeatherStateHolder.lastFetchAt)
     } catch (e: Exception) {
-        WeatherStateHolder.error = e.message ?: "获取天气失败"
-        Log.w("WeatherService", "fetchWeather failed: ${e.message}")
+        if (generation == WeatherStateHolder.fetchGeneration.get()) {
+            WeatherStateHolder.error = e.message ?: "获取天气失败"
+            Log.w("WeatherService", "fetchWeather failed: ${e.message}")
+        }
     } finally {
-        WeatherStateHolder.loading = false
+        if (generation == WeatherStateHolder.fetchGeneration.get()) {
+            WeatherStateHolder.loading = false
+        }
     }
 }
 

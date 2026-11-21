@@ -5,15 +5,10 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <!-- Keystore 密钥不会随备份恢复，密文备份到新设备也无法解密，直接排除。 -->
+        <exclude domain="sharedpref" path="mote_secrets.xml" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="sharedpref" path="mote_secrets.xml" />
     </device-transfer>
-    -->
 </data-extraction-rules>
