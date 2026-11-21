@@ -131,7 +131,7 @@ internal object AiPresetStore {
         )
 
     private val LEGACY_NAMES: Map<String, Set<String>> = mapOf(
-        DEFAULT_ID to setOf("通用"),
+        DEFAULT_ID to setOf("默认"),
         "builtin_phone" to setOf("手机助手"),
         "builtin_minimal" to setOf("极简"),
     )
@@ -147,7 +147,7 @@ internal object AiPresetStore {
     private val BUILT_INS: List<AiAgentPreset> = listOf(
         AiAgentPreset(
             id = DEFAULT_ID,
-            name = "默认",
+            name = "通用",
             description = "跟随全局 AI 设置",
             builtIn = true,
         ),

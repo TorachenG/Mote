@@ -135,7 +135,6 @@ import com.torachen.mote.ui.filemanager.LocalFileViewerRequest
 import com.torachen.mote.ui.filemanager.LocalFileViewerState
 import com.torachen.mote.ui.ai.mcp.AiToolApprovalDialog
 import com.torachen.mote.ui.ai.preset.AiPresetChip
-import com.torachen.mote.ui.ai.preset.AiPresetPickerDialog
 import com.torachen.mote.ui.ai.preset.AiPresetStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -220,10 +219,10 @@ fun AiChatPage(
     onOpenSettings: () -> Unit,
 ) {
     val context = LocalContext.current
-    AiChatStore.ensureLoaded(context)
-    LaunchedEffect(Unit) {
+    remember {
+        AiChatStore.ensureLoaded(context)
         if (AiSettings.newConversationOnOpen) {
-            AiChatStore.newConversation()
+            AiChatStore.newConversation(AiPresetStore.defaultId())
         }
     }
     AiPageTheme {
@@ -376,7 +375,6 @@ private fun AiChatContent(
     var programmaticScroll by remember { mutableStateOf(false) }
     var showSidebar by remember { mutableStateOf(false) }
     var sidebarDrag by remember { mutableFloatStateOf(0f) }
-    var showPresetPicker by remember { mutableStateOf(false) }
     var sourceSheetSources by remember { mutableStateOf<List<AiSource>>(emptyList()) }
     var sourceSheetIndex by remember { mutableStateOf<Int?>(null) }
     var pendingBranchScroll by remember { mutableStateOf<Int?>(null) }
@@ -577,12 +575,7 @@ private fun AiChatContent(
         }
     }
 
-    fun createNewConversation(presetId: String? = null) {
-        // 有多个预设时，先让用户选择；选择后才真正创建会话。
-        if (presetId == null && AiPresetStore.all(context).size > 1) {
-            showPresetPicker = true
-            return
-        }
+    fun createNewConversation() {
         // 输入框有内容也可以新建：当前内容先存到当前对话的草稿里。
         val previousConversation = AiChatStore.activeConversationId
         AiDraftStore.set(
@@ -590,7 +583,7 @@ private fun AiChatContent(
             previousConversation ?: AiDraftStore.NEW_CONVERSATION_KEY,
             input,
         )
-        AiChatStore.newConversation(presetId)
+        AiChatStore.newConversation(AiPresetStore.defaultId())
         // 原本还没有对话时，把这段草稿转到刚创建的对话上，避免输入内容“消失”。
         if (previousConversation == null) {
             AiChatStore.activeConversationId?.let { newConversationId ->
@@ -958,14 +951,6 @@ private fun AiChatContent(
         }
         AiFileEditConfirmDialog()
         AiToolApprovalDialog()
-        AiPresetPickerDialog(
-            show = showPresetPicker,
-            onDismiss = { showPresetPicker = false },
-            onSelect = { id ->
-                showPresetPicker = false
-                createNewConversation(id)
-            },
-        )
         val editing = editingMessage
         if (editing != null) {
             WindowDialog(

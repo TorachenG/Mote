@@ -558,7 +558,7 @@ private fun SettingsSearchMiuix(
             val contentHeight = with(density) { contentHeightPx.toDp() }
 
             val fillerHeight = (
-                    viewportHeight - contentTopPadding - contentHeight - 12.dp + 1.dp
+                    viewportHeight - (contentTopPadding + 4.dp) - contentHeight - 12.dp + 1.dp
                     ).coerceAtLeast(0.dp)
 
             Box(
@@ -578,7 +578,7 @@ private fun SettingsSearchMiuix(
                         .scrollEndHaptic()
                         .overScrollVertical(),
                     contentPadding = PaddingValues(
-                        top = contentTopPadding,
+                        top = contentTopPadding + 4.dp,
                         bottom = 12.dp,
                     ),
                     overscrollEffect = null,

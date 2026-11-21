@@ -161,6 +161,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -4963,6 +4964,13 @@ private fun buildChromePalette(
 }
 
 /**
+ * 搜索建议/历史浮层可用的最大高度。
+ * 由 [BrowserHeader] 根据标题栏位置、状态栏、导航栏和输入法计算，
+ * 内部列表只在这个高度内滚动，不能反过来挤压输入框。
+ */
+private val LocalSearchPopupMaxHeight = compositionLocalOf<Dp?> { null }
+
+/**
  * 浏览器标题栏容器。
  *
  * [atBottom] 为 true 时，整个标题栏上下排序取反：
@@ -5068,6 +5076,32 @@ private fun BrowserHeader(
             } else {
                 RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp)
             }
+
+            // 浮层不能无限长，否则输入法/小屏时会被系统重新摆放并盖住输入框。
+            // 空间不足时让建议/历史在内部滚动，输入框始终保留。
+            val popupDensity = LocalDensity.current
+            val screenHeightPx = with(popupDensity) {
+                LocalConfiguration.current.screenHeightDp.dp.toPx()
+            }
+            val statusBarPx = with(popupDensity) {
+                WindowInsets.statusBars.asPaddingValues().calculateTopPadding().toPx()
+            }
+            val navBarPx = with(popupDensity) {
+                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding().toPx()
+            }
+            val imePx = with(popupDensity) {
+                WindowInsets.ime.asPaddingValues().calculateBottomPadding().toPx()
+            }
+            val popupGapPx = with(popupDensity) { 8.dp.toPx() }
+            val availablePx = if (atBottom) {
+                headerTop - statusBarPx - popupGapPx
+            } else {
+                screenHeightPx - headerBottom - navBarPx - imePx - popupGapPx
+            }
+            val maxPopupHeight = with(popupDensity) {
+                availablePx.coerceAtLeast(160.dp.toPx()).toDp()
+            }
+
             Popup(
                 alignment = if (atBottom) Alignment.BottomStart else Alignment.TopStart,
                 offset = IntOffset(0, offsetY),
@@ -5077,13 +5111,18 @@ private fun BrowserHeader(
                     dismissOnBackPress = false,
                 ),
             ) {
-                Column(
-                    modifier = Modifier
-                        .width(with(LocalDensity.current) { headerWidth.toDp() })
-                        .clip(popupShape)
-                        .background(containerColor),
+                CompositionLocalProvider(
+                    LocalSearchPopupMaxHeight provides maxPopupHeight,
                 ) {
-                    content()
+                    Column(
+                        modifier = Modifier
+                            .width(with(LocalDensity.current) { headerWidth.toDp() })
+                            .heightIn(max = maxPopupHeight)
+                            .clip(popupShape)
+                            .background(containerColor),
+                    ) {
+                        content()
+                    }
                 }
             }
         }
@@ -5693,6 +5732,11 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
     onRemoveHistory: (Int) -> Unit,
 ) {
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
+    val popupMaxHeight = LocalSearchPopupMaxHeight.current
+    // 给“当前网页”“复制的链接”等固定卡片留出空间，剩余高度给建议/历史列表滚动。
+    val historyListMaxHeight = popupMaxHeight
+        ?.let { (it - 118.dp).coerceIn(120.dp, 320.dp) }
+        ?: 320.dp
     LaunchedEffect(focused) {
         clipboardUrl = if (focused) {
             withContext(Dispatchers.IO) { readClipboardUrl(context, prefs) }
@@ -5821,7 +5865,7 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 320.dp)
+                .heightIn(max = historyListMaxHeight)
                 .animateContentSize(),
         ) {
             items(
@@ -5874,7 +5918,7 @@ private fun ColumnScope.BrowserHeaderExpandedContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 320.dp)
+                .heightIn(max = historyListMaxHeight)
                 .animateContentSize(),
         ) {
             item(key = "search_history_header") {
@@ -7831,6 +7875,9 @@ fun BrowserScreen(
         if (trimmed.isEmpty()) return
         val id = activeWindowId ?: return
         val wv = webViewMap[id] ?: return
+        // 从新标签页/主页发起的首次导航不把 about:blank 或主页留在历史里，
+        // 否则从搜索结果返回会落到一个空白页，而不是回到新标签页。
+        val fromHomePage = isHomeUrl(windows.firstOrNull { it.id == id }?.url.orEmpty())
 
         val rawIndex = prefs.getInt("default_search_engine", 0)
         val engineIndex = rawIndex.coerceIn(0, searchEngines.lastIndex)
@@ -7869,6 +7916,7 @@ fun BrowserScreen(
         } else {
             TextFieldValue(trimmed)
         }
+        if (fromHomePage) runCatching { wv.clearHistory() }
         wv.loadUrl(url)
     }
 
@@ -12584,7 +12632,14 @@ private fun WebViewLayer(
                                     previousUrl.isNotBlank() &&
                                     !isHomeUrl(previousUrl)
                                 ) {
-                                    return@pageState
+                                    // 只有 WebView 当前确实已经停在空白页时才接受这次回调；
+                                    // 新页面已经打开后的迟到空白回调仍然忽略。
+                                    val actualUrl = runCatching {
+                                        webViewMap[id]?.url.orEmpty()
+                                    }.getOrDefault("")
+                                    if (actualUrl.isNotBlank() && actualUrl != "about:blank") {
+                                        return@pageState
+                                    }
                                 }
                                 val urlChanged = win0?.url != url
                                 if (urlChanged) {

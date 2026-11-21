@@ -672,6 +672,9 @@ internal fun lookupPageIcon(route: String): ImageVector? =
     findSettingsItemByRoute(route)?.icon
         ?: if (route in AI_SETTINGS_ROUTES) MiuixIcons.MindMap else null
 
+internal fun lookupPageImageRes(route: String): Int? =
+    findSettingsItemByRoute(route)?.imageRes
+
 internal fun lookupPageIconColor(route: String): Color? =
     findSettingsItemByRoute(route)?.iconBgColor
         ?: if (route in AI_SETTINGS_ROUTES) Color(0xFF7767F9) else null
@@ -1073,6 +1076,7 @@ private fun SettingsMainPageMiuix(
                                             val matchedEntries = groupedResults[pageRoute]
                                             val initialEntries = allGroups[pageRoute] ?: emptyList()
                                             val pageIcon = lookupPageIcon(pageRoute)
+                                            val pageImageRes = lookupPageImageRes(pageRoute)
                                             val pageIconBg = lookupPageIconColor(pageRoute)
                                                 ?: MiuixTheme.colorScheme.primary
 
@@ -1135,11 +1139,12 @@ private fun SettingsMainPageMiuix(
                                                                             end = ICON_TO_TITLE_GAP
                                                                         )
                                                                     ) {
-                                                                        if (pageIcon != null) {
+                                                                        if (pageIcon != null || pageImageRes != null) {
                                                                             SettingsIcon(
-                                                                                icon = pageIcon,
+                                                                                icon = pageIcon ?: MiuixIcons.MindMap,
                                                                                 innerSize = DEFAULT_ICON_INNER_SIZE,
                                                                                 bgColor = pageIconBg,
+                                                                                imageRes = pageImageRes,
                                                                             )
                                                                         }
                                                                     }
