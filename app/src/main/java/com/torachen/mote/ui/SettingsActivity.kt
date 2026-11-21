@@ -329,6 +329,17 @@ private val settingsSections = listOf(
     ),
 )
 
+private val topLevelSearchEntries = settingsSections.flatMap { section -> section.items }
+    .mapIndexed { index, item ->
+        SearchableEntry(
+            title = item.title,
+            pageRoute = item.route,
+            pageTitle = item.title,
+            itemKey = "settings_top_${item.route}",
+            order = index,
+        )
+    }
+
 // ============================================================
 // ★ 中文拼音映射表
 // ============================================================
@@ -883,7 +894,8 @@ private fun SettingsMainPageMiuix(
     }
 
     DisposableEffect(Unit) {
-        SettingsSearchRegistry.preload(SETTINGS_SEARCH_CATALOG)
+        // 一级设置项本身也要能搜索到（例如直接搜“AI 设置”）。
+        SettingsSearchRegistry.preload(SETTINGS_SEARCH_CATALOG + topLevelSearchEntries)
         // 三级页面里的动态列表（如浏览器 UA 预设）无法在编译期扫描，这里在启动时补注册
         runCatching {
             UaStore.presets.forEachIndexed { index, preset ->
@@ -1571,7 +1583,7 @@ private fun SettingsMainPageMaterial(
     var searchValue by remember { mutableStateOf("") }
 
     DisposableEffect(Unit) {
-        SettingsSearchRegistry.preload(SETTINGS_SEARCH_CATALOG)
+        SettingsSearchRegistry.preload(SETTINGS_SEARCH_CATALOG + topLevelSearchEntries)
         onDispose {
             SettingsSearchRegistry.clearPreload()
         }

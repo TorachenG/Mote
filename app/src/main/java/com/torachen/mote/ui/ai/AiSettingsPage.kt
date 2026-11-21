@@ -625,23 +625,23 @@ private fun AiSystemPromptDialog(
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
             Spacer(Modifier.height(12.dp))
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Button(
                     onClick = {
                         value = AiSettings.DEFAULT_SYSTEM_PROMPT
                     },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         color = MiuixTheme.colorScheme.secondaryContainer,
                         contentColor = MiuixTheme.colorScheme.onSurface,
                     ),
                 ) { Text("默认") }
-                Spacer(Modifier.weight(1f))
                 Button(
                     onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         color = MiuixTheme.colorScheme.secondaryContainer,
                         contentColor = MiuixTheme.colorScheme.onSurface,
@@ -652,6 +652,7 @@ private fun AiSystemPromptDialog(
                         onSave(value)
                         Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
                     },
+                    modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         color = MiuixTheme.colorScheme.primary,
                         contentColor = Color.White,

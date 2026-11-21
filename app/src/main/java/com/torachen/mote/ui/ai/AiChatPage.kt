@@ -9,7 +9,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.Manifest
 import android.net.Uri
-import android.speech.SpeechRecognizer
 import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.provider.Settings as AndroidSettings
@@ -360,9 +359,6 @@ private fun AiChatContent(
     var input by remember {
         mutableStateOf(AiDraftStore.get(context, AiChatStore.activeConversationId))
     }
-    val voiceAvailable = remember {
-        runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false)
-    }
     val attachments = remember { mutableStateListOf<AiAttachment>() }
     val draftAttachments = remember { mutableStateMapOf<String, List<AiAttachment>>() }
     var draftAttachmentConversation by remember {
@@ -490,47 +486,6 @@ private fun AiChatContent(
         }
     }
 
-    fun startVoiceInput() {
-        AiVoiceInput.start(
-            context = context,
-            languageTag = Locale.getDefault().toLanguageTag(),
-            onResult = { text ->
-                if (text.isNotBlank()) {
-                    setInput(if (input.isBlank()) text else input + " " + text)
-                }
-            },
-            onError = { message ->
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-            },
-        )
-    }
-
-    val voicePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) startVoiceInput() else {
-            Toast.makeText(context, "需要录音权限才能语音输入", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    fun toggleVoiceInput() {
-        if (AiVoiceInput.listening) {
-            AiVoiceInput.stop()
-        } else if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO,
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            startVoiceInput()
-        } else {
-            voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { AiVoiceInput.stop() }
-    }
-
     LaunchedEffect(listScrollState) {
         snapshotFlow { listScrollState.isScrollInProgress }
             .drop(1)
@@ -597,7 +552,6 @@ private fun AiChatContent(
     }
 
     fun submit() {
-        AiVoiceInput.stop()
         val text = input.trim()
         if (!configured) {
             Toast.makeText(context, "请先配置 AI 服务", Toast.LENGTH_SHORT).show()
@@ -853,11 +807,6 @@ private fun AiChatContent(
                 onRetryFailedFiles = { retryFailedFiles() },
                 streaming = AiChatStore.streaming,
                 configured = configured,
-                voiceAvailable = voiceAvailable,
-                voiceListening = AiVoiceInput.listening,
-                voiceLevel = AiVoiceInput.level,
-                voicePartial = AiVoiceInput.partialText,
-                onVoice = { toggleVoiceInput() },
                 canSend = configured &&
                         !readingFile &&
                         (input.isNotBlank() || attachments.isNotEmpty()),
@@ -2051,46 +2000,6 @@ private fun AiSourceCards(
 }
 
 @Composable
-private fun AiVoiceWave(level: Float, partial: String) {
-    val animatedLevel by animateFloatAsState(
-        targetValue = level.coerceIn(0f, 1f),
-        animationSpec = tween(90),
-        label = "aiVoiceLevel",
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val factors = listOf(0.35f, 0.7f, 1f, 0.65f, 0.4f)
-            factors.forEach { factor ->
-                val height = 4f + 14f * animatedLevel * factor
-                Box(
-                    modifier = Modifier
-                        .width(2.5.dp)
-                        .height(height.dp)
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(MiuixTheme.colorScheme.primary),
-                )
-            }
-        }
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = partial.ifBlank { "正在聆听…" },
-            fontSize = 12.sp,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
 private fun AiReadingBars(playing: Boolean, color: Color) {
     val transition = rememberInfiniteTransition(label = "aiReadingBars")
     Row(
@@ -3136,11 +3045,6 @@ private fun AiChatInputBar(
     onRetryFailedFiles: () -> Unit,
     streaming: Boolean,
     configured: Boolean,
-    voiceAvailable: Boolean,
-    voiceListening: Boolean,
-    voiceLevel: Float,
-    voicePartial: String,
-    onVoice: () -> Unit,
     canSend: Boolean,
     onAttach: () -> Unit,
     onRemoveAttachment: (AiAttachment) -> Unit,
@@ -3217,10 +3121,6 @@ private fun AiChatInputBar(
             }
         }
 
-        if (voiceListening) {
-            AiVoiceWave(level = voiceLevel, partial = voicePartial)
-        }
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3228,20 +3128,6 @@ private fun AiChatInputBar(
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (voiceAvailable) {
-                IconButton(onClick = onVoice) {
-                    Icon(
-                        imageVector = MiuixIcons.AppRecording,
-                        contentDescription = if (voiceListening) "停止语音输入" else "语音输入",
-                        tint = if (voiceListening) {
-                            MiuixTheme.colorScheme.primary
-                        } else {
-                            MiuixTheme.colorScheme.onSurface
-                        },
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -3264,6 +3150,7 @@ private fun AiChatInputBar(
                     modifier = Modifier.size(20.dp),
                 )
             }
+            Spacer(Modifier.width(8.dp))
             TextField(
                 value = input,
                 onValueChange = onInputChange,
