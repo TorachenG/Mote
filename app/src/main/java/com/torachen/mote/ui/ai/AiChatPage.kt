@@ -2854,7 +2854,9 @@ private fun AiAgentChip() {
     val context = LocalContext.current
     val presetDevice = AiConversationSettings
         .presetFor(AiChatStore.activeConversationId)?.deviceControl
-    val enabled = presetDevice ?: AiSettings.agentEnabled
+    val accessibilityEnabled = MoteAccessibilityService.isEnabled(context)
+    // 预设开启“自动操作”只代表允许，不代表已经拿到系统无障碍权限。
+    val enabled = (presetDevice ?: AiSettings.agentEnabled) && accessibilityEnabled
     Row(
         modifier = Modifier
             .height(36.dp)
@@ -2864,6 +2866,18 @@ private fun AiAgentChip() {
                 else MiuixTheme.colorScheme.surfaceContainer,
             )
             .clickable {
+                if (presetDevice == true && !accessibilityEnabled) {
+                    Toast.makeText(
+                        context,
+                        "手机模式已选择，但系统无障碍未开启，暂时不能操作手机。请先开启 Mote AI 自动操作。",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    context.startActivity(
+                        Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    return@clickable
+                }
                 if (presetDevice != null) {
                     Toast.makeText(
                         context,
@@ -2873,7 +2887,7 @@ private fun AiAgentChip() {
                     return@clickable
                 }
                 if (!enabled) {
-                    if (!MoteAccessibilityService.isEnabled(context)) {
+                    if (!accessibilityEnabled) {
                         Toast.makeText(
                             context,
                             "请在系统无障碍设置开启Mote AI 自动操作",

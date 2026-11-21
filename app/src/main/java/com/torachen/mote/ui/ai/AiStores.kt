@@ -655,6 +655,8 @@ object AiChatStore {
     private var saveJob: Job? = null
     private var persistPending = false
     private var activeCall: okhttp3.Call? = null
+    /** 仅记住刚由 + 创建的空对话；历史空对话不会被误复用。 */
+    private var freshConversationId: String? = null
 
     val messages = mutableStateListOf<AiUiMessage>()
     val conversations = mutableStateListOf<AiConversationMeta>()
@@ -794,6 +796,7 @@ object AiChatStore {
         allMessages.clear()
         conversations.clear()
         activeConversationId = null
+        freshConversationId = null
         rootMessageId = null
         nextId = 1L
         ensureLoaded(context)
@@ -915,7 +918,11 @@ object AiChatStore {
     /** 新建一个会话；当前已经是空对话时复用，避免堆积空会话。 */
     fun newConversation(presetId: String? = null) {
         if (streaming) stop()
-        if (activeConversationId != null && messages.isEmpty()) {
+        // 只复用刚刚由 + 创建的空对话；历史里的空对话不能成为“新对话”的落点。
+        if (activeConversationId != null &&
+            activeConversationId == freshConversationId &&
+            messages.isEmpty()
+        ) {
             val context = appContext
             if (context != null && presetId != null) {
                 AiConversationSettings.setPreset(context, activeConversationId, presetId)
@@ -924,20 +931,10 @@ object AiChatStore {
             return
         }
         saveCurrentNow()
-        val context = appContext
-        if (context != null) {
-            val existingEmpty = conversations.firstOrNull { meta ->
-                meta.id != activeConversationId &&
-                        AiConversationStore.load(context, meta.id).isEmpty()
-            }
-            if (existingEmpty != null) {
-                switchConversation(existingEmpty.id)
-                return
-            }
-        }
         val id = "conv_" + System.currentTimeMillis().toString(36)
         conversations.add(0, AiConversationMeta(id, "新对话", System.currentTimeMillis()))
         activeConversationId = id
+        freshConversationId = id
         messages.clear()
         allMessages.clear()
         rootMessageId = null
@@ -950,6 +947,7 @@ object AiChatStore {
     fun switchConversation(id: String) {
         if (id == activeConversationId) return
         if (conversations.none { it.id == id }) return
+        if (id != freshConversationId) freshConversationId = null
         if (streaming) stop()
         saveCurrentNow()
         val context = appContext ?: return
@@ -975,6 +973,7 @@ object AiChatStore {
         allMessages.clear()
         rootMessageId = null
         activeConversationId = null
+        freshConversationId = null
         nextId = 1L
         notice = null
         AiConversationSettings.clearAll(context)
@@ -995,6 +994,7 @@ object AiChatStore {
         conversations.removeAll { it.id in ids }
         if (activeConversationId in ids) {
             activeConversationId = conversations.firstOrNull()?.id
+            freshConversationId = null
             messages.clear()
             allMessages.clear()
             rootMessageId = null

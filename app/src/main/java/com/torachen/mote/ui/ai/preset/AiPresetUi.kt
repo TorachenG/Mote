@@ -1,5 +1,6 @@
 package com.torachen.mote.ui.ai.preset
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -9,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.torachen.mote.service.MoteAccessibilityService
 import com.torachen.mote.ui.ai.AiChatStore
 import com.torachen.mote.ui.ai.AiConversationSettings
 import top.yukonga.miuix.kmp.basic.DropdownEntry
@@ -34,6 +36,21 @@ internal fun AiPresetChip() {
                     onClick = {
                         if (item.id != preset.id) {
                             AiConversationSettings.setPreset(context, conversationId, item.id)
+                            if (item.deviceControl == true) {
+                                val enabled = MoteAccessibilityService.isEnabled(context)
+                                val connected = MoteAccessibilityService.instance != null
+                                val message = when {
+                                    !enabled ->
+                                        "已切换为手机模式，但系统无障碍未开启，暂时不能操作手机。请到设置 → 无障碍开启 Mote AI 自动操作。"
+
+                                    !connected ->
+                                        "已切换为手机模式，正在等待无障碍服务连接。"
+
+                                    else ->
+                                        "已切换为手机模式，自动操作可用。"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
                         }
                     },
                 )

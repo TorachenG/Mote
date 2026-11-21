@@ -347,14 +347,16 @@ fun AiSettingsPage(
                 summary = "允许 AI 自己判断何时读屏、点击、输入、滑动；关闭后仍可以打开应用，但不能操作界面",
                 checked = AiSettings.agentEnabled,
                 onCheckedChange = { enabled ->
-                    AiSettings.setAgentEnabled(context, enabled)
                     if (enabled && !accessibilityEnabled) {
+                        // 没拿到系统无障碍权限时不要先写成“已开启”，否则界面会假装可用。
                         Toast.makeText(
                             context,
-                            "请在系统无障碍设置开启Mote AI 自动操作",
+                            "请先在系统无障碍设置开启 Mote AI 自动操作",
                             Toast.LENGTH_SHORT,
                         ).show()
                         MoteAccessibilityService.openAccessibilitySettings(context)
+                    } else {
+                        AiSettings.setAgentEnabled(context, enabled)
                     }
                 },
             )
