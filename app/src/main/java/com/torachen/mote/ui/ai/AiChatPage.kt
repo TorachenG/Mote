@@ -93,7 +93,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -356,13 +355,15 @@ private fun AiChatContent(
     }
     val pageTitle = activeConversation?.title?.ifBlank { "新对话" } ?: "新对话"
 
-    var input by remember {
-        mutableStateOf(AiDraftStore.get(context, AiChatStore.activeConversationId))
+    // 和 DeepSeek Demo 一样：输入框和附件都按 conversationId 取自己的草稿。
+    // remember(conversationId) 让 A/B 切换时同步换掉整份状态，不再靠延迟 effect 加载。
+    var input by remember(conversationId) {
+        mutableStateOf(AiDraftStore.get(context, conversationId))
     }
-    val attachments = remember { mutableStateListOf<AiAttachment>() }
-    val draftAttachments = remember { mutableStateMapOf<String, List<AiAttachment>>() }
-    var draftAttachmentConversation by remember {
-        mutableStateOf(AiChatStore.activeConversationId)
+    val attachments = remember(conversationId) {
+        mutableStateListOf<AiAttachment>().apply {
+            addAll(AiDraftStore.attachments(context, conversationId))
+        }
     }
     var readingFile by remember { mutableStateOf(false) }
     var pendingSuggestionPrompt by remember { mutableStateOf<String?>(null) }
@@ -388,24 +389,17 @@ private fun AiChatContent(
     val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
     val inputBarBottomGap = (navigationBarBottom - imeBottom).coerceAtLeast(0.dp)
 
-    // 每个对话的输入草稿：切换对话时恢复；输入内容变化时写回当前对话。
-    LaunchedEffect(AiChatStore.activeConversationId) {
-        val current = AiChatStore.activeConversationId
-        input = AiDraftStore.get(context, current)
-        val previous = draftAttachmentConversation
-        if (previous != current) {
-            draftAttachments[previous ?: AiDraftStore.NEW_CONVERSATION_KEY] = attachments.toList()
-            attachments.clear()
-            attachments.addAll(
-                draftAttachments[current ?: AiDraftStore.NEW_CONVERSATION_KEY].orEmpty(),
-            )
-            draftAttachmentConversation = current
-        }
+    fun persistDraftAttachments() {
+        AiDraftStore.setAttachments(context, conversationId, attachments.toList())
+    }
+
+    DisposableEffect(conversationId) {
+        onDispose { AiDraftStore.setAttachments(context, conversationId, attachments.toList()) }
     }
 
     fun setInput(value: String) {
         input = value
-        AiDraftStore.set(context, AiChatStore.activeConversationId, value)
+        AiDraftStore.setText(context, conversationId, value)
     }
 
     var failedFiles by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -451,6 +445,7 @@ private fun AiChatContent(
             }
             failedFiles = (failedFiles + failures).distinct().take(9)
             readingFile = false
+            persistDraftAttachments()
         }
     }
 
@@ -533,21 +528,17 @@ private fun AiChatContent(
     fun createNewConversation() {
         // 输入框有内容也可以新建：当前内容先存到当前对话的草稿里。
         val previousConversation = AiChatStore.activeConversationId
-        AiDraftStore.set(
-            context,
-            previousConversation ?: AiDraftStore.NEW_CONVERSATION_KEY,
-            input,
-        )
+        val draftKey = previousConversation ?: AiDraftStore.NEW_CONVERSATION_KEY
+        AiDraftStore.setText(context, draftKey, input)
+        AiDraftStore.setAttachments(context, draftKey, attachments.toList())
         AiChatStore.newConversation(AiPresetStore.defaultId())
         // 原本还没有对话时，把这段草稿转到刚创建的对话上，避免输入内容“消失”。
         if (previousConversation == null) {
             AiChatStore.activeConversationId?.let { newConversationId ->
-                AiDraftStore.set(context, newConversationId, input)
+                AiDraftStore.setText(context, newConversationId, input)
+                AiDraftStore.setAttachments(context, newConversationId, attachments.toList())
             }
         }
-        draftAttachments[previousConversation ?: AiDraftStore.NEW_CONVERSATION_KEY] =
-            attachments.toList()
-        attachments.clear()
         followBottom = true
     }
 
@@ -570,7 +561,6 @@ private fun AiChatContent(
         }
         input = ""
         attachments.clear()
-        draftAttachments[draftKey ?: AiDraftStore.NEW_CONVERSATION_KEY] = emptyList()
         failedFiles = emptyList()
         focusManager.clearFocus()
         followBottom = true
@@ -811,7 +801,10 @@ private fun AiChatContent(
                         !readingFile &&
                         (input.isNotBlank() || attachments.isNotEmpty()),
                 onAttach = { filePicker.launch(arrayOf("*/*")) },
-                onRemoveAttachment = { attachment -> attachments.remove(attachment) },
+                onRemoveAttachment = { attachment ->
+                    attachments.remove(attachment)
+                    persistDraftAttachments()
+                },
                 onSend = { submit() },
                 onStop = { AiChatStore.stop() },
                 onMeasured = { height ->

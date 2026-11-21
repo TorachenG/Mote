@@ -150,7 +150,7 @@ private fun AiFloatingPanel(
     val visibleMessages = messages.takeLast(30)
     val provider = AiConversationSettings.providerFor(AiChatStore.activeConversationId)
     val listState = rememberLazyListState()
-    var input by remember {
+    var input by remember(AiChatStore.activeConversationId) {
         mutableStateOf(AiDraftStore.get(context, AiChatStore.activeConversationId))
     }
     var editingMessage by remember { mutableStateOf<AiUiMessage?>(null) }
@@ -160,13 +160,9 @@ private fun AiFloatingPanel(
     val openThreshold = with(density) { 72.dp.toPx() }
     val secondary = MiuixTheme.colorScheme.onSurfaceVariantSummary
 
-    LaunchedEffect(AiChatStore.activeConversationId) {
-        input = AiDraftStore.get(context, AiChatStore.activeConversationId)
-    }
-
     fun setInput(value: String) {
         input = value
-        AiDraftStore.set(context, AiChatStore.activeConversationId, value)
+        AiDraftStore.setText(context, AiChatStore.activeConversationId, value)
     }
 
     LaunchedEffect(Unit) {
