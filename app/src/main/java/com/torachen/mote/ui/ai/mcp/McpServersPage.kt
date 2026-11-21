@@ -341,8 +341,12 @@ fun McpServerEditPage(onBack: () -> Unit) {
         onBack = onBack,
     ) {
         SmallTitle("基本信息")
-        Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 12.dp)
+                .padding(top = 12.dp, bottom = 12.dp),
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 McpField("名称", displayName, { displayName = it }, "例如 GitHub")
                 McpField("命名空间", namespace, { namespace = it }, "只允许字母/数字/_/-，用于 mcp__<namespace>__<tool>")
                 McpField("URL", url, { url = it }, "https://example.com/mcp", enabled = transport != McpTransport.Stdio)
@@ -377,7 +381,7 @@ fun McpServerEditPage(onBack: () -> Unit) {
         if (transport == McpTransport.Stdio) {
             SmallTitle("stdio 命令")
             Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "通过 Shizuku 以 shell 身份启动。命令和参数由你负责，Mote 只负责转发 stdio。",
                         fontSize = 12.sp,
@@ -429,7 +433,7 @@ fun McpServerEditPage(onBack: () -> Unit) {
         } else {
             SmallTitle("认证")
             Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     WindowDropdownPreference(
                         title = "认证方式",
                         summary = authType,

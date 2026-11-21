@@ -205,7 +205,7 @@ fun AiPresetEditPage(onBack: () -> Unit) {
 
         SmallTitle("模型与推理")
         Card(modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column {
                 WindowDropdownPreference(
                     title = "默认服务",
                     summary = provider?.name ?: "跟随当前服务",
